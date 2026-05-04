@@ -341,8 +341,11 @@ function PartyBreakdown({ breakdown }) {
   return (
     <div style={{ padding: '0 10px 8px' }}>
       <div style={{
-        display: 'flex', borderRadius: '6px', overflow: 'hidden',
-        border: '1px solid var(--border)', height: '10px',
+        display: 'flex',
+        borderRadius: 'var(--cl-radius-sm)',
+        overflow: 'hidden',
+        border: '1px solid var(--cl-border)',
+        height: 10,
       }}>
         {['R', 'D', 'I'].map((k) => {
           const n = breakdown[k] || 0;
@@ -361,24 +364,34 @@ function PartyBreakdown({ breakdown }) {
         })}
       </div>
       <div style={{
-        marginTop: '6px', display: 'flex', gap: '10px', flexWrap: 'wrap',
-        fontSize: '0.74rem', color: 'var(--text-light)',
+        marginTop: 6,
+        display: 'flex',
+        gap: 10,
+        flexWrap: 'wrap',
+        fontSize: 'var(--cl-text-xs)',
+        color: 'var(--cl-text-light)',
+        fontFamily: 'var(--cl-font-sans)',
       }}>
         {['R', 'D', 'I'].map((k) => (breakdown[k] ? (
-          <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+          <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{
-              display: 'inline-block', width: '9px', height: '9px',
-              borderRadius: '50%', background: PARTY_COLORS[k],
+              display: 'inline-block',
+              width: 9, height: 9,
+              borderRadius: '50%',
+              background: PARTY_COLORS[k],
             }} />
-            <strong style={{ color: 'var(--text)' }}>{breakdown[k]}</strong>
+            <strong className="cl-num" style={{ color: 'var(--cl-text)' }}>{breakdown[k]}</strong>
             {k === 'R' ? 'Republicans' : k === 'D' ? 'Democrats' : 'Independents'}
           </span>
         ) : null))}
       </div>
       {breakdown._note && (
         <div style={{
-          marginTop: '6px', fontSize: '0.7rem',
-          color: 'var(--text-light)', fontStyle: 'italic', lineHeight: 1.4,
+          marginTop: 6,
+          fontSize: 'var(--cl-text-2xs)',
+          color: 'var(--cl-text-light)',
+          fontStyle: 'italic',
+          lineHeight: 1.4,
         }}>
           {breakdown._note}
         </div>
@@ -553,10 +566,8 @@ function OfficialCard({
 }) {
   const memberCmpId = followTarget && (followTarget.bioguide_id || followTarget.id);
   const isComparing = Boolean(compareIds && memberCmpId && compareIds.has(memberCmpId));
-  const partyColor = party ? (PARTY_COLORS[party] || '#666') : null;
-  const partyBg = party === 'R' ? '#fde8e8'
-    : party === 'D' ? '#e3f0f7'
-    : party === 'I' ? '#f0eaff' : '#eef';
+  const partyColor = party ? (PARTY_COLORS[party] || 'var(--cl-text-light)') : null;
+  const partyBg = party && PARTY_SOFT[party] ? PARTY_SOFT[party] : 'var(--cl-bg-soft)';
   const clickable = typeof onClick === 'function';
   return (
     <div
