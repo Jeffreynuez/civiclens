@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Skeleton } from './ui';
 import PersonCard from './PersonCard';
 import ProfileView from './ProfileView';
 import AddressLookup from './AddressLookup';
@@ -279,8 +280,8 @@ export default function SidePanel({
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
         {loading && (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-light)' }}>
-            <div style={{ fontSize: '0.95rem', fontWeight: 500 }}>Loading...</div>
+          <div style={{ padding: 16 }}>
+            <Skeleton variant="list" count={3} />
           </div>
         )}
 

@@ -1,6 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import {
+  Skeleton,
+  EmptyState,
+  ErrorState,
+  MagnifyingGlass,
+  Building,
+} from './ui';
 import { fetchCommittees, fetchCommitteeDetail } from '@/lib/api';
 
 const PARTY_COLORS = { R: '#e63946', D: '#457b9d', I: '#6c3ec1' };
@@ -172,14 +179,18 @@ export default function CommitteesModal({ open, onClose, onMemberPick }) {
 
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {loading && (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-light)', fontSize: '0.85rem' }}>
-                  Loading committees…
+                <div style={{ padding: '12px' }}>
+                  <Skeleton variant="list" count={4} />
                 </div>
               )}
               {!loading && filtered.length === 0 && (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-light)', fontSize: '0.85rem' }}>
-                  No committees match &ldquo;{query}&rdquo;.
-                </div>
+                <EmptyState
+                  icon={<MagnifyingGlass size={32} active color="muted" />}
+                  headline={`No matches for "${query}"`}
+                  body="Try a committee name, a subcommittee, or a chamber filter (House / Senate / Joint)."
+                  tone="muted"
+                  dense
+                />
               )}
               {!loading && ['House', 'Senate', 'Joint'].map((ch) => (
                 grouped[ch].length > 0 && (
@@ -214,26 +225,27 @@ export default function CommitteesModal({ open, onClose, onMemberPick }) {
           {/* Right pane — detail */}
           <div style={{ flex: 1, overflowY: 'auto', background: 'white' }}>
             {!selectedId && (
-              <div style={{ padding: '60px 40px', color: 'var(--text-light)', textAlign: 'center' }}>
-                <div style={{ fontSize: '2.4rem', marginBottom: '12px', opacity: 0.25 }}>⚖️</div>
-                <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
-                  Select a committee to see its roster
-                </div>
-                <div style={{ fontSize: '0.85rem' }}>
-                  Pick a full committee or a subcommittee on the left.
-                </div>
-              </div>
+              <EmptyState
+                icon={<Building size={36} active color="default" />}
+                headline="Select a committee to see its roster"
+                body="Pick a full committee or a subcommittee on the left."
+              />
             )}
             {selectedId && detailLoading && (
-              <div style={{ padding: '40px', color: 'var(--text-light)' }}>Loading roster…</div>
+              <div style={{ padding: 20 }}>
+                <Skeleton variant="card" />
+              </div>
             )}
             {selectedId && !detailLoading && detail && (
               <CommitteeDetail detail={detail} onMemberPick={handlePickMember} />
             )}
             {selectedId && !detailLoading && !detail && (
-              <div style={{ padding: '40px', color: 'var(--text-light)' }}>
-                Couldn&apos;t load committee details.
-              </div>
+              <ErrorState
+                kind="network"
+                headline="Couldn't load committee details"
+                body="Check your connection and try again."
+                cta={{ label: 'Retry', onClick: () => window.location.reload() }}
+              />
             )}
           </div>
         </div>

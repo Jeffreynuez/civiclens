@@ -1166,20 +1166,41 @@ function OfficialCard({
 }
 
 function Loading({ children }) {
+  // Centered text loading affordance — used inside dense tabs where a
+  // full skeleton card would feel out of scale. Tokenized in Phase 4A.
   return (
-    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-light)' }}>
+    <div
+      style={{
+        textAlign: 'center',
+        padding: '40px 20px',
+        color: 'var(--cl-text-light)',
+        fontFamily: 'var(--cl-font-sans)',
+        fontSize: 'var(--cl-text-sm)',
+      }}
+    >
       {children}
     </div>
   );
 }
 
 function EmptyState({ children }) {
+  // Tab-internal "no data seeded yet" placeholder. The dashed border is
+  // intentional — communicates "intentional empty state, not error."
   return (
-    <div style={{
-      margin: '20px 10px', padding: '18px 16px', textAlign: 'center',
-      background: 'var(--bg)', border: '1px dashed var(--border)', borderRadius: '12px',
-      color: 'var(--text-light)', fontSize: '0.84rem', lineHeight: 1.5,
-    }}>
+    <div
+      style={{
+        margin: '20px 10px',
+        padding: '18px 16px',
+        textAlign: 'center',
+        background: 'var(--cl-bg)',
+        border: '1px dashed var(--cl-border)',
+        borderRadius: 'var(--cl-radius-xl)',
+        color: 'var(--cl-text-light)',
+        fontSize: 'var(--cl-text-sm)',
+        fontFamily: 'var(--cl-font-sans)',
+        lineHeight: 'var(--cl-leading-normal)',
+      }}
+    >
       {children}
     </div>
   );

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchBillSnapshot } from '@/lib/api';
 import { untrackBill, updateTrackedBill, useTrackedBills } from '@/lib/trackedBills';
+import { EmptyState as UIEmptyState, BookmarkSimple } from './ui';
 
 /**
  * Full-screen modal showing every bill the user is currently tracking,
@@ -307,19 +308,19 @@ function TrackedBillRow({ bill, changed, onUntrack, onSponsorClick }) {
 
 function EmptyState() {
   return (
-    <div style={{
-      padding: '60px 20px', textAlign: 'center', color: 'var(--text-light)',
-    }}>
-      <div style={{ fontSize: '2.4rem', marginBottom: '10px' }}>📌</div>
-      <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', marginBottom: '6px' }}>
-        No tracked bills yet
-      </div>
-      <div style={{ fontSize: '0.85rem', maxWidth: '420px', margin: '0 auto', lineHeight: '1.4' }}>
-        Open any representative’s profile, jump to the <strong>Bills</strong> tab,
-        and tap <strong>+ Track</strong> on the bills you want to follow. We’ll
-        let you know when their status changes.
-      </div>
-    </div>
+    <UIEmptyState
+      icon={<BookmarkSimple size={36} active color="muted" />}
+      headline="No tracked bills yet"
+      body={
+        <>
+          Open any representative&rsquo;s profile, jump to the{' '}
+          <strong>Bills</strong> tab, and tap <strong>+ Track</strong> on the
+          bills you want to follow. We&rsquo;ll let you know when their status
+          changes.
+        </>
+      }
+      tone="muted"
+    />
   );
 }
 
