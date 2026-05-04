@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchOwnerDashboard } from '../lib/pagesApi';
+import { ThumbsUp, ThumbsDown, ChatText } from './ui';
 
 /**
  * Constituent Dashboard — owner-only engagement rollup across every
@@ -130,18 +131,20 @@ export default function Dashboard({ officialId, scope, onJumpToPost }) {
             {rb.most_liked_post && (
               <MiniPostRow
                 label="Most liked"
-                accent="#1877f2"
+                accent="var(--cl-up)"
                 post={rb.most_liked_post}
-                metric={`↑ ${rb.most_liked_post.up_count}`}
+                metricIcon={<ThumbsUp size={12} active color="up" />}
+                metricValue={rb.most_liked_post.up_count}
                 onJump={onJumpToPost}
               />
             )}
             {rb.most_disliked_post && (
               <MiniPostRow
                 label="Most disliked"
-                accent="#c33333"
+                accent="var(--cl-down)"
                 post={rb.most_disliked_post}
-                metric={`↓ ${rb.most_disliked_post.down_count}`}
+                metricIcon={<ThumbsDown size={12} active color="down" />}
+                metricValue={rb.most_disliked_post.down_count}
                 onJump={onJumpToPost}
               />
             )}
@@ -187,10 +190,16 @@ export default function Dashboard({ officialId, scope, onJumpToPost }) {
                     <div style={{ fontSize: '0.86rem', color: 'var(--text)', marginTop: '4px', lineHeight: 1.4 }}>
                       {p.body_preview}
                     </div>
-                    <div style={{ marginTop: '6px', display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--text-light)', fontVariantNumeric: 'tabular-nums' }}>
-                      <span>↑ {p.up_count}</span>
-                      <span>↓ {p.down_count}</span>
-                      <span>💬 {p.comment_count}</span>
+                    <div style={{ marginTop: '6px', display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--text-light)', fontVariantNumeric: 'tabular-nums', alignItems: 'center' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <ThumbsUp size={11} active color="up" /> {p.up_count}
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <ThumbsDown size={11} active color="down" /> {p.down_count}
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <ChatText size={11} /> {p.comment_count}
+                      </span>
                       <span>🗳 {p.poll_vote_count}</span>
                       <span style={{ marginLeft: 'auto', fontWeight: 700, color: 'var(--text)' }}>
                         score {p.engagement_score}
@@ -308,31 +317,42 @@ function SectionCard({ title, children }) {
   );
 }
 
-function MiniPostRow({ label, accent, post, metric, onJump }) {
+function MiniPostRow({ label, accent, post, metricIcon, metricValue, metric, onJump }) {
   return (
     <button
       type="button"
       onClick={() => onJump?.(post.post_id)}
       style={{
         width: '100%', textAlign: 'left', cursor: 'pointer',
-        padding: '10px', background: 'white',
-        border: '1px solid var(--border)', borderRadius: '8px',
+        padding: '10px', background: 'var(--cl-card)',
+        border: '1px solid var(--cl-border)', borderRadius: 'var(--cl-radius-md)',
         font: 'inherit', color: 'inherit',
       }}
       onMouseOver={(e) => e.currentTarget.style.borderColor = accent}
-      onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
+      onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--cl-border)'}
     >
       <div style={{
-        fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.04em',
+        fontSize: 'var(--cl-text-2xs)', fontWeight: 800, letterSpacing: 'var(--cl-tracking-wide)',
         color: accent, textTransform: 'uppercase',
       }}>
         {label}
       </div>
-      <div style={{ fontSize: '0.82rem', color: 'var(--text)', marginTop: '4px', lineHeight: 1.4 }}>
+      <div style={{ fontSize: 'var(--cl-text-sm)', color: 'var(--cl-text)', marginTop: 4, lineHeight: 1.4 }}>
         {post.body_preview}
       </div>
-      <div style={{ marginTop: '6px', fontSize: '0.78rem', color: accent, fontWeight: 700 }}>
-        {metric}
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 'var(--cl-text-sm)',
+          color: accent,
+          fontWeight: 700,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        {metricIcon}
+        {metricValue != null ? <span className="cl-num">{metricValue}</span> : metric}
       </div>
     </button>
   );
