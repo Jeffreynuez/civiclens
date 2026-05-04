@@ -195,12 +195,21 @@ function Hero({ onVerifyClick }) {
     return () => ro.disconnect();
   }, []);
 
-  // Layout breakpoints (in px of container width):
-  //   < 560  : single column, no visual
-  //   560-840: single column, no visual
-  //   > 840  : two-column with visual
-  const showVisual = containerWidth >= 720;
-  const visualSize = Math.min(280, Math.max(140, containerWidth * 0.22));
+  // Layout: visual appears once the container has room for a SMALL
+  // brand mark (~80px), then scales smoothly up to its full 280px as
+  // the panel widens. This avoids the previous "pop in at full size"
+  // jump — instead the visual fades in small and grows gradually.
+  //
+  //   < 540  : single column, no visual (panel too narrow for any
+  //            two-column hero)
+  //   540    : visual pops in at 80px (small, lands cleanly to the
+  //            right of the text)
+  //   540 → 1040 : linear scale 80 → 280
+  //   ≥ 1040 : visual at full 280px
+  const showVisual = containerWidth >= 540;
+  const visualSize = showVisual
+    ? Math.min(280, 80 + ((containerWidth - 540) / 500) * 200)
+    : 0;
 
   return (
     <section
@@ -330,15 +339,19 @@ function Hero({ onVerifyClick }) {
         </div>
 
         {/* Hero visual — magnify-lens-flag mark on a navy tinted plate.
-            Hidden at narrow container widths (< 720px) so it doesn't
-            compete with the text in the SidePanel. Logo size scales
-            with available container width so the SVG never overflows. */}
+            Below 540px container width, the visual is hidden and the
+            hero collapses to single column. Above 540px, the visual
+            renders at a size proportional to container width (80px
+            minimum, 280px capped). The plate's padding scales with
+            the logo size so it always frames the mark consistently.
+            CSS transitions on width/height/padding give a smooth
+            grow effect when the user resizes the panel. */}
         {showVisual && (
           <div
             style={{
               background: 'var(--cl-primary)',
               borderRadius: 'var(--cl-radius-2xl)',
-              padding: 20,
+              padding: Math.max(12, visualSize * 0.1),
               aspectRatio: '1 / 1',
               maxWidth: 360,
               width: '100%',
@@ -346,10 +359,17 @@ function Hero({ onVerifyClick }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              transition: 'padding var(--cl-duration-base) var(--cl-ease-standard)',
             }}
             aria-hidden="true"
           >
-            <CivicLensLogo size={visualSize} variant="reverse" />
+            <CivicLensLogo
+              size={visualSize}
+              variant="reverse"
+              style={{
+                transition: 'width var(--cl-duration-base) var(--cl-ease-standard), height var(--cl-duration-base) var(--cl-ease-standard)',
+              }}
+            />
           </div>
         )}
       </div>
