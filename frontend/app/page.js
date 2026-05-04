@@ -668,6 +668,7 @@ export default function Home() {
             onFocusCandidateConsumed={handleFocusCandidateConsumed}
             onOpenPage={handleOpenPage}
             onRequestVerify={handleCitizenLoginOpen}
+            onStatePick={handleStateSelect}
           />
         )}
       </div>

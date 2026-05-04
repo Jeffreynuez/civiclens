@@ -121,6 +121,10 @@ export default function SidePanel({
   // wired by parent to open CitizenLoginModal so unauth visitors can
   // sign in. Forwarded only to NationalOfficialsPanel.
   onRequestVerify,
+  // NOP Browse-by-State grid — clicks pick a state and route through
+  // the parent's existing state-selection flow (same handler used by
+  // MapView clicks).
+  onStatePick,
 }) {
   const isInCompare = (m) => Boolean(compareIds && m && compareIds.has(m.bioguide_id || m.id));
   // Controlled tab state when the parent lifts it (so selecting a candidate
@@ -320,6 +324,7 @@ export default function SidePanel({
               compareIds={compareIds}
               onOpenPage={onOpenPage}
               onRequestVerify={onRequestVerify}
+              onStatePick={onStatePick}
             />
           </div>
         )}
