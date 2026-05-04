@@ -5,6 +5,7 @@ import { fetchFederalOfficials } from '@/lib/api';
 import SelectionBadge from './SelectionBadge';
 import FollowButton from './FollowButton';
 import CompareButton from './CompareButton';
+import PageButton from './PageButton';
 import {
   Avatar,
   PartyChip,
@@ -62,6 +63,9 @@ export default function NationalOfficialsPanel({
   onNotify,
   onCompareToggle,
   compareIds,
+  // Opens the rep's page (post feed / dashboard) when a visitor clicks
+  // the "Page" button on a card. Wired from page.js → handleOpenPage.
+  onOpenPage,
   // New: opens the citizen-login modal when a visitor hits the
   // hero / CTA-strip "Find my reps" buttons. Optional — falls back
   // to onNotify if not provided.
@@ -127,6 +131,7 @@ export default function NationalOfficialsPanel({
         onNotify={onNotify}
         onCompareToggle={onCompareToggle}
         compareIds={compareIds}
+        onOpenPage={onOpenPage}
       />
 
       <SenateLeadershipSection
@@ -136,6 +141,7 @@ export default function NationalOfficialsPanel({
         onNotify={onNotify}
         onCompareToggle={onCompareToggle}
         compareIds={compareIds}
+        onOpenPage={onOpenPage}
       />
 
       <HouseLeadershipSection
@@ -145,6 +151,7 @@ export default function NationalOfficialsPanel({
         onNotify={onNotify}
         onCompareToggle={onCompareToggle}
         compareIds={compareIds}
+        onOpenPage={onOpenPage}
       />
 
       <SCOTUSSection
@@ -153,6 +160,7 @@ export default function NationalOfficialsPanel({
         onNotify={onNotify}
         onCompareToggle={onCompareToggle}
         compareIds={compareIds}
+        onOpenPage={onOpenPage}
       />
 
       <VerificationCTAStrip onVerifyClick={handleVerifyClick} />
@@ -380,7 +388,7 @@ function Hero({ onVerifyClick }) {
 // ─────────────────────────────────────────────────────────────────
 // 2. EXECUTIVE BRANCH
 // ─────────────────────────────────────────────────────────────────
-function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggle, compareIds }) {
+function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggle, compareIds, onOpenPage }) {
   const pres = exec.president;
   const vp = exec.vice_president;
   const cabinet = exec.cabinet || [];
@@ -406,8 +414,8 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-                gap: 16,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: 12,
               }}
             >
               {pres && (
@@ -424,6 +432,7 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
                   onNotify={onNotify}
                   onCompareToggle={onCompareToggle}
                   compareIds={compareIds}
+                  onOpenPage={onOpenPage}
                 />
               )}
               {vp && (
@@ -440,6 +449,7 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
                   onNotify={onNotify}
                   onCompareToggle={onCompareToggle}
                   compareIds={compareIds}
+                  onOpenPage={onOpenPage}
                 />
               )}
             </div>
@@ -481,6 +491,7 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
                   onNotify={onNotify}
                   onCompareToggle={onCompareToggle}
                   compareIds={compareIds}
+                  onOpenPage={onOpenPage}
                 />
               ))}
             </div>
@@ -494,7 +505,7 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
 // ─────────────────────────────────────────────────────────────────
 // 3. SENATE LEADERSHIP
 // ─────────────────────────────────────────────────────────────────
-function SenateLeadershipSection({ senate, congressNumber, onSelectPerson, onNotify, onCompareToggle, compareIds }) {
+function SenateLeadershipSection({ senate, congressNumber, onSelectPerson, onNotify, onCompareToggle, compareIds, onOpenPage }) {
   const leadership = senate.leadership || [];
   if (leadership.length === 0) return null;
   const breakdown = senate.party_breakdown || {};
@@ -529,7 +540,7 @@ function SenateLeadershipSection({ senate, congressNumber, onSelectPerson, onNot
 // ─────────────────────────────────────────────────────────────────
 // 4. HOUSE LEADERSHIP
 // ─────────────────────────────────────────────────────────────────
-function HouseLeadershipSection({ house, congressNumber, onSelectPerson, onNotify, onCompareToggle, compareIds }) {
+function HouseLeadershipSection({ house, congressNumber, onSelectPerson, onNotify, onCompareToggle, compareIds, onOpenPage }) {
   const leadership = house.leadership || [];
   if (leadership.length === 0) return null;
   const breakdown = house.party_breakdown || {};
@@ -564,7 +575,7 @@ function HouseLeadershipSection({ house, congressNumber, onSelectPerson, onNotif
 // ─────────────────────────────────────────────────────────────────
 // 5. SUPREME COURT
 // ─────────────────────────────────────────────────────────────────
-function SCOTUSSection({ sc, onSelectPerson, onNotify, onCompareToggle, compareIds }) {
+function SCOTUSSection({ sc, onSelectPerson, onNotify, onCompareToggle, compareIds, onOpenPage }) {
   const justices = sc.members || [];
   if (justices.length === 0) return null;
 
@@ -598,6 +609,7 @@ function SCOTUSSection({ sc, onSelectPerson, onNotify, onCompareToggle, compareI
               onNotify={onNotify}
               onCompareToggle={onCompareToggle}
               compareIds={compareIds}
+              onOpenPage={onOpenPage}
             />
           ))}
         </div>
@@ -610,10 +622,14 @@ function SCOTUSSection({ sc, onSelectPerson, onNotify, onCompareToggle, compareI
 // 6. VERIFICATION CTA STRIP
 // ─────────────────────────────────────────────────────────────────
 function VerificationCTAStrip({ onVerifyClick }) {
+  // Flex with wrap — button stays on the right at wide widths, drops
+  // below the text at narrow widths. Both items have a generous min-
+  // width so they don't squish together; once the row can't fit them
+  // side-by-side, the button wraps under the heading + body cleanly.
   return (
     <section
       style={{
-        padding: '40px 24px',
+        padding: '32px 24px',
         margin: '24px 24px 0',
         maxWidth: 1180,
         background: 'var(--cl-primary)',
@@ -625,13 +641,14 @@ function VerificationCTAStrip({ onVerifyClick }) {
     >
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, auto)',
-          gap: 32,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 24,
           alignItems: 'center',
+          justifyContent: 'space-between',
         }}
       >
-        <div>
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
           <h2
             className="cl-h1"
             style={{
@@ -660,16 +677,17 @@ function VerificationCTAStrip({ onVerifyClick }) {
           type="button"
           onClick={onVerifyClick}
           style={{
+            flexShrink: 0,
             display: 'inline-flex',
             alignItems: 'center',
             gap: 8,
-            height: 48,
-            padding: '0 22px',
+            height: 44,
+            padding: '0 20px',
             background: 'var(--cl-accent)',
             color: 'var(--cl-text-on-dark)',
             border: 'none',
             borderRadius: 'var(--cl-radius-md)',
-            fontSize: 'var(--cl-text-md)',
+            fontSize: 'var(--cl-text-sm)',
             fontWeight: 700,
             fontFamily: 'var(--cl-font-sans)',
             cursor: 'pointer',
@@ -939,7 +957,7 @@ function PartyDot({ color, count, label }) {
 // ─────────────────────────────────────────────────────────────────
 // Big person card — used for President + VP + Cabinet hero tier
 // ─────────────────────────────────────────────────────────────────
-function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify, onCompareToggle, compareIds }) {
+function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify, onCompareToggle, compareIds, onOpenPage }) {
   const memberCmpId = followTarget && (followTarget.bioguide_id || followTarget.id);
   const isComparing = Boolean(compareIds && memberCmpId && compareIds.has(memberCmpId));
   const clickable = typeof onClick === 'function';
@@ -964,14 +982,14 @@ function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify,
       onMouseOver={clickable ? (e) => { e.currentTarget.style.borderColor = 'var(--cl-accent)'; e.currentTarget.style.boxShadow = 'var(--cl-shadow-card)'; } : undefined}
       onMouseOut={clickable ? (e) => { e.currentTarget.style.borderColor = 'var(--cl-border)'; e.currentTarget.style.boxShadow = 'none'; } : undefined}
     >
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-        <Avatar name={person.name} party={person.party} size="xl" />
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+        <Avatar name={person.name} party={person.party} size="lg" />
         <div style={{ flex: 1, minWidth: 0 }}>
           <Eyebrow tone="accent">{eyebrow}</Eyebrow>
           <h3
             style={{
               margin: '4px 0 4px',
-              fontSize: 'var(--cl-text-xl)',
+              fontSize: 'var(--cl-text-lg)',
               fontWeight: 700,
               color: 'var(--cl-text)',
               letterSpacing: 'var(--cl-tracking-tight)',
@@ -979,6 +997,7 @@ function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify,
               alignItems: 'center',
               gap: 8,
               flexWrap: 'wrap',
+              lineHeight: 1.2,
             }}
           >
             {person.name}
@@ -1001,7 +1020,7 @@ function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify,
           )}
         </div>
       </div>
-      {(followTarget || compareIds) && (
+      {(followTarget || compareIds || onOpenPage) && (
         <div
           style={{
             marginTop: 12,
@@ -1009,7 +1028,7 @@ function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify,
             borderTop: '1px solid var(--cl-divider)',
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            gap: 6,
             flexWrap: 'wrap',
           }}
           onClick={(e) => e.stopPropagation()}
@@ -1023,6 +1042,17 @@ function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify,
               isComparing={isComparing}
               onCompareToggle={onCompareToggle}
               size="sm"
+            />
+          )}
+          {onOpenPage && memberCmpId && (
+            <PageButton
+              size="sm"
+              officialId={memberCmpId}
+              onOpen={(id) => onOpenPage(id, {
+                displayName: person.name,
+                role: person.role || person.title || eyebrow || '',
+                photoUrl: person.photoUrl,
+              })}
             />
           )}
           {clickable && (
@@ -1050,7 +1080,7 @@ function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify,
 // ─────────────────────────────────────────────────────────────────
 // Compact person card — used for Cabinet, SCOTUS, leadership tiers
 // ─────────────────────────────────────────────────────────────────
-function CompactPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify, onCompareToggle, compareIds }) {
+function CompactPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify, onCompareToggle, compareIds, onOpenPage }) {
   const memberCmpId = followTarget && (followTarget.bioguide_id || followTarget.id);
   const isComparing = Boolean(compareIds && memberCmpId && compareIds.has(memberCmpId));
   const clickable = typeof onClick === 'function';
@@ -1121,6 +1151,48 @@ function CompactPersonCard({ person, eyebrow, meta, onClick, followTarget, onNot
           )}
         </div>
       </div>
+      {/* Action row — Follow / Compare / Page sit below the name+meta
+          line. Mirrors the BigPersonCard treatment so every member card
+          surfaces the same engagement affordances. Card height grows
+          slightly to accommodate; small buttons (sm = 24px) keep it
+          compact. */}
+      {(followTarget || compareIds || onOpenPage) && (
+        <div
+          style={{
+            marginTop: 10,
+            paddingTop: 8,
+            borderTop: '1px solid var(--cl-divider)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexWrap: 'wrap',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {followTarget && (
+            <FollowButton member={followTarget} size="sm" onNotify={onNotify} />
+          )}
+          {onCompareToggle && memberCmpId && (
+            <CompareButton
+              member={followTarget}
+              isComparing={isComparing}
+              onCompareToggle={onCompareToggle}
+              size="sm"
+            />
+          )}
+          {onOpenPage && memberCmpId && (
+            <PageButton
+              size="sm"
+              officialId={memberCmpId}
+              onOpen={(id) => onOpenPage(id, {
+                displayName: person.name,
+                role: person.role || person.title || eyebrow || '',
+                photoUrl: person.photoUrl,
+              })}
+            />
+          )}
+        </div>
+      )}
     </article>
   );
 }
@@ -1130,7 +1202,7 @@ function CompactPersonCard({ person, eyebrow, meta, onClick, followTarget, onNot
 // Tier 1 (floor leadership): Speaker / Majority Leader / Minority Leader
 // Tier 2 (whips, caucus chairs, pro tempore, etc.): everyone else
 // ─────────────────────────────────────────────────────────────────
-function LeadershipGrid({ leadership, chamber, onSelectPerson, onNotify, onCompareToggle, compareIds }) {
+function LeadershipGrid({ leadership, chamber, onSelectPerson, onNotify, onCompareToggle, compareIds, onOpenPage }) {
   // Sort floor leadership to the top tier — anything matching these
   // role keywords. Everything else lands in the second tier.
   const FLOOR_KEYWORDS = ['speaker', 'majority leader', 'minority leader', 'president pro tempore', 'pro tempore'];
@@ -1151,7 +1223,7 @@ function LeadershipGrid({ leadership, chamber, onSelectPerson, onNotify, onCompa
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
               gap: 12,
               marginBottom: supporting.length > 0 ? 20 : 0,
             }}
@@ -1167,6 +1239,7 @@ function LeadershipGrid({ leadership, chamber, onSelectPerson, onNotify, onCompa
                 onNotify={onNotify}
                 onCompareToggle={onCompareToggle}
                 compareIds={compareIds}
+                onOpenPage={onOpenPage}
               />
             ))}
           </div>
@@ -1194,6 +1267,7 @@ function LeadershipGrid({ leadership, chamber, onSelectPerson, onNotify, onCompa
                 onNotify={onNotify}
                 onCompareToggle={onCompareToggle}
                 compareIds={compareIds}
+                onOpenPage={onOpenPage}
               />
             ))}
           </div>

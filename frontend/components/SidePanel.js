@@ -302,7 +302,10 @@ export default function SidePanel({
               </p>
             </div>
 
-            {/* National officials — Executive / Judicial / Congress / Elections */}
+            {/* National officials — landing-page layout (Hero → Executive
+                → Senate / House Leadership → SCOTUS → CTA strip → Footer).
+                onOpenPage routes through to handleOpenPage in page.js so
+                the Page button on each card opens the rep's PageView. */}
             <NationalOfficialsPanel
               onSelectPerson={(person, roleType) => {
                 const m = toFederalMember(person, roleType);
@@ -311,6 +314,7 @@ export default function SidePanel({
               onNotify={onNotify}
               onCompareToggle={onCompareToggle}
               compareIds={compareIds}
+              onOpenPage={onOpenPage}
             />
           </div>
         )}
