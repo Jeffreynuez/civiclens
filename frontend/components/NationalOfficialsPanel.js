@@ -7,7 +7,20 @@ import FollowButton from './FollowButton';
 import CompareButton from './CompareButton';
 import TrackElectionButton from './TrackElectionButton';
 
-const PARTY_COLORS = { R: '#e63946', D: '#457b9d', I: '#6c3ec1' };
+// Party colors resolve through the canonical --cl-* tokens. Soft-tints
+// are used for chip backgrounds (per design system "party fills are
+// pill-only" rule); the solid variants are reserved for chip text and
+// the small avatar hue dots.
+const PARTY_COLORS = {
+  R: 'var(--cl-republican)',
+  D: 'var(--cl-democrat)',
+  I: 'var(--cl-independent)',
+};
+const PARTY_SOFT = {
+  R: 'var(--cl-republican-soft)',
+  D: 'var(--cl-democrat-soft)',
+  I: 'var(--cl-independent-soft)',
+};
 
 /**
  * National landing view — shows while no state is selected.
