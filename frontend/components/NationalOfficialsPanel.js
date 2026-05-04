@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchFederalOfficials } from '@/lib/api';
 import SelectionBadge from './SelectionBadge';
 import FollowButton from './FollowButton';
@@ -176,8 +176,35 @@ function Hero({ onVerifyClick }) {
     { value: '12.4k', label: 'Verified citizens' },
   ];
 
+  // Container-width-aware layout. NOP renders inside the resizable
+  // SidePanel, which can be anywhere from ~300px to full-viewport. When
+  // narrow we drop to single column and hide the hero visual; the lens-
+  // and-flag mark is decorative, not load-bearing, so hiding it at small
+  // widths is fine.
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Layout breakpoints (in px of container width):
+  //   < 560  : single column, no visual
+  //   560-840: single column, no visual
+  //   > 840  : two-column with visual
+  const showVisual = containerWidth >= 720;
+  const visualSize = Math.min(280, Math.max(140, containerWidth * 0.22));
+
   return (
     <section
+      ref={containerRef}
       style={{
         padding: '40px 24px 32px',
         background: 'var(--cl-card)',
@@ -189,7 +216,7 @@ function Hero({ onVerifyClick }) {
           maxWidth: 1180,
           margin: '0 auto',
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
+          gridTemplateColumns: showVisual ? 'minmax(0, 1.4fr) minmax(0, 1fr)' : 'minmax(0, 1fr)',
           gap: 32,
           alignItems: 'center',
         }}
@@ -302,24 +329,29 @@ function Hero({ onVerifyClick }) {
           </div>
         </div>
 
-        {/* Hero visual — magnify-lens-flag mark at large scale on a navy
-            tinted plate. Reads as iconic without being decorative. */}
-        <div
-          style={{
-            background: 'var(--cl-primary)',
-            borderRadius: 'var(--cl-radius-2xl)',
-            padding: 24,
-            aspectRatio: '1 / 1',
-            maxWidth: 360,
-            justifySelf: 'end',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          aria-hidden="true"
-        >
-          <CivicLensLogo size={220} variant="reverse" />
-        </div>
+        {/* Hero visual — magnify-lens-flag mark on a navy tinted plate.
+            Hidden at narrow container widths (< 720px) so it doesn't
+            compete with the text in the SidePanel. Logo size scales
+            with available container width so the SVG never overflows. */}
+        {showVisual && (
+          <div
+            style={{
+              background: 'var(--cl-primary)',
+              borderRadius: 'var(--cl-radius-2xl)',
+              padding: 20,
+              aspectRatio: '1 / 1',
+              maxWidth: 360,
+              width: '100%',
+              justifySelf: 'end',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            aria-hidden="true"
+          >
+            <CivicLensLogo size={visualSize} variant="reverse" />
+          </div>
+        )}
       </div>
     </section>
   );
