@@ -537,12 +537,14 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
         </button>
       )}
 
-      {/* Zoom dock — bottom-right. Phase 4B: tokenized chrome, accent-green
-          slider thumb, .cl-num percentage label. */}
+      {/* Zoom dock — bottom-LEFT (was bottom-right; fixed Phase 4B follow-up:
+          right edge collides with the maplibre attribution badge and other
+          floating chrome). Tokenized chrome, accent-green slider thumb,
+          .cl-num percentage label. */}
       <div
         style={{
           position: 'absolute',
-          right: 16,
+          left: 16,
           bottom: 16,
           zIndex: 10,
           background: 'var(--cl-card)',

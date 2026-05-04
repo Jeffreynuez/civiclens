@@ -13,6 +13,7 @@ import {
   ChatCircleDots,
   Newspaper,
   MapPin,
+  ArrowLeft,
   ArrowRight,
 } from './ui';
 import { listTrackedOfficials } from '../lib/trackedOfficials';
@@ -93,12 +94,52 @@ export default function ConstituentDashboard({
         style={{
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '32px 24px 48px',
+          padding: '24px 24px 48px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 24,
+          gap: 16,
         }}
       >
+        {/* Top-left back-to-map pill — primary escape hatch. The Close ×
+            in the welcome header is preserved as a secondary affordance,
+            but this pill is much more obvious. Mirrors the design system
+            "ambient floating chrome" treatment used on MapView. */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              alignSelf: 'flex-start',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 14px',
+              background: 'var(--cl-card)',
+              border: '1px solid var(--cl-border)',
+              borderRadius: 'var(--cl-radius-pill)',
+              fontSize: 'var(--cl-text-sm)',
+              fontWeight: 600,
+              fontFamily: 'var(--cl-font-sans)',
+              color: 'var(--cl-accent)',
+              cursor: 'pointer',
+              boxShadow: 'var(--cl-shadow-sticky)',
+              transition:
+                'background var(--cl-duration-fast) var(--cl-ease-standard), border-color var(--cl-duration-fast) var(--cl-ease-standard)',
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = 'var(--cl-accent-soft)';
+              e.currentTarget.style.borderColor = 'var(--cl-accent)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = 'var(--cl-card)';
+              e.currentTarget.style.borderColor = 'var(--cl-border)';
+            }}
+          >
+            <ArrowLeft size={14} color="accent" active />
+            Back to map
+          </button>
+        )}
+
         {/* Welcome header */}
         <WelcomeHeader
           citizen={citizen}
