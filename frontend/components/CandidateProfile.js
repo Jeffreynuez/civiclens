@@ -456,8 +456,19 @@ function SectionTitle({ children }) {
 }
 
 function EmptyState({ children }) {
+  // Tab-internal placeholder. Kept dense + body-only because the surrounding
+  // tab already provides the heading context (Issues / Endorsements /
+  // Experience / etc.); a second headline here would feel redundant.
   return (
-    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-light)', fontSize: '0.85rem' }}>
+    <div
+      style={{
+        padding: '20px',
+        textAlign: 'center',
+        color: 'var(--cl-text-light)',
+        fontSize: 'var(--cl-text-sm)',
+        fontFamily: 'var(--cl-font-sans)',
+      }}
+    >
       {children}
     </div>
   );
