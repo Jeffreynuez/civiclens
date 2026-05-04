@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { STATE_NAME_TO_CODE, STATE_CODE_TO_FIPS } from '@/lib/constants';
 import { fetchDistrictGeometry, fetchDistrictsForState } from '@/lib/api';
+import { ArrowLeft } from './ui';
 
 // Zoom bounds for the map — the slider maps linearly between these.
 const MIN_ZOOM = 2;
@@ -97,6 +98,9 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
 
         // State fill layer — selected state is dimmed because its districts
         // render on top of it. Unselected states stay clickable everywhere.
+        // Phase 4B: per design system, hover/selected use accent-green tint
+        // (was previously a slate hover + dark-green selected mix). Resting
+        // is the neutral surface-100 token (#f1f3f5).
         map.current.addLayer({
           id: 'state-fills',
           type: 'fill',
@@ -105,22 +109,23 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
             'fill-color': [
               'case',
               ['boolean', ['feature-state', 'selected'], false],
-              '#2d6a4f',
+              '#2d6a4f', // --cl-accent
               ['boolean', ['feature-state', 'hover'], false],
-              '#778da9',
-              '#c5d5e4',
+              '#2d6a4f', // --cl-accent
+              '#f1f3f5', // --cl-bg-soft (surface-100)
             ],
             'fill-opacity': [
               'case',
-              ['boolean', ['feature-state', 'selected'], false], 0.08,
-              ['boolean', ['feature-state', 'hover'], false], 0.28,
-              0.15,
+              ['boolean', ['feature-state', 'selected'], false], 0.06,
+              ['boolean', ['feature-state', 'hover'], false], 0.12,
+              1.0,
             ],
           },
         });
 
         // State borders — always visible so the state shape is legible even
-        // when districts are overlaid on top.
+        // when districts are overlaid on top. Selected state now flips to
+        // accent-green stroke at 2px (was a darker green at 2.5px).
         map.current.addLayer({
           id: 'state-borders',
           type: 'line',
@@ -129,23 +134,24 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
             'line-color': [
               'case',
               ['boolean', ['feature-state', 'selected'], false],
-              '#1b4332',
-              '#415a77',
+              '#2d6a4f', // --cl-accent
+              ['boolean', ['feature-state', 'hover'], false],
+              '#2d6a4f', // --cl-accent
+              '#dee2e6', // --cl-border (hairline neutral)
             ],
             'line-width': [
               'case',
-              ['boolean', ['feature-state', 'selected'], false],
-              2.5,
-              1,
+              ['boolean', ['feature-state', 'selected'], false], 2,
+              ['boolean', ['feature-state', 'hover'], false], 1.5,
+              0.75,
             ],
-            'line-opacity': 0.8,
+            'line-opacity': 1,
           },
         });
 
-        // Districts overview — fill. Near-invisible by default (just enough to
-        // be hit-testable) and highlighted on hover so it's unambiguous which
-        // one you're about to click. Zoom-independent now that districts
-        // render as soon as a state is selected.
+        // Districts overview — fill. Near-invisible by default (just enough
+        // to be hit-testable) and highlighted on hover. Phase 4B: hover
+        // uses accent-green tint (was party-red, conflated with reactions).
         map.current.addLayer({
           id: 'district-overview-fill',
           type: 'fill',
@@ -154,19 +160,20 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
             'fill-color': [
               'case',
               ['boolean', ['feature-state', 'hover'], false],
-              '#e63946', // red — mirrors the selected-district color
-              '#457b9d',
+              '#2d6a4f', // --cl-accent
+              '#2d6a4f', // --cl-accent (very faint resting)
             ],
             'fill-opacity': [
               'case',
               ['boolean', ['feature-state', 'hover'], false], 0.22,
-              0.04,
+              0.0,
             ],
           },
         });
 
         // Districts overview — outlines. Always visible (hairline) once a
-        // state is selected, beefed up on hover.
+        // state is selected, beefed up on hover. Phase 4B: hover uses
+        // accent-green stroke (was dark-red).
         map.current.addLayer({
           id: 'district-overview-line',
           type: 'line',
@@ -175,13 +182,13 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
             'line-color': [
               'case',
               ['boolean', ['feature-state', 'hover'], false],
-              '#a4161a',
-              '#1d3557',
+              '#2d6a4f', // --cl-accent
+              '#ced4da', // --cl-border-strong (surface-400 hairline)
             ],
             'line-width': [
               'case',
               ['boolean', ['feature-state', 'hover'], false],
-              3,
+              2,
               1.2,
             ],
             'line-opacity': [
@@ -192,18 +199,21 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
           },
         });
 
-        // Active district — highlighted selection (on top)
+        // Active district — highlighted selection (on top). Phase 4B:
+        // accent-green at 35% fill + 2px accent-green stroke per the
+        // design system MapView spec (was the GOP-red treatment, which
+        // conflated party signaling with selection signaling).
         map.current.addLayer({
           id: 'district-fill',
           type: 'fill',
           source: 'active-district',
-          paint: { 'fill-color': '#e63946', 'fill-opacity': 0.25 },
+          paint: { 'fill-color': '#2d6a4f', 'fill-opacity': 0.35 },
         });
         map.current.addLayer({
           id: 'district-outline',
           type: 'line',
           source: 'active-district',
-          paint: { 'line-color': '#a4161a', 'line-width': 3 },
+          paint: { 'line-color': '#2d6a4f', 'line-width': 2 },
         });
 
         // ── Hover / click on states ───────────────────────────────
@@ -499,43 +509,62 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
     <div className="relative flex-1">
       <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
 
-      {/* Back-to-state view button — top center, only when a district is active */}
+      {/* Back-to-state view pill — top-left, only when a district is active.
+          Phase 4B: tokenized chrome + Phosphor ArrowLeft glyph + accent-
+          green text per the design system's "ambient floating chrome"
+          treatment. */}
       {activeDistrict && (
         <button
           onClick={handleBackToState}
           style={{
-            position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
-            background: 'white', padding: '8px 14px', borderRadius: '999px',
-            fontSize: '0.82rem', color: '#1b263b', fontWeight: 600,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)', border: '1px solid #e0e0e0',
-            zIndex: 10, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+            position: 'absolute', top: 16, left: 16,
+            background: 'var(--cl-card)',
+            padding: '8px 14px',
+            borderRadius: 'var(--cl-radius-pill)',
+            fontSize: 'var(--cl-text-sm)',
+            color: 'var(--cl-accent)',
+            fontWeight: 600,
+            fontFamily: 'var(--cl-font-sans)',
+            boxShadow: 'var(--cl-shadow-pop)',
+            border: '1px solid var(--cl-border)',
+            zIndex: 10,
+            display: 'flex', alignItems: 'center', gap: 6,
+            cursor: 'pointer',
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
-          </svg>
-          Back to {activeDistrict.stateCode || 'state'}
+          <ArrowLeft size={14} color="accent" active />
+          {activeDistrict.stateCode || 'United States'}
         </button>
       )}
 
-      {/* Zoom slider — bottom left. Minimized to just percentage + slider. */}
+      {/* Zoom dock — bottom-right. Phase 4B: tokenized chrome, accent-green
+          slider thumb, .cl-num percentage label. */}
       <div
         style={{
           position: 'absolute',
-          left: '16px',
-          bottom: '16px',
+          right: 16,
+          bottom: 16,
           zIndex: 10,
-          background: 'white',
-          borderRadius: '10px',
+          background: 'var(--cl-card)',
+          borderRadius: 'var(--cl-radius-lg)',
           padding: '8px 12px',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+          boxShadow: 'var(--cl-shadow-pop)',
+          border: '1px solid var(--cl-border)',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          width: '200px',
+          gap: 10,
+          width: 200,
         }}
       >
-        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary)', minWidth: '34px' }}>
+        <div
+          className="cl-num"
+          style={{
+            fontSize: 'var(--cl-text-sm)',
+            fontWeight: 700,
+            color: 'var(--cl-text)',
+            minWidth: 34,
+          }}
+        >
           {zoomPct}%
         </div>
         <input
@@ -545,20 +574,32 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
           step={1}
           value={zoomPct}
           onChange={handleSliderChange}
+          aria-label="Map zoom"
           style={{
             flex: 1,
-            accentColor: '#457b9d',
+            accentColor: 'var(--cl-accent)',
             cursor: 'pointer',
           }}
         />
       </div>
 
-      {/* State / district label — bottom center. Reflects hover when available. */}
+      {/* State / district label — bottom center. Reflects hover when
+          available. Phase 4B: tokenized chrome (navy primary fill, white
+          text via --cl-text-on-dark). */}
       <div
         style={{
-          position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-          background: '#1b263b', color: 'white', padding: '8px 20px', borderRadius: '24px',
-          fontSize: '0.85rem', fontWeight: 500, opacity: 0.9, zIndex: 10, pointerEvents: 'none',
+          position: 'absolute', bottom: 24, left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'var(--cl-primary)',
+          color: 'var(--cl-text-on-dark)',
+          padding: '8px 20px',
+          borderRadius: 'var(--cl-radius-pill)',
+          fontSize: 'var(--cl-text-sm)',
+          fontWeight: 500,
+          fontFamily: 'var(--cl-font-sans)',
+          opacity: 0.9,
+          zIndex: 10,
+          pointerEvents: 'none',
         }}
       >
         {hoveredDistrictLabel || hoveredState || currentLabel}
