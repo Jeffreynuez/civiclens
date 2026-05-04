@@ -70,6 +70,10 @@ export default function NationalOfficialsPanel({
   // hero / CTA-strip "Find my reps" buttons. Optional — falls back
   // to onNotify if not provided.
   onRequestVerify,
+  // Browse-by-state grid hands off to the parent's state-selection
+  // handler. Wired through SidePanel → page.js's handleStateSelect
+  // (a no-op if missing — grid still renders, clicks are inert).
+  onStatePick,
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -162,6 +166,10 @@ export default function NationalOfficialsPanel({
         compareIds={compareIds}
         onOpenPage={onOpenPage}
       />
+
+      <NationalActivitySection onRequestVerify={handleVerifyClick} />
+
+      <BrowseByStateSection onStatePick={onStatePick} />
 
       <VerificationCTAStrip onVerifyClick={handleVerifyClick} />
 
@@ -619,7 +627,309 @@ function SCOTUSSection({ sc, onSelectPerson, onNotify, onCompareToggle, compareI
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 6. VERIFICATION CTA STRIP
+// 6. NATIONAL ACTIVITY FEED
+//
+// Seeded mock data for the demo — the design system spec calls for
+// a balanced (D/R alternating) feed of recent posts from federal
+// officials. Backend integration (a /api/feed/national endpoint
+// aggregating posts across federal RepAccounts) is deferred. The
+// fictional names + post bodies come from the National Officials
+// Panel design review brief; "Alternates 4D · 4R for balanced scan"
+// disclosure is preserved as a literal eyebrow line.
+// ─────────────────────────────────────────────────────────────────
+
+const NATIONAL_ACTIVITY_DEMO = [
+  {
+    id: 'na-1', party: 'D',
+    author: 'Sen. Marisol Estévez', role: 'D-WA',
+    when: '14m ago',
+    body: 'Just finished oversight hearing on rural broadband subsidies. Three-year audit shows 41% of disbursed funds never reached households. Filed amendment requiring quarterly milestone reporting before next tranche. Full statement on the page.',
+    likes: 1842, comments: 184,
+  },
+  {
+    id: 'na-2', party: 'R',
+    author: 'Rep. Chase Holloway', role: 'R-TN-7',
+    when: '32m ago',
+    body: 'Heard from over 200 small-business owners at the district roundtable today. Top concern by a wide margin: input cost volatility, particularly steel and lumber. Bringing those numbers back to Ways & Means this week.',
+    likes: 967, comments: 92,
+  },
+  {
+    id: 'na-3', party: 'D',
+    author: 'Rep. Aamir Desai', role: 'D-NJ-3',
+    when: '1h ago',
+    body: 'Transit bill markup is moving Thursday. The amendment to preserve direct grants for legacy systems made it through committee 8–5. Long road ahead, but a real win for cities like Newark.',
+    likes: 612, comments: 38,
+  },
+  {
+    id: 'na-4', party: 'R',
+    author: 'Sen. Wendell Marsh', role: 'R-WY',
+    when: '2h ago',
+    body: 'Joined a bipartisan letter to OMB requesting clear cost estimates on the federal-lands package before any vote moves. Both sides of this debate deserve real numbers.',
+    likes: 528, comments: 47,
+  },
+  {
+    id: 'na-5', party: 'D',
+    author: 'Sen. Patricia Linn', role: 'D-IL',
+    when: '4h ago',
+    body: 'Statewide tour stop in Peoria today. Manufacturing town halls keep coming back to one question — how do we keep skilled workers from leaving for the coasts? Apprenticeship reauth is part of the answer.',
+    likes: 743, comments: 62,
+  },
+  {
+    id: 'na-6', party: 'R',
+    author: 'Rep. Tomas Reyna', role: 'R-TX-22',
+    when: '5h ago',
+    body: 'Briefing on the border-tech pilot this morning. Pilot has cut processing time per encounter by 38% — encouraging numbers but I want to see the next quarter\'s data before committing to scale.',
+    likes: 634, comments: 71,
+  },
+];
+
+function NationalActivitySection({ onRequestVerify }) {
+  return (
+    <section style={{ padding: '32px 24px 16px' }}>
+      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+        <SectionHeader
+          eyebrow="Past 24 hours"
+          title="National activity"
+          subhead="What national leaders are saying right now · alternating R / D for balanced scan"
+          chip={null}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {NATIONAL_ACTIVITY_DEMO.map((post) => (
+            <ActivityPostRow key={post.id} post={post} onRequestVerify={onRequestVerify} />
+          ))}
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 14 }}>
+          <button
+            type="button"
+            onClick={onRequestVerify}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--cl-accent)',
+              fontSize: 'var(--cl-text-sm)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'var(--cl-font-sans)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            Sign in to follow these reps
+            <ArrowRight size={12} active color="accent" />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ActivityPostRow({ post, onRequestVerify }) {
+  return (
+    <article
+      style={{
+        background: 'var(--cl-card)',
+        border: '1px solid var(--cl-border)',
+        borderRadius: 'var(--cl-radius-xl)',
+        padding: 14,
+      }}
+    >
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <Avatar name={post.author} party={post.party} size="sm" />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 6,
+              flexWrap: 'wrap',
+              fontSize: 'var(--cl-text-sm)',
+            }}
+          >
+            <span style={{ fontWeight: 700, color: 'var(--cl-text)' }}>
+              {post.author}
+            </span>
+            <PartyChip party={post.party} size="xs" />
+            <span style={{ color: 'var(--cl-text-light)' }}>· {post.role}</span>
+            <span style={{ color: 'var(--cl-text-muted)', marginLeft: 'auto' }}>
+              {post.when}
+            </span>
+          </div>
+          <p
+            className="cl-body-sm"
+            style={{
+              margin: '8px 0 0',
+              color: 'var(--cl-text)',
+              lineHeight: 'var(--cl-leading-normal)',
+            }}
+          >
+            {post.body}
+          </p>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              marginTop: 10,
+              fontSize: 'var(--cl-text-xs)',
+              color: 'var(--cl-text-muted)',
+            }}
+          >
+            <span className="cl-num">{post.likes.toLocaleString()} reactions</span>
+            <span aria-hidden="true">·</span>
+            <span className="cl-num">{post.comments} comments</span>
+            <button
+              type="button"
+              onClick={onRequestVerify}
+              style={{
+                marginLeft: 'auto',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--cl-accent)',
+                fontSize: 'var(--cl-text-xs)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'var(--cl-font-sans)',
+              }}
+            >
+              Sign in to participate →
+            </button>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 7. BROWSE BY STATE
+//
+// Alphabetical grid of all 50 states + DC. The SVG geographic-map
+// version from the design is deferred to a future polish pass; the
+// grid is the accessible, scannable fallback. Each state pill calls
+// the parent's onStatePick handler — wired through SidePanel to
+// page.js's handleStateSelect so clicks bring up the state's officials
+// in the side panel.
+// ─────────────────────────────────────────────────────────────────
+
+const STATES_FOR_GRID = [
+  ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'],
+  ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'],
+  ['DC', 'District of Columbia'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'],
+  ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'],
+  ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'],
+  ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'],
+  ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'],
+  ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'],
+  ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'],
+  ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'],
+  ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'],
+  ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'],
+  ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
+];
+
+function BrowseByStateSection({ onStatePick }) {
+  return (
+    <section style={{ padding: '32px 24px 16px', background: 'var(--cl-bg-soft)' }}>
+      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+        <SectionHeader
+          eyebrow="All 50 states · plus DC"
+          title="Browse by state"
+          subhead="Pick a state to see its governor, senators, House delegation, and state legislature."
+          chip={null}
+        />
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+            gap: 6,
+          }}
+        >
+          {STATES_FOR_GRID.map(([code, name]) => (
+            <StatePill
+              key={code}
+              code={code}
+              name={name}
+              onClick={onStatePick ? () => onStatePick(code, name) : null}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StatePill({ code, name, onClick }) {
+  const clickable = typeof onClick === 'function';
+  return (
+    <button
+      type="button"
+      onClick={clickable ? onClick : undefined}
+      disabled={!clickable}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '8px 10px',
+        background: 'var(--cl-card)',
+        border: '1px solid var(--cl-border)',
+        borderRadius: 'var(--cl-radius-md)',
+        fontFamily: 'var(--cl-font-sans)',
+        fontSize: 'var(--cl-text-sm)',
+        color: 'var(--cl-text)',
+        cursor: clickable ? 'pointer' : 'default',
+        transition: 'border-color var(--cl-duration-fast) var(--cl-ease-standard), background var(--cl-duration-fast) var(--cl-ease-standard)',
+        textAlign: 'left',
+      }}
+      onMouseOver={
+        clickable
+          ? (e) => {
+              e.currentTarget.style.borderColor = 'var(--cl-accent)';
+              e.currentTarget.style.background = 'var(--cl-accent-soft)';
+            }
+          : undefined
+      }
+      onMouseOut={
+        clickable
+          ? (e) => {
+              e.currentTarget.style.borderColor = 'var(--cl-border)';
+              e.currentTarget.style.background = 'var(--cl-card)';
+            }
+          : undefined
+      }
+    >
+      <span
+        className="cl-num"
+        style={{
+          fontSize: 'var(--cl-text-2xs)',
+          fontWeight: 800,
+          color: 'var(--cl-text-light)',
+          background: 'var(--cl-bg-soft)',
+          padding: '2px 5px',
+          borderRadius: 'var(--cl-radius-xs)',
+          minWidth: 24,
+          textAlign: 'center',
+        }}
+      >
+        {code}
+      </span>
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {name}
+      </span>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 8. VERIFICATION CTA STRIP
 // ─────────────────────────────────────────────────────────────────
 function VerificationCTAStrip({ onVerifyClick }) {
   // Flex with wrap — button stays on the right at wide widths, drops
