@@ -438,26 +438,33 @@ export default function ProfileView({
     >
       {/* Back + Close row — the contextual back label tells the user exactly
           where Back will take them (e.g. "← Back to Congress"), and the ×
-          on the right fully closes the profile. Useful when the panel has
-          been dragged wide and Back feels buried in the corner. */}
+          on the right fully closes the profile. Mobile bumps the row's
+          height and target sizes to clear the 44px minimum. */}
       <div
         style={{
           display: 'flex', alignItems: 'center', gap: '6px',
           borderBottom: '1px solid var(--cl-border)',
+          minHeight: isMobile ? 48 : undefined,
         }}
       >
         <div
           onClick={onBack}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onBack?.(); }}
           style={{
-            flex: 1, display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '10px 16px',
-            fontSize: '0.85rem', color: 'var(--cl-accent)', cursor: 'pointer',
+            flex: 1,
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: isMobile ? '14px 16px' : '10px 16px',
+            fontSize: isMobile ? '0.95rem' : '0.85rem',
+            color: 'var(--cl-accent)', cursor: 'pointer',
             fontWeight: 500,
+            minHeight: isMobile ? 44 : undefined,
           }}
           onMouseOver={(e) => (e.currentTarget.style.background = 'var(--cl-bg)')}
           onMouseOut={(e) => (e.currentTarget.style.background = 'none')}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
+          <svg width={isMobile ? 18 : 16} height={isMobile ? 18 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
           {backLabel || 'Back to list'}
         </div>
         {onClose && (
@@ -467,8 +474,12 @@ export default function ProfileView({
             title="Close"
             style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
-              color: 'var(--cl-text-light)', padding: '8px 14px',
-              fontSize: '1.15rem', lineHeight: 1,
+              color: 'var(--cl-text-light)',
+              padding: isMobile ? '12px 18px' : '8px 14px',
+              fontSize: isMobile ? '1.4rem' : '1.15rem',
+              lineHeight: 1,
+              minWidth: isMobile ? 44 : undefined,
+              minHeight: isMobile ? 44 : undefined,
             }}
             onMouseOver={(e) => (e.currentTarget.style.color = 'var(--cl-text)')}
             onMouseOut={(e) => (e.currentTarget.style.color = 'var(--cl-text-light)')}
@@ -533,14 +544,32 @@ export default function ProfileView({
         {member.title && (
           <p style={{ fontSize: '0.82rem', color: 'var(--cl-text-light)', marginTop: '4px' }}>{member.title}</p>
         )}
-        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '6px' }}>
+        {/* Action row — Follow / Compare / View Candidate / Page.
+            Mobile bumps padding so each button hits the 44px minimum
+            tap target, allows wrap so all four can show on a 375px
+            screen, and uses justify-content: center on each row. */}
+        <div
+          style={{
+            marginTop: '12px',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: isMobile ? 8 : 6,
+            flexWrap: isMobile ? 'wrap' : 'nowrap',
+          }}
+        >
           <button
             onClick={toggleFollow}
             style={{
-              padding: '7px 18px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s',
+              padding: isMobile ? '11px 22px' : '7px 18px',
+              borderRadius: '8px',
+              fontSize: isMobile ? '0.92rem' : '0.85rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'background 0.2s',
               background: isFollowing ? 'white' : 'var(--cl-accent)',
               color: isFollowing ? 'var(--cl-accent)' : 'white',
               border: isFollowing ? '2px solid var(--cl-accent)' : 'none',
+              minHeight: isMobile ? 44 : undefined,
             }}
           >
             {isFollowing ? '✓ Following' : '+ Follow'}
@@ -550,10 +579,15 @@ export default function ProfileView({
               onClick={() => onCompareToggle(member)}
               title={isComparing ? 'Remove from compare' : 'Add to compare'}
               style={{
-                padding: '7px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+                padding: isMobile ? '11px 18px' : '7px 14px',
+                borderRadius: '8px',
+                fontSize: isMobile ? '0.9rem' : '0.82rem',
+                fontWeight: 600,
+                cursor: 'pointer',
                 background: isComparing ? `${PARTY_COLORS[party]}14` : 'white',
                 color: isComparing ? PARTY_COLORS[party] : 'var(--cl-text)',
                 border: isComparing ? `1.5px solid ${PARTY_COLORS[party]}` : '1px solid var(--cl-border)',
+                minHeight: isMobile ? 44 : undefined,
               }}
             >
               {isComparing ? '✓ In compare' : '+ Compare'}
@@ -572,10 +606,14 @@ export default function ProfileView({
                   : 'Open candidate profile'
               }
               style={{
-                padding: '7px 14px', borderRadius: '8px',
-                fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+                padding: isMobile ? '11px 18px' : '7px 14px',
+                borderRadius: '8px',
+                fontSize: isMobile ? '0.9rem' : '0.82rem',
+                fontWeight: 600,
+                cursor: 'pointer',
                 background: 'white', color: 'var(--cl-text)',
                 border: '1px solid var(--cl-border)',
+                minHeight: isMobile ? 44 : undefined,
               }}
             >
               View Candidate
@@ -595,8 +633,25 @@ export default function ProfileView({
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--cl-border)', background: 'white', flexShrink: 0 }}>
+      {/* Tab bar — desktop / tablet uses flex:1 per tab so all six fit
+          edge-to-edge. On mobile that crushes labels at narrow widths,
+          so we switch to a horizontally-scrollable strip with a fixed
+          min-width per tab. The browser-native scrollbar is hidden via
+          inline `scrollbarWidth`/`msOverflowStyle` (Firefox / IE) and
+          a `cl-no-scrollbar` class for WebKit (defined in globals.css
+          if needed; falls back to a thin scrollbar otherwise). */}
+      <div
+        style={{
+          display: 'flex',
+          borderBottom: '1px solid var(--cl-border)',
+          background: 'white',
+          flexShrink: 0,
+          overflowX: isMobile ? 'auto' : 'visible',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+        className={isMobile ? 'cl-no-scrollbar' : ''}
+      >
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -604,12 +659,20 @@ export default function ProfileView({
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
-                flex: 1, padding: '10px 6px', fontSize: '0.8rem', fontWeight: 600,
-                background: 'none', border: 'none', cursor: 'pointer',
+                flex: isMobile ? '0 0 auto' : 1,
+                minWidth: isMobile ? 92 : undefined,
+                padding: isMobile ? '14px 16px' : '10px 6px',
+                fontSize: isMobile ? '0.88rem' : '0.8rem',
+                fontWeight: 600,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
                 color: isActive ? 'var(--cl-accent)' : 'var(--cl-text-light)',
                 borderBottom: isActive ? '2px solid var(--cl-accent)' : '2px solid transparent',
                 marginBottom: '-1px',
                 transition: 'color 0.15s',
+                whiteSpace: 'nowrap',
+                minHeight: isMobile ? 44 : undefined,
               }}
             >
               {tab.label}
