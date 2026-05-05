@@ -675,6 +675,8 @@ export default function Home() {
             onRequestVerify={handleCitizenLoginOpen}
             onStatePick={handleStateSelect}
             citizen={citizen}
+            onOpenTracked={() => setTrackedOpen(true)}
+            onSubscribe={() => handleRequestCitizenWaitlist('subscribe')}
           />
         )}
       </div>
