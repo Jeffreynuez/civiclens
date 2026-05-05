@@ -25,16 +25,73 @@
       "term_length_years": 4,
       "open_seat": true,
       "incumbent_candidate_id": null,
-      "notes": "Open seat — Governor DeSantis is term-limited. Primary is closed (party-only).",
+      "notes": "Open seat — Governor DeSantis is term-limited. Florida runs a closed primary, so only registered Republican / Democratic voters choose between primary candidates on Aug 18. NPA, Libertarian, Constitution, Independent, and Write-in candidates skip the primary and appear on the Nov 3 general ballot.",
       "primary_candidates": {
-        "R": ["fl-cand-byron-donalds", "fl-cand-paul-renner"],
-        "D": ["fl-cand-jared-moskowitz", "fl-cand-nikki-fried"]
+        "R": [
+          "fl-cand-bobby-williams",
+          "fl-cand-byron-donalds",
+          "fl-cand-caneste-succe",
+          "fl-cand-daniel-imperato",
+          "fl-cand-daniel-nokovich",
+          "fl-cand-james-fishback",
+          "fl-cand-james-shaw",
+          "fl-cand-jay-collins",
+          "fl-cand-jenny-curtman",
+          "fl-cand-jim-holcomb",
+          "fl-cand-john-mercadante",
+          "fl-cand-paul-renner",
+          "fl-cand-rachel-rodriguez",
+          "fl-cand-shea-cruel"
+        ],
+        "D": [
+          "fl-cand-bill-slater",
+          "fl-cand-charles-lewis",
+          "fl-cand-david-jolly",
+          "fl-cand-dayna-foster",
+          "fl-cand-donald-peterson",
+          "fl-cand-evelyn-castillo-bach",
+          "fl-cand-faith-antonio",
+          "fl-cand-jerry-demings",
+          "fl-cand-jessica-vernekar",
+          "fl-cand-kenneth-norman",
+          "fl-cand-kevin-cichowski",
+          "fl-cand-randy-zapata",
+          "fl-cand-richard-dembinsky",
+          "fl-cand-thomas-fernandez"
+        ]
       },
       "general_candidates": [
         "fl-cand-byron-donalds",
-        "fl-cand-jared-moskowitz"
+        "fl-cand-jerry-demings",
+        "fl-cand-ansaun-fisher",
+        "fl-cand-charles-burkett",
+        "fl-cand-dean-abrams",
+        "fl-cand-frank-russo",
+        "fl-cand-insley-evans",
+        "fl-cand-jeffrey-datto",
+        "fl-cand-jennifer-pearl",
+        "fl-cand-mo-hylton",
+        "fl-cand-moliere-dimanche",
+        "fl-cand-surindar-bedi",
+        "fl-cand-yerucham-winer",
+        "fl-cand-scott-jewett",
+        "fl-cand-brandon-mcintyre",
+        "fl-cand-andrea-klink",
+        "fl-cand-james-michael-brown",
+        "fl-cand-reginald-strachan",
+        "fl-cand-christopher-powell",
+        "fl-cand-erik-morris",
+        "fl-cand-kathleen-anderson",
+        "fl-cand-rodney-glover"
       ],
-      "general_candidates_note": "Demo projection of primary winners — update after Aug 18."
+      "general_candidates_note": "Demo projection of the R / D primary winners (update after Aug 18) plus every NPA, minor-party, and write-in candidate who bypassed the primary and goes straight to the Nov 3 ballot.",
+      "_roster_source": {
+        "authority": "Florida Department of State, Division of Elections — Candidate Tracking System",
+        "url": "https://dos.elections.myflorida.com/candidates/CanList.asp?elecid=20261103-GEN&OfficeCode=GOV",
+        "observed": "2026-05-05",
+        "count": 48,
+        "note": "48 active filers as of 2026-05-05. List is fluid until the FL qualifying-period close (June 2026)."
+      }
     },
     {
       "id": "fl-2026-ag",
@@ -47,8 +104,12 @@
       "incumbent_candidate_id": "fl-cand-james-uthmeier",
       "notes": "Uthmeier was appointed in 2025 and is seeking a full term.",
       "primary_candidates": {
-        "R": ["fl-cand-james-uthmeier"],
-        "D": ["fl-cand-jose-javier-rodriguez"]
+        "R": [
+          "fl-cand-james-uthmeier"
+        ],
+        "D": [
+          "fl-cand-jose-javier-rodriguez"
+        ]
       },
       "general_candidates": [
         "fl-cand-james-uthmeier",
@@ -67,8 +128,12 @@
       "open_seat": false,
       "incumbent_candidate_id": "fl-cand-maxwell-frost",
       "primary_candidates": {
-        "D": ["fl-cand-maxwell-frost"],
-        "R": ["fl-cand-willie-montague"]
+        "D": [
+          "fl-cand-maxwell-frost"
+        ],
+        "R": [
+          "fl-cand-willie-montague"
+        ]
       },
       "general_candidates": [
         "fl-cand-maxwell-frost",
@@ -87,8 +152,12 @@
       "open_seat": false,
       "incumbent_candidate_id": "fl-cand-ileana-garcia",
       "primary_candidates": {
-        "R": ["fl-cand-ileana-garcia"],
-        "D": ["fl-cand-raquel-pacheco"]
+        "R": [
+          "fl-cand-ileana-garcia"
+        ],
+        "D": [
+          "fl-cand-raquel-pacheco"
+        ]
       },
       "general_candidates": [
         "fl-cand-ileana-garcia",
@@ -107,8 +176,12 @@
       "open_seat": false,
       "incumbent_candidate_id": "fl-cand-anna-eskamani",
       "primary_candidates": {
-        "D": ["fl-cand-anna-eskamani"],
-        "R": ["fl-cand-bonnie-jackson"]
+        "D": [
+          "fl-cand-anna-eskamani"
+        ],
+        "R": [
+          "fl-cand-bonnie-jackson"
+        ]
       },
       "general_candidates": [
         "fl-cand-anna-eskamani",
@@ -133,14 +206,19 @@
             "Lowers fixed-cost burden on seniors aging in place as insurance and HOA costs climb.",
             "Does not affect school-district funding."
           ],
-          "sponsors": ["Florida Chamber of Commerce", "AARP Florida"]
+          "sponsors": [
+            "Florida Chamber of Commerce",
+            "AARP Florida"
+          ]
         },
         "opposition": {
           "arguments": [
             "Shifts ~$180M/yr of county tax burden onto working-age homeowners and renters.",
             "Benefits highest-value homesteads disproportionately."
           ],
-          "sponsors": ["Florida Policy Institute"]
+          "sponsors": [
+            "Florida Policy Institute"
+          ]
         },
         "fiscal_impact": "Estimated −$180M/yr in non-school local property-tax revenue statewide by Year 3."
       },
@@ -159,14 +237,20 @@
             "Creates a durable standard surviving administration changes.",
             "Empowers affected residents to act where regulators don't."
           ],
-          "sponsors": ["Florida Conservation Voters", "VoteWater.org"]
+          "sponsors": [
+            "Florida Conservation Voters",
+            "VoteWater.org"
+          ]
         },
         "opposition": {
           "arguments": [
             "Will trigger a wave of litigation against farmers, municipalities, and utilities.",
             "Vague language creates regulatory uncertainty."
           ],
-          "sponsors": ["Florida Farm Bureau", "Associated Industries of Florida"]
+          "sponsors": [
+            "Florida Farm Bureau",
+            "Associated Industries of Florida"
+          ]
         },
         "fiscal_impact": "Indeterminate — enforcement costs depend on implementing statute."
       },
@@ -185,14 +269,19 @@
             "Removes self-dealing by incumbent legislators.",
             "Track record in states like California and Michigan shows more competitive districts."
           ],
-          "sponsors": ["League of Women Voters of Florida", "Common Cause Florida"]
+          "sponsors": [
+            "League of Women Voters of Florida",
+            "Common Cause Florida"
+          ]
         },
         "opposition": {
           "arguments": [
             "Removes accountability from elected officials to unelected commissioners.",
             "Existing Fair Districts amendments already constrain legislature."
           ],
-          "sponsors": ["Republican Party of Florida"]
+          "sponsors": [
+            "Republican Party of Florida"
+          ]
         },
         "fiscal_impact": "~$8M/yr ongoing for commission operations; ~$14M in startup IT and staffing."
       }
@@ -215,14 +304,19 @@
               "Produces ~6,000 income-restricted units over 10 years.",
               "Dedicates 40% to seniors and essential workers."
             ],
-            "sponsors": ["Miami Homes For All", "South Florida AFL-CIO"]
+            "sponsors": [
+              "Miami Homes For All",
+              "South Florida AFL-CIO"
+            ]
           },
           "opposition": {
             "arguments": [
               "Adds to property-tax burden during an affordability crisis.",
               "County lacks capacity to deploy funds efficiently."
             ],
-            "sponsors": ["Miami-Dade Chamber of Commerce (divided)"]
+            "sponsors": [
+              "Miami-Dade Chamber of Commerce (divided)"
+            ]
           },
           "fiscal_impact": "+0.25 mills ad valorem; ~$28M/yr in new debt service over 25 years."
         },
@@ -327,11 +421,21 @@
   },
   "_personalization_hints": {
     "match_keys": {
-      "state": ["level=state"],
-      "county": ["level=county AND county_fips=<user.county_fips>"],
-      "congressional_district": ["congressional_district=<user.district>"],
-      "state_senate_district": ["state_senate_district=<user.state_senate_district>"],
-      "state_house_district": ["state_house_district=<user.state_house_district>"]
+      "state": [
+        "level=state"
+      ],
+      "county": [
+        "level=county AND county_fips=<user.county_fips>"
+      ],
+      "congressional_district": [
+        "congressional_district=<user.district>"
+      ],
+      "state_senate_district": [
+        "state_senate_district=<user.state_senate_district>"
+      ],
+      "state_house_district": [
+        "state_house_district=<user.state_house_district>"
+      ]
     },
     "notes": "Frontend will stitch 'Your Ballot' from: statewide races + statewide measures + county-matched measures + federal race matching user's congressional_district + state legislative races matching user's districts. Municipal races not yet seeded — stubs can be added under races[].jurisdiction once city election dates align."
   }

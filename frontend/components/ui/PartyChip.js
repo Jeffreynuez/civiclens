@@ -23,21 +23,50 @@ import React from 'react';
  * a neutral chip.
  */
 const PARTY_KEY = {
-  D: 'D', d: 'D', democrat: 'D', democratic: 'D',
-  R: 'R', r: 'R', republican: 'R', gop: 'R',
-  I: 'I', i: 'I', independent: 'I', ind: 'I',
+  D: 'D', d: 'D', democrat: 'D', democratic: 'D', dem: 'D',
+  R: 'R', r: 'R', republican: 'R', gop: 'R', rep: 'R',
+  I: 'I', i: 'I', independent: 'I', ind: 'I', IND: 'I',
+  // Florida ballot codes for non-major-party candidates. We render
+  // these as their own chips so a No-Party-Affiliation candidate
+  // doesn't read the same as an Independent candidate (they're
+  // different ballot statuses under FL law).
+  NPA: 'NPA', npa: 'NPA',
+  LPF: 'LPF', lpf: 'LPF', libertarian: 'LPF', lib: 'LPF',
+  CPF: 'CPF', cpf: 'CPF', constitution: 'CPF',
+  WRI: 'WRI', wri: 'WRI', 'write-in': 'WRI', writein: 'WRI',
 };
 
 const PARTY_COLORS = {
   D: { solid: 'var(--cl-democrat)', soft: 'var(--cl-democrat-soft)' },
   R: { solid: 'var(--cl-republican)', soft: 'var(--cl-republican-soft)' },
   I: { solid: 'var(--cl-independent)', soft: 'var(--cl-independent-soft)' },
+  // Minor-party / no-party chips intentionally use neutral surface
+  // tokens — no party-coded color — so they sit outside the R/D/I
+  // visual hierarchy without inventing new brand colors.
+  NPA: null,
+  LPF: null,
+  CPF: null,
+  WRI: null,
 };
 
 const PARTY_LABEL = {
   D: 'D',
   R: 'R',
   I: 'I',
+  NPA: 'NPA',
+  LPF: 'LIB',
+  CPF: 'CON',
+  WRI: 'WI',
+};
+
+const PARTY_FULL = {
+  D: 'Democrat',
+  R: 'Republican',
+  I: 'Independent',
+  NPA: 'No Party Affiliation',
+  LPF: 'Libertarian',
+  CPF: 'Constitution Party',
+  WRI: 'Write-in',
 };
 
 export default function PartyChip({
@@ -53,10 +82,13 @@ export default function PartyChip({
   const colors = key ? PARTY_COLORS[key] : null;
   const text = label ?? (key ? PARTY_LABEL[key] : '?');
 
+  // Wider sizes for multi-letter labels (NPA / LIB / CON / WI) so the
+  // text doesn't get clipped inside the pill.
+  const isWide = key === 'NPA' || key === 'LPF' || key === 'CPF' || key === 'WRI';
   const sizeStyle = {
-    xs: { height: 16, padding: '0 5px', fontSize: 10, minWidth: 16 },
-    sm: { height: 18, padding: '0 6px', fontSize: 11, minWidth: 18 },
-    md: { height: 22, padding: '0 8px', fontSize: 12, minWidth: 22 },
+    xs: { height: 16, padding: isWide ? '0 6px' : '0 5px', fontSize: 10, minWidth: isWide ? 28 : 16 },
+    sm: { height: 18, padding: isWide ? '0 7px' : '0 6px', fontSize: 11, minWidth: isWide ? 32 : 18 },
+    md: { height: 22, padding: isWide ? '0 9px' : '0 8px', fontSize: 12, minWidth: isWide ? 36 : 22 },
   }[size];
 
   let visual;
@@ -100,7 +132,7 @@ export default function PartyChip({
       className={className}
       style={baseStyle}
       role="img"
-      aria-label={key ? `${PARTY_LABEL[key] === 'D' ? 'Democrat' : PARTY_LABEL[key] === 'R' ? 'Republican' : 'Independent'}` : 'Party unknown'}
+      aria-label={key ? PARTY_FULL[key] : 'Party unknown'}
       {...rest}
     >
       {text}
