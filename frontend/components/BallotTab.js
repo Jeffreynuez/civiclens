@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchElections, fetchBallotForAddress } from '@/lib/api';
 import useVoterInfo from '@/lib/useVoterInfo';
 import { getLean, setLean, subscribe as subscribeLean } from '@/lib/leaningPrefs';
+import { useIsMobile } from '@/lib/useViewport';
 import FollowButton from './FollowButton';
 import CompareButton from './CompareButton';
 import TrackElectionButton from './TrackElectionButton';
@@ -599,6 +600,7 @@ function RaceCard({
   forceExpanded, focusCandidateId, highlightCandidateId,
   onFocusCandidateConsumed, onHighlightConsumed,
 }) {
+  const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(Boolean(forceExpanded));
   useEffect(() => {
     if (forceExpanded) setExpanded(true);
@@ -680,9 +682,13 @@ function RaceCard({
         <button
           onClick={() => setExpanded((v) => !v)}
           style={{
-            padding: '5px 10px', background: 'var(--cl-bg)', border: '1px solid var(--cl-border)',
-            borderRadius: '8px', fontSize: '0.72rem', fontWeight: 600,
+            padding: isMobile ? '12px 16px' : '5px 10px',
+            background: 'var(--cl-bg)', border: '1px solid var(--cl-border)',
+            borderRadius: '8px',
+            fontSize: isMobile ? '0.84rem' : '0.72rem',
+            fontWeight: 600,
             cursor: 'pointer', color: 'var(--cl-text-light)', whiteSpace: 'nowrap',
+            minHeight: isMobile ? 44 : undefined,
           }}
         >
           {expanded ? 'Hide' : `${candidates.length} candidate${candidates.length === 1 ? '' : 's'}`}
@@ -879,6 +885,7 @@ function toCandidateMember(candidate, race, stateCode, electionPhase) {
 
 // ─── Ballot-measure card ─────────────────────────────────────────────
 function MeasureCard({ measure }) {
+  const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
   const levelColor = measure.level === 'state' ? '#2a9d8f' : '#e76f51';
   // Leaning preference — read once on mount, then subscribe so cross-tab
@@ -951,9 +958,13 @@ function MeasureCard({ measure }) {
         <button
           onClick={() => setExpanded((v) => !v)}
           style={{
-            padding: '5px 10px', background: 'var(--cl-bg)', border: '1px solid var(--cl-border)',
-            borderRadius: '8px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+            padding: isMobile ? '12px 16px' : '5px 10px',
+            background: 'var(--cl-bg)', border: '1px solid var(--cl-border)',
+            borderRadius: '8px',
+            fontSize: isMobile ? '0.84rem' : '0.72rem',
+            fontWeight: 600, cursor: 'pointer',
             color: 'var(--cl-text-light)',
+            minHeight: isMobile ? 44 : undefined,
           }}
         >
           {expanded ? 'Hide' : 'Details'}
@@ -1158,7 +1169,10 @@ function LeanButton({ active, tone, onClick, children }) {
   // Toggle button for ballot-measure leaning preferences. tone='accent'
   // for Yes (accent-green palette), tone='warning' for No (yellow
   // palette — neutral, not destructive). Active flips to filled,
-  // inactive shows hairline outline.
+  // inactive shows hairline outline. Mobile bumps height to 44px so
+  // the Yes / No pair clears the touch target minimum — hitting the
+  // wrong one when recording a leaning would be especially irritating.
+  const isMobile = useIsMobile();
   const palette = tone === 'warning'
     ? {
         active: { bg: 'var(--cl-warning-soft)', color: 'var(--cl-warning-text)', border: 'var(--cl-warning-border)' },
@@ -1174,13 +1188,13 @@ function LeanButton({ active, tone, onClick, children }) {
       type="button"
       onClick={onClick}
       style={{
-        height: 26,
-        padding: '0 12px',
+        height: isMobile ? 44 : 26,
+        padding: isMobile ? '0 18px' : '0 12px',
         borderRadius: 'var(--cl-radius-pill)',
         background: p.bg,
         color: p.color,
         border: `1px solid ${p.border}`,
-        fontSize: 'var(--cl-text-xs)',
+        fontSize: isMobile ? 'var(--cl-text-sm)' : 'var(--cl-text-xs)',
         fontWeight: 700,
         fontFamily: 'var(--cl-font-sans)',
         cursor: 'pointer',

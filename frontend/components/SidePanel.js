@@ -264,7 +264,10 @@ export default function SidePanel({
         )}
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — Congress / State / Local / Elections. Mobile bumps
+          padding so the row clears the 44px tap-target minimum and
+          shrinks the font slightly so "🗳 Elections" doesn't wrap on
+          a 375px screen. */}
       {stateData && (
         <div style={{ display: 'flex', borderBottom: '1px solid var(--cl-border)', background: 'white' }}>
           {[
@@ -277,7 +280,11 @@ export default function SidePanel({
               key={key}
               onClick={() => setActiveTab(key)}
               style={{
-                flex: 1, padding: '10px', textAlign: 'center', fontSize: '0.8rem', fontWeight: 600,
+                flex: 1,
+                padding: isMobile ? '14px 4px' : '10px',
+                textAlign: 'center',
+                fontSize: isMobile ? '0.78rem' : '0.8rem',
+                fontWeight: 600,
                 color: activeTab === key ? 'var(--cl-primary)' : 'var(--cl-text-light)',
                 borderBottom: activeTab === key ? '2px solid var(--cl-accent)' : '2px solid transparent',
                 cursor: 'pointer', background: 'none', border: 'none',
@@ -285,6 +292,8 @@ export default function SidePanel({
                 borderBottomWidth: '2px',
                 borderBottomColor: activeTab === key ? 'var(--cl-accent)' : 'transparent',
                 transition: 'all 0.2s',
+                minHeight: isMobile ? 44 : undefined,
+                whiteSpace: 'nowrap',
               }}
               onMouseOver={(e) => (e.currentTarget.style.background = 'var(--cl-bg)')}
               onMouseOut={(e) => (e.currentTarget.style.background = 'none')}
