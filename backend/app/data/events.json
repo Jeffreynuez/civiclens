@@ -1,6 +1,6 @@
 {
-  "_note": "Curated upcoming public events / town halls per representative. Keys are bioguide_ids. Each event: id, title, type, date (ISO), location, virtual (bool), url, description.",
-  "_source": "Manually curated demo data — replace with feeds from member offices or services like townhallproject.com when available.",
+  "_note": "Curated upcoming public events / town halls. Keys may be bioguide_ids (Congress) OR federal-official IDs (us-pres-*, us-vp-*, us-cabinet-*, us-scotus-*) — Task #71. Each event: id, title, type, date (ISO), location, virtual (bool), rsvp_url, description.",
+  "_source": "Manually curated demo data — replace with feeds from member offices or services like townhallproject.com when available. Federal-official events are typically press conferences, official addresses, or public-facing department announcements.",
   "events": {
     "R000595": [
       {
@@ -288,6 +288,65 @@
         "virtual": false,
         "rsvp_url": null,
         "description": "Casework appointments with district staff. Federal benefits, passports, IRS, military."
+      }
+    ],
+
+    "us-pres-trump": [
+      {
+        "id": "evt-us-pres-trump-001",
+        "title": "Joint Address to Congress",
+        "type": "Address",
+        "date": "2026-05-20T21:00:00",
+        "location": "U.S. Capitol — House Chamber",
+        "virtual": true,
+        "rsvp_url": "https://www.whitehouse.gov/live",
+        "description": "Annual joint address to Congress. Live-streamed on whitehouse.gov and major networks."
+      },
+      {
+        "id": "evt-us-pres-trump-002",
+        "title": "Press Conference — Economic Briefing",
+        "type": "Press Conference",
+        "date": "2026-06-02T14:00:00",
+        "location": "White House Press Briefing Room",
+        "virtual": true,
+        "rsvp_url": "https://www.whitehouse.gov/live",
+        "description": "Press briefing covering Q2 economic indicators and trade policy."
+      }
+    ],
+    "us-vp-vance": [
+      {
+        "id": "evt-us-vp-vance-001",
+        "title": "U.S. Naval Academy Commencement",
+        "type": "Speech",
+        "date": "2026-05-23T10:00:00",
+        "location": "Annapolis, MD",
+        "virtual": false,
+        "rsvp_url": null,
+        "description": "Commencement address to the graduating class of the U.S. Naval Academy. Public broadcast on C-SPAN."
+      }
+    ],
+    "us-cabinet-rubio": [
+      {
+        "id": "evt-us-cabinet-rubio-001",
+        "title": "State Dept Press Briefing — Latin America",
+        "type": "Press Conference",
+        "date": "2026-05-14T13:00:00",
+        "location": "U.S. Department of State, Washington DC",
+        "virtual": true,
+        "rsvp_url": "https://www.state.gov/briefings",
+        "description": "Joint press briefing with the Spokesperson on Western Hemisphere policy updates."
+      }
+    ],
+    "us-scotus-roberts": [
+      {
+        "id": "evt-us-scotus-roberts-001",
+        "title": "Federal Judges Association Annual Meeting — Keynote",
+        "type": "Speech",
+        "date": "2026-06-10T19:00:00",
+        "location": "Smithsonian American Art Museum, Washington DC",
+        "virtual": false,
+        "rsvp_url": null,
+        "description": "Keynote address. Limited public attendance; main remarks released to press the following morning."
       }
     ]
   }

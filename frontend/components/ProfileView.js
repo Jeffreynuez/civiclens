@@ -268,9 +268,22 @@ export default function ProfileView({
         });
       }
       if (activeTab === 'events' && !eventsState.loaded && !eventsState.loading) {
-        // No federal/state events feed today — resolve with an empty list so the
-        // tab renders its friendly empty state instead of a spinner.
-        setEventsState({ loading: false, loaded: true, data: [], isLive: false });
+        // Task #71: federal officials now have curated events keyed by
+        // their federal-official ID (us-pres-trump, us-vp-vance, etc.)
+        // in events.json. Try to fetch — if there's nothing curated for
+        // this id, we fall back to an empty list for the friendly empty
+        // state. State officials don't have curated events yet, but the
+        // same call is harmless (it just returns []) so we run it for
+        // every non-Congress role.
+        const officialId = member.id || member.bioguide_id;
+        if (officialId) {
+          setEventsState((s) => ({ ...s, loading: true }));
+          fetchMemberEvents(officialId).then(({ data, isLive }) => {
+            setEventsState({ loading: false, loaded: true, data, isLive });
+          });
+        } else {
+          setEventsState({ loading: false, loaded: true, data: [], isLive: false });
+        }
       }
     }
 
