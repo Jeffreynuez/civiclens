@@ -95,8 +95,18 @@ export default function CandidateProfile({
     <div
       className="flex flex-col overflow-hidden bg-white"
       style={
+        // Mobile: full-viewport takeover below the navbar (matches the
+        // ProfileView pattern from M2). The 60vh panel area would crush
+        // the candidate's content; reading a profile is a takeover
+        // interaction.  z-index 45 sits below the navbar (z:50) so the
+        // navbar logo / search / menu stay reachable.
         isMobile
-          ? { width: '100%', flex: 1, minHeight: 0 }
+          ? {
+              position: 'fixed',
+              top: 56, left: 0, right: 0, bottom: 0,
+              background: 'white',
+              zIndex: 45,
+            }
           : { width: `${width}px`, flexShrink: 0 }
       }
     >
@@ -107,8 +117,12 @@ export default function CandidateProfile({
             onClick={onBack}
             style={{
               background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.35)',
-              padding: '4px 10px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 600,
+              padding: isMobile ? '10px 16px' : '4px 10px',
+              borderRadius: '8px',
+              fontSize: isMobile ? '0.92rem' : '0.78rem',
+              fontWeight: 600,
               cursor: 'pointer',
+              minHeight: isMobile ? 44 : undefined,
             }}
           >
             ← {backLabel || 'Back'}
@@ -120,8 +134,12 @@ export default function CandidateProfile({
               title="Close"
               style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'rgba(255,255,255,0.8)', padding: '2px 6px',
-                fontSize: '1.25rem', lineHeight: 1,
+                color: 'rgba(255,255,255,0.8)',
+                padding: isMobile ? '10px 14px' : '2px 6px',
+                fontSize: isMobile ? '1.55rem' : '1.25rem',
+                lineHeight: 1,
+                minWidth: isMobile ? 44 : undefined,
+                minHeight: isMobile ? 44 : undefined,
               }}
               onMouseOver={(e) => (e.currentTarget.style.color = 'white')}
               onMouseOut={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}
@@ -174,15 +192,20 @@ export default function CandidateProfile({
           </div>
         </div>
 
-        {/* Action row */}
-        <div style={{ display: 'flex', gap: '6px', marginTop: '12px', flexWrap: 'wrap' }}>
+        {/* Action row — mobile bumps padding + font so each button
+            clears the 44px tap-target minimum. flex-wrap stays on for
+            both modes since this row already has 4–5 actions. */}
+        <div style={{ display: 'flex', gap: isMobile ? 8 : 6, marginTop: '12px', flexWrap: 'wrap' }}>
           <button
             onClick={toggleFollow}
             style={{
-              padding: '6px 12px', fontSize: '0.76rem', fontWeight: 700,
+              padding: isMobile ? '11px 18px' : '6px 12px',
+              fontSize: isMobile ? '0.92rem' : '0.76rem',
+              fontWeight: 700,
               borderRadius: '8px', cursor: 'pointer',
               background: isFollowing ? '#1d5a2c' : 'rgba(255,255,255,0.22)',
               color: 'white', border: '1px solid rgba(255,255,255,0.35)',
+              minHeight: isMobile ? 44 : undefined,
             }}
           >
             {isFollowing ? '✓ Following' : '+ Follow'}
@@ -191,10 +214,13 @@ export default function CandidateProfile({
             <button
               onClick={() => onCompareToggle(c)}
               style={{
-                padding: '6px 12px', fontSize: '0.76rem', fontWeight: 700,
+                padding: isMobile ? '11px 18px' : '6px 12px',
+                fontSize: isMobile ? '0.9rem' : '0.76rem',
+                fontWeight: 700,
                 borderRadius: '8px', cursor: 'pointer',
                 background: isComparing ? '#f4a261' : 'rgba(255,255,255,0.22)',
                 color: 'white', border: '1px solid rgba(255,255,255,0.35)',
+                minHeight: isMobile ? 44 : undefined,
               }}
             >
               {isComparing ? '✓ In Compare' : '+ Compare'}
@@ -206,10 +232,14 @@ export default function CandidateProfile({
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                padding: '6px 12px', fontSize: '0.76rem', fontWeight: 700,
+                padding: isMobile ? '11px 18px' : '6px 12px',
+                fontSize: isMobile ? '0.9rem' : '0.76rem',
+                fontWeight: 700,
                 borderRadius: '8px', background: 'rgba(255,255,255,0.22)',
                 color: 'white', border: '1px solid rgba(255,255,255,0.35)',
                 textDecoration: 'none',
+                minHeight: isMobile ? 44 : undefined,
+                display: 'inline-flex', alignItems: 'center',
               }}
             >
               Campaign Site ↗
@@ -232,10 +262,13 @@ export default function CandidateProfile({
               }}
               title="Open this candidate's current-office profile"
               style={{
-                padding: '6px 12px', fontSize: '0.76rem', fontWeight: 700,
+                padding: isMobile ? '11px 18px' : '6px 12px',
+                fontSize: isMobile ? '0.9rem' : '0.76rem',
+                fontWeight: 700,
                 borderRadius: '8px', cursor: 'pointer',
                 background: 'rgba(255,255,255,0.22)', color: 'white',
                 border: '1px solid rgba(255,255,255,0.35)',
+                minHeight: isMobile ? 44 : undefined,
               }}
             >
               View Rep.
@@ -243,7 +276,7 @@ export default function CandidateProfile({
           )}
           {onOpenPage && (
             <PageButton
-              size="sm"
+              size={isMobile ? 'md' : 'sm'}
               officialId={c.id}
               onOpen={(id) => onOpenPage(id, {
                 displayName: c.name,
@@ -255,18 +288,35 @@ export default function CandidateProfile({
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--cl-border)', background: 'white', overflowX: 'auto' }}>
+      {/* Tabs — already overflow-scrolls, mobile bumps padding + min-
+          height to clear 44px tap targets and hides the native
+          scrollbar via the .cl-no-scrollbar utility. */}
+      <div
+        className={isMobile ? 'cl-no-scrollbar' : ''}
+        style={{
+          display: 'flex',
+          borderBottom: '1px solid var(--cl-border)',
+          background: 'white',
+          overflowX: 'auto',
+          scrollbarWidth: isMobile ? 'none' : undefined,
+          msOverflowStyle: isMobile ? 'none' : undefined,
+        }}
+      >
         {tabs.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
             style={{
-              padding: '10px 14px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 600,
+              padding: isMobile ? '14px 18px' : '10px 14px',
+              textAlign: 'center',
+              fontSize: isMobile ? '0.88rem' : '0.76rem',
+              fontWeight: 600,
               color: activeTab === key ? 'var(--cl-primary)' : 'var(--cl-text-light)',
               borderBottom: activeTab === key ? '2px solid var(--cl-accent)' : '2px solid transparent',
               cursor: 'pointer', background: 'none', border: 'none',
               whiteSpace: 'nowrap',
+              minHeight: isMobile ? 44 : undefined,
+              minWidth: isMobile ? 92 : undefined,
             }}
           >
             {label}

@@ -9,11 +9,13 @@ import {
   Building,
 } from './ui';
 import { fetchCommittees, fetchCommitteeDetail } from '@/lib/api';
+import { useIsMobile } from '@/lib/useViewport';
 
 const PARTY_COLORS = { R: '#e63946', D: '#457b9d', I: '#6c3ec1' };
 const CHAMBER_LABEL = { House: 'House', Senate: 'Senate', Joint: 'Joint' };
 
 export default function CommitteesModal({ open, onClose, onMemberPick }) {
+  const isMobile = useIsMobile();
   const [committees, setCommittees] = useState([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
@@ -103,10 +105,16 @@ export default function CommitteesModal({ open, onClose, onMemberPick }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(1100px, 95vw)', height: 'min(820px, 92vh)',
-          margin: 'auto', background: 'white', borderRadius: '14px',
+          // Mobile: full-bleed sheet that takes the whole viewport
+          // (no margin, no rounded corners, no shadow). Desktop:
+          // floating card.
+          width: isMobile ? '100%' : 'min(1100px, 95vw)',
+          height: isMobile ? '100vh' : 'min(820px, 92vh)',
+          margin: isMobile ? 0 : 'auto',
+          background: 'white',
+          borderRadius: isMobile ? 0 : '14px',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.28)',
+          boxShadow: isMobile ? 'none' : '0 24px 64px rgba(0,0,0,0.28)',
         }}
       >
         {/* Header */}
