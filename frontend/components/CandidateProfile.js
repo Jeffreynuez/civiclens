@@ -267,6 +267,33 @@ export default function CandidateProfile({
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
         {activeTab === 'overview' && (
           <div>
+            {/* Skeleton-record disclosure. CivicLens tries to give every
+                filed candidate equal footing on the ballot, which means
+                listing minor / NPA / write-in candidates that don't have
+                public bios or campaign sites. We surface that gap
+                honestly rather than padding the profile with filler. */}
+            {c.data_status === 'skeleton' && (
+              <div
+                style={{
+                  fontSize: '0.78rem',
+                  color: 'var(--cl-text-light)',
+                  background: 'var(--cl-bg-soft)',
+                  border: '1px solid var(--cl-border)',
+                  borderRadius: 'var(--cl-radius-md, 8px)',
+                  padding: '10px 12px',
+                  marginBottom: '14px',
+                  lineHeight: 1.45,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: 'var(--cl-text)', marginBottom: 2 }}>
+                  Limited information on file
+                </div>
+                Confirmed as an active filer with the {c.data_source || 'state Division of Elections'}.
+                We don&apos;t have a curated bio, issue stances, endorsements, or fundraising
+                data on this candidate yet — we&apos;ll fill those in as the campaign publishes
+                a website or files the next required disclosure.
+              </div>
+            )}
             {c.bio && (
               <p style={{ fontSize: '0.88rem', lineHeight: 1.5, color: 'var(--cl-text)', marginBottom: '14px' }}>
                 {c.bio}
