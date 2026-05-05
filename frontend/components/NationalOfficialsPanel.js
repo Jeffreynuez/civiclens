@@ -78,7 +78,30 @@ export default function NationalOfficialsPanel({
   // National Activity section to swap "Sign in to participate" CTAs for
   // a "View thread" affordance once the visitor is authenticated.
   citizen,
+  // Footer Citizen-column wires. Both opt-in: if missing, the link is
+  // rendered as inactive (no cursor + muted color).
+  //   onOpenTracked - opens the My Tracked modal (mirrors the navbar
+  //                   "My Tracked" button + the in-footer "Notifications"
+  //                   link, which routes to the same modal because that's
+  //                   where per-item notification prefs live today).
+  //   onSubscribe   - opens the citizen-waitlist / Subscribe modal
+  //                   (mirrors the navbar Subscribe button).
+  onOpenTracked,
+  onSubscribe,
 }) {
+  // Refs for footer Browse-column scroll-to-section links. Each section
+  // renders inside a wrapper div with one of these refs attached, so the
+  // footer handlers can call scrollIntoView without any global IDs.
+  const executiveRef = useRef(null);
+  const senateRef = useRef(null);
+  const houseRef = useRef(null);
+  const browseRef = useRef(null);
+
+  const scrollToRef = (ref) => {
+    if (ref?.current) {
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -133,34 +156,40 @@ export default function NationalOfficialsPanel({
     <div style={{ fontFamily: 'var(--cl-font-sans)' }}>
       <Hero onVerifyClick={handleVerifyClick} />
 
-      <ExecutiveBranchSection
-        exec={exec}
-        onSelectPerson={onSelectPerson}
-        onNotify={onNotify}
-        onCompareToggle={onCompareToggle}
-        compareIds={compareIds}
-        onOpenPage={onOpenPage}
-      />
+      <div ref={executiveRef}>
+        <ExecutiveBranchSection
+          exec={exec}
+          onSelectPerson={onSelectPerson}
+          onNotify={onNotify}
+          onCompareToggle={onCompareToggle}
+          compareIds={compareIds}
+          onOpenPage={onOpenPage}
+        />
+      </div>
 
-      <SenateLeadershipSection
-        senate={congress.senate || {}}
-        congressNumber={congress.congress_number}
-        onSelectPerson={onSelectPerson}
-        onNotify={onNotify}
-        onCompareToggle={onCompareToggle}
-        compareIds={compareIds}
-        onOpenPage={onOpenPage}
-      />
+      <div ref={senateRef}>
+        <SenateLeadershipSection
+          senate={congress.senate || {}}
+          congressNumber={congress.congress_number}
+          onSelectPerson={onSelectPerson}
+          onNotify={onNotify}
+          onCompareToggle={onCompareToggle}
+          compareIds={compareIds}
+          onOpenPage={onOpenPage}
+        />
+      </div>
 
-      <HouseLeadershipSection
-        house={congress.house || {}}
-        congressNumber={congress.congress_number}
-        onSelectPerson={onSelectPerson}
-        onNotify={onNotify}
-        onCompareToggle={onCompareToggle}
-        compareIds={compareIds}
-        onOpenPage={onOpenPage}
-      />
+      <div ref={houseRef}>
+        <HouseLeadershipSection
+          house={congress.house || {}}
+          congressNumber={congress.congress_number}
+          onSelectPerson={onSelectPerson}
+          onNotify={onNotify}
+          onCompareToggle={onCompareToggle}
+          compareIds={compareIds}
+          onOpenPage={onOpenPage}
+        />
+      </div>
 
       <SCOTUSSection
         sc={judiciary.supreme_court || {}}
@@ -176,11 +205,21 @@ export default function NationalOfficialsPanel({
         citizen={citizen}
       />
 
-      <BrowseByStateSection onStatePick={onStatePick} />
+      <div ref={browseRef}>
+        <BrowseByStateSection onStatePick={onStatePick} />
+      </div>
 
       <VerificationCTAStrip onVerifyClick={handleVerifyClick} />
 
-      <Footer />
+      <Footer
+        onJumpExecutive={() => scrollToRef(executiveRef)}
+        onJumpSenate={() => scrollToRef(senateRef)}
+        onJumpHouse={() => scrollToRef(houseRef)}
+        onJumpBrowse={() => scrollToRef(browseRef)}
+        onVerify={handleVerifyClick}
+        onOpenTracked={onOpenTracked}
+        onSubscribe={onSubscribe}
+      />
     </div>
   );
 }
@@ -1045,7 +1084,15 @@ function VerificationCTAStrip({ onVerifyClick }) {
 // ─────────────────────────────────────────────────────────────────
 // 7. FOOTER
 // ─────────────────────────────────────────────────────────────────
-function Footer() {
+function Footer({
+  onJumpExecutive,
+  onJumpSenate,
+  onJumpHouse,
+  onJumpBrowse,
+  onVerify,
+  onOpenTracked,
+  onSubscribe,
+}) {
   return (
     <footer
       style={{
@@ -1099,24 +1146,36 @@ function Footer() {
               in their own districts.
             </p>
           </div>
+          {/* Browse column — every link scrolls to its corresponding NOP
+              section. */}
           <FooterColumn
             heading="Browse"
             links={[
-              { label: 'Executive branch', onClick: null },
-              { label: 'Senate', onClick: null },
-              { label: 'House', onClick: null },
-              { label: 'Browse by state', onClick: null },
+              { label: 'Executive branch', onClick: onJumpExecutive },
+              { label: 'Senate', onClick: onJumpSenate },
+              { label: 'House', onClick: onJumpHouse },
+              { label: 'Browse by state', onClick: onJumpBrowse },
             ]}
           />
+          {/* Citizen column — wired to the same handlers as their navbar
+              counterparts so the footer becomes a fallback entry point.
+              "Subscribe" was renamed from "Subscribe to a rep" — you can
+              already subscribe to / follow individual reps via the Follow
+              button on every profile card; the Subscribe modal is the
+              email-list waitlist for the product itself. "Notifications"
+              routes to the My Tracked modal because that's where per-item
+              notification prefs live today. */}
           <FooterColumn
             heading="Citizen"
             links={[
-              { label: 'Verify your address', onClick: null },
-              { label: 'My tracked', onClick: null },
-              { label: 'Notifications', onClick: null },
-              { label: 'Subscribe to a rep', onClick: null },
+              { label: 'Verify your address', onClick: onVerify || null },
+              { label: 'My tracked', onClick: onOpenTracked || null },
+              { label: 'Notifications', onClick: onOpenTracked || null },
+              { label: 'Subscribe', onClick: onSubscribe || null },
             ]}
           />
+          {/* About column — placeholders for static pages we haven't built
+              yet. Rendered as inactive (no cursor, muted color). */}
           <FooterColumn
             heading="About"
             links={[
@@ -1152,26 +1211,52 @@ function FooterColumn({ heading, links }) {
     <div>
       <Eyebrow style={{ marginBottom: 10 }}>{heading}</Eyebrow>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {links.map((l) => (
-          <li key={l.label}>
-            <button
-              type="button"
-              onClick={l.onClick || (() => {})}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                padding: 0,
-                fontSize: 'var(--cl-text-sm)',
-                color: 'var(--cl-text)',
-                fontFamily: 'var(--cl-font-sans)',
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              {l.label}
-            </button>
-          </li>
-        ))}
+        {links.map((l) => {
+          const active = typeof l.onClick === 'function';
+          return (
+            <li key={l.label}>
+              {active ? (
+                <button
+                  type="button"
+                  onClick={l.onClick}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: 'var(--cl-text-sm)',
+                    color: 'var(--cl-text)',
+                    fontFamily: 'var(--cl-font-sans)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.color = 'var(--cl-accent)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.color = 'var(--cl-text)';
+                  }}
+                >
+                  {l.label}
+                </button>
+              ) : (
+                // Inactive link — rendered as muted text so users don't
+                // try to click placeholders for pages that don't exist
+                // yet (Methodology, Editorial standards, etc.).
+                <span
+                  aria-disabled="true"
+                  style={{
+                    fontSize: 'var(--cl-text-sm)',
+                    color: 'var(--cl-text-muted)',
+                    fontFamily: 'var(--cl-font-sans)',
+                    cursor: 'default',
+                  }}
+                >
+                  {l.label}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

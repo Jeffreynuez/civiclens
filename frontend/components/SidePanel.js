@@ -130,6 +130,10 @@ export default function SidePanel({
   // — null when no citizen is signed in, in which case the banner is
   // omitted.
   citizen,
+  // NOP footer Citizen-column wires (mirror the navbar buttons of the
+  // same name). Forwarded only to NationalOfficialsPanel.
+  onOpenTracked,
+  onSubscribe,
 }) {
   const isInCompare = (m) => Boolean(compareIds && m && compareIds.has(m.bioguide_id || m.id));
   // Controlled tab state when the parent lifts it (so selecting a candidate
@@ -331,6 +335,8 @@ export default function SidePanel({
               onRequestVerify={onRequestVerify}
               onStatePick={onStatePick}
               citizen={citizen}
+              onOpenTracked={onOpenTracked}
+              onSubscribe={onSubscribe}
             />
           </div>
         )}
