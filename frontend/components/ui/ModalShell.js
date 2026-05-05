@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { useIsMobile } from '@/lib/useViewport';
 
 /**
  * CivicLens ModalShell — the canonical centered card on a dimmed
@@ -48,6 +49,11 @@ export default function ModalShell({
   children,
 }) {
   const cardRef = useRef(null);
+  // Mobile (≤768px) flips the centered card to a full-screen sheet:
+  // card takes 100% of the viewport, no border-radius, no esc hint,
+  // larger close × that clears 44px tap-target. Backdrop is hidden
+  // because the card covers everything anyway.
+  const isMobile = useIsMobile();
 
   // ESC key handler.
   useEffect(() => {
@@ -87,9 +93,9 @@ export default function ModalShell({
         zIndex: 1500,
         background: VARIANT_BACKDROP[variant] || VARIANT_BACKDROP.form,
         display: 'flex',
-        alignItems: 'center',
+        alignItems: isMobile ? 'stretch' : 'center',
         justifyContent: 'center',
-        padding: 16,
+        padding: isMobile ? 0 : 16,
         overflowY: 'auto',
       }}
     >
@@ -98,11 +104,16 @@ export default function ModalShell({
         style={{
           position: 'relative',
           background: 'var(--cl-card)',
-          borderRadius: 'var(--cl-radius-2xl)',
-          boxShadow: 'var(--cl-shadow-modal)',
+          // Full-bleed on mobile (no rounded corners, fills the
+          // viewport edge to edge). Centered card on desktop.
+          borderRadius: isMobile ? 0 : 'var(--cl-radius-2xl)',
+          boxShadow: isMobile ? 'none' : 'var(--cl-shadow-modal)',
           width: '100%',
-          maxWidth: width,
-          padding: '24px 24px 16px',
+          maxWidth: isMobile ? '100%' : width,
+          minHeight: isMobile ? '100vh' : undefined,
+          // Slightly more padding on mobile for the close-X breathing
+          // room and to keep content away from the screen edges.
+          padding: isMobile ? '56px 20px 24px' : '24px 24px 16px',
           ...cardStyle,
         }}
       >
@@ -113,15 +124,17 @@ export default function ModalShell({
             aria-label="Close"
             style={{
               position: 'absolute',
-              top: 12,
-              right: 12,
-              width: 28,
-              height: 28,
+              top: isMobile ? 8 : 12,
+              right: isMobile ? 8 : 12,
+              // 44×44 on mobile to clear the tap-target minimum;
+              // 28×28 on desktop where pointer precision is better.
+              width: isMobile ? 44 : 28,
+              height: isMobile ? 44 : 28,
               border: 'none',
               background: 'transparent',
               borderRadius: 'var(--cl-radius-pill)',
               color: 'var(--cl-text-light)',
-              fontSize: 18,
+              fontSize: isMobile ? 26 : 18,
               lineHeight: 1,
               cursor: 'pointer',
               display: 'inline-flex',
@@ -135,7 +148,9 @@ export default function ModalShell({
 
         {children}
 
-        {showEscHint && onClose && (
+        {/* Esc-to-close hint is desktop-only — no physical keyboard
+            on a phone, so the hint reads as cruft. */}
+        {showEscHint && onClose && !isMobile && (
           <div
             style={{
               marginTop: 16,

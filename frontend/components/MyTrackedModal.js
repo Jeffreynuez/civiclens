@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useIsMobile } from '@/lib/useViewport';
 import { fetchBillSnapshot } from '@/lib/api';
 import {
   untrackBill, updateTrackedBill, useTrackedBills, setBillPrefs,
@@ -26,6 +27,7 @@ import { PREF_SCHEMA, PREF_TYPES, mergePrefs } from '@/lib/notificationPrefs';
  * refresh action on the Bills section header.
  */
 export default function MyTrackedModal({ open, onClose, onMemberPick, onNotify }) {
+  const isMobile = useIsMobile();
   const { list: bills } = useTrackedBills();
   const { list: officialsAll } = useTrackedOfficials();
   const { list: elections } = useTrackedElections();
@@ -118,15 +120,23 @@ export default function MyTrackedModal({ open, onClose, onMemberPick, onNotify }
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '24px', zIndex: 100,
+        display: 'flex',
+        // Mobile: full-bleed sheet (no padding, card fills the screen).
+        alignItems: isMobile ? 'stretch' : 'center',
+        justifyContent: 'center',
+        padding: isMobile ? 0 : '24px',
+        zIndex: 100,
       }}
     >
       <div style={{
-        width: 'min(860px, 100%)', maxHeight: 'calc(100vh - 48px)',
-        background: 'white', borderRadius: '12px', overflow: 'hidden',
+        width: isMobile ? '100%' : 'min(860px, 100%)',
+        height: isMobile ? '100vh' : undefined,
+        maxHeight: isMobile ? undefined : 'calc(100vh - 48px)',
+        background: 'white',
+        borderRadius: isMobile ? 0 : '12px',
+        overflow: 'hidden',
         display: 'flex', flexDirection: 'column',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        boxShadow: isMobile ? 'none' : '0 20px 60px rgba(0,0,0,0.3)',
       }}>
         {/* Header */}
         <div style={{
@@ -146,10 +156,13 @@ export default function MyTrackedModal({ open, onClose, onMemberPick, onNotify }
             onClick={onClose}
             aria-label="Close"
             style={{
-              width: '30px', height: '30px', borderRadius: '8px',
+              width: isMobile ? 44 : 30,
+              height: isMobile ? 44 : 30,
+              borderRadius: '8px',
               background: 'rgba(255,255,255,0.12)', color: 'white',
               border: '1px solid rgba(255,255,255,0.25)', cursor: 'pointer',
-              fontSize: '1rem', fontWeight: 700,
+              fontSize: isMobile ? '1.4rem' : '1rem',
+              fontWeight: 700,
             }}
           >×</button>
         </div>
