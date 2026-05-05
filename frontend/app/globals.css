@@ -278,3 +278,25 @@ body {
 .cl-no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ============================================================
+   MapLibre NavigationControl — mobile tap-target bump
+
+   The built-in zoom +/- and compass buttons default to 29×29 px,
+   which is below the 44px touch-target minimum. At ≤768px we
+   bump them so the map is comfortably zoomable on a phone. The
+   icon glyphs scale with the button via background-size: contain.
+
+   Scoped to the maplibregl-ctrl-group that holds the buttons so
+   we don't accidentally catch the attribution badge or other
+   chrome.
+   ============================================================ */
+@media (max-width: 768px) {
+  .maplibregl-ctrl-group button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+    background-size: 70% !important;
+  }
+}

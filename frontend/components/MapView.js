@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { STATE_NAME_TO_CODE, STATE_CODE_TO_FIPS } from '@/lib/constants';
 import { fetchDistrictGeometry, fetchDistrictsForState } from '@/lib/api';
+import { useIsMobile } from '@/lib/useViewport';
 import { ArrowLeft } from './ui';
 
 // Zoom bounds for the map — the slider maps linearly between these.
@@ -62,6 +63,10 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
   const [hoveredDistrictLabel, setHoveredDistrictLabel] = useState(null);
   const [currentLabel, setCurrentLabel] = useState('United States');
   const [zoomPct, setZoomPct] = useState(zoomToPct(3.5));
+  // On mobile we hide the bottom-left zoom dock (MapLibre's built-in
+  // NavigationControl + native pinch-zoom cover the same affordance
+  // and don't burn screen space the panel needs more than the map).
+  const isMobile = useIsMobile();
 
   // ─── One-time map init ──────────────────────────────────────────────
   useEffect(() => {
@@ -636,9 +641,12 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
           style={{
             position: 'absolute', top: 16, left: 16,
             background: 'var(--cl-card)',
-            padding: '8px 14px',
+            // Mobile bumps padding so the pill clears the 44px tap-
+            // target minimum. Desktop stays compact since cursor
+            // precision is fine.
+            padding: isMobile ? '12px 18px' : '8px 14px',
             borderRadius: 'var(--cl-radius-pill)',
-            fontSize: 'var(--cl-text-sm)',
+            fontSize: isMobile ? '0.95rem' : 'var(--cl-text-sm)',
             color: 'var(--cl-accent)',
             fontWeight: 600,
             fontFamily: 'var(--cl-font-sans)',
@@ -647,9 +655,10 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
             zIndex: 10,
             display: 'flex', alignItems: 'center', gap: 6,
             cursor: 'pointer',
+            minHeight: isMobile ? 44 : undefined,
           }}
         >
-          <ArrowLeft size={14} color="accent" active />
+          <ArrowLeft size={isMobile ? 16 : 14} color="accent" active />
           {activeDistrict.stateCode || 'United States'}
         </button>
       )}
@@ -657,50 +666,58 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
       {/* Zoom dock — bottom-LEFT (was bottom-right; fixed Phase 4B follow-up:
           right edge collides with the maplibre attribution badge and other
           floating chrome). Tokenized chrome, accent-green slider thumb,
-          .cl-num percentage label. */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 16,
-          bottom: 16,
-          zIndex: 10,
-          background: 'var(--cl-card)',
-          borderRadius: 'var(--cl-radius-lg)',
-          padding: '8px 12px',
-          boxShadow: 'var(--cl-shadow-pop)',
-          border: '1px solid var(--cl-border)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          width: 200,
-        }}
-      >
+          .cl-num percentage label.
+
+          Hidden on mobile: the slider isn't a meaningful touch
+          affordance (the thumb is a desktop-pointer interaction), and
+          MapLibre's built-in NavigationControl (top-right) plus native
+          pinch-zoom cover the same job without burning the panel's
+          horizontal real estate. */}
+      {!isMobile && (
         <div
-          className="cl-num"
           style={{
-            fontSize: 'var(--cl-text-sm)',
-            fontWeight: 700,
-            color: 'var(--cl-text)',
-            minWidth: 34,
+            position: 'absolute',
+            left: 16,
+            bottom: 16,
+            zIndex: 10,
+            background: 'var(--cl-card)',
+            borderRadius: 'var(--cl-radius-lg)',
+            padding: '8px 12px',
+            boxShadow: 'var(--cl-shadow-pop)',
+            border: '1px solid var(--cl-border)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            width: 200,
           }}
         >
-          {zoomPct}%
+          <div
+            className="cl-num"
+            style={{
+              fontSize: 'var(--cl-text-sm)',
+              fontWeight: 700,
+              color: 'var(--cl-text)',
+              minWidth: 34,
+            }}
+          >
+            {zoomPct}%
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={zoomPct}
+            onChange={handleSliderChange}
+            aria-label="Map zoom"
+            style={{
+              flex: 1,
+              accentColor: 'var(--cl-accent)',
+              cursor: 'pointer',
+            }}
+          />
         </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={zoomPct}
-          onChange={handleSliderChange}
-          aria-label="Map zoom"
-          style={{
-            flex: 1,
-            accentColor: 'var(--cl-accent)',
-            cursor: 'pointer',
-          }}
-        />
-      </div>
+      )}
 
       {/* State / district label — bottom center. Reflects hover when
           available. Phase 4B: tokenized chrome (navy primary fill, white
