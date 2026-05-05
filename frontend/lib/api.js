@@ -468,22 +468,34 @@ export async function fetchCommitteeDetail(thomasId) {
   }
 }
 
-// ─── Member events (curated town halls / public events) ────────────
+// ─── Official events (curated town halls / public events) ───────────
 // Returns array of: { id, title, type, date (ISO), location, virtual,
-// rsvp_url, description }
-export async function fetchMemberEvents(bioguideId) {
-  if (!bioguideId) return { data: [], isLive: false };
+// rsvp_url, description, official_id }
+//
+// Task #71: callers can pass EITHER a bioguide_id (Congress) OR a
+// federal-official ID (us-pres-trump, us-vp-vance, us-cabinet-rubio,
+// us-scotus-roberts). Backend treats every key in events.json as an
+// opaque "official_id" — see backend/app/services/events_service.py.
+export async function fetchOfficialEvents(officialId) {
+  if (!officialId) return { data: [], isLive: false };
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/events/upcoming?bioguide_id=${encodeURIComponent(bioguideId)}`
+      `${API_BASE_URL}/api/events/upcoming?official_id=${encodeURIComponent(officialId)}`
     );
     if (!response.ok) throw new Error(`API Error ${response.status}`);
     const data = await response.json();
     return { data: data.events || [], isLive: true };
   } catch (error) {
-    console.warn('Member events API unavailable:', error.message);
+    console.warn('Official events API unavailable:', error.message);
     return { data: [], isLive: false };
   }
+}
+
+// Legacy alias — preserved so existing call sites that still think in
+// bioguide_id terms keep working without edits. Routes through the
+// same endpoint.
+export async function fetchMemberEvents(bioguideId) {
+  return fetchOfficialEvents(bioguideId);
 }
 
 // All upcoming events across the curated set, soonest first.

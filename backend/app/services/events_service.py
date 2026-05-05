@@ -1,8 +1,16 @@
 """
 Events Service
-Loads curated upcoming public events / town halls from a static JSON file and
-exposes simple lookup helpers. Events are filtered to upcoming-only based on
-the current server time.
+
+Loads curated upcoming public events / town halls from a static JSON file
+and exposes simple lookup helpers. Events are filtered to upcoming-only
+based on the current server time.
+
+Schema note (Task #71): keys in events.json may be either bioguide_ids
+(Congress members) OR federal-official IDs (e.g., 'us-pres-trump',
+'us-vp-vance', 'us-cabinet-rubio'). The lookup is type-agnostic — the
+service treats every key as an opaque "official_id". The legacy
+get_member_events() helper stays as a thin alias for callers that still
+think in bioguide_id terms.
 """
 import json
 import logging
@@ -17,7 +25,10 @@ DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "events.json"
 
 class EventsService:
     def __init__(self):
-        self._events_by_member: dict[str, list[dict]] = {}
+        # Keys are opaque official_ids — bioguide_ids for Congress,
+        # federal-official IDs (us-pres-*, us-vp-*, us-cabinet-*,
+        # us-scotus-*) for everyone else.
+        self._events_by_official: dict[str, list[dict]] = {}
         self._loaded_at: Optional[datetime] = None
         self._load()
 
@@ -25,21 +36,21 @@ class EventsService:
         try:
             with DATA_PATH.open("r", encoding="utf-8") as fh:
                 raw = json.load(fh)
-            self._events_by_member = raw.get("events", {}) or {}
+            self._events_by_official = raw.get("events", {}) or {}
             self._loaded_at = datetime.utcnow()
-            total = sum(len(v) for v in self._events_by_member.values())
+            total = sum(len(v) for v in self._events_by_official.values())
             logger.info(
-                "EventsService: loaded %d events for %d members from %s",
+                "EventsService: loaded %d events for %d officials from %s",
                 total,
-                len(self._events_by_member),
+                len(self._events_by_official),
                 DATA_PATH,
             )
         except FileNotFoundError:
             logger.warning("EventsService: events.json not found at %s", DATA_PATH)
-            self._events_by_member = {}
+            self._events_by_official = {}
         except json.JSONDecodeError as e:
             logger.error("EventsService: failed to parse events.json: %s", e)
-            self._events_by_member = {}
+            self._events_by_official = {}
 
     @staticmethod
     def _parse_date(date_str: str) -> Optional[datetime]:
@@ -61,20 +72,35 @@ class EventsService:
         upcoming.sort(key=lambda e: self._parse_date(e.get("date", "")) or datetime.max)
         return upcoming
 
-    def get_member_events(self, bioguide_id: str) -> list[dict]:
-        """Return upcoming events for a single bioguide_id, soonest first."""
-        if not bioguide_id:
+    def get_events_for_official(self, official_id: str) -> list[dict]:
+        """Return upcoming events for a single official_id, soonest first.
+
+        Accepts both bioguide_ids (Congress) and federal-official IDs
+        (us-pres-*, etc.). Empty list when the id has no curated events.
+        """
+        if not official_id:
             return []
-        raw = self._events_by_member.get(bioguide_id, [])
+        raw = self._events_by_official.get(official_id, [])
         return self._filter_upcoming(raw)
 
+    # Legacy alias — preserved so existing call sites that still think in
+    # bioguide_id terms (the original Phase 1.5 code path) keep working.
+    def get_member_events(self, bioguide_id: str) -> list[dict]:
+        return self.get_events_for_official(bioguide_id)
+
     def get_all_upcoming_events(self) -> list[dict]:
-        """Return a flat list of all upcoming events across all members,
-        each enriched with the bioguide_id key, sorted by date ascending."""
+        """Return a flat list of all upcoming events across all officials,
+        each enriched with both `official_id` and the legacy `bioguide_id`
+        key (same value), sorted by date ascending. The duplicate key is
+        for backward compatibility — frontend can read either."""
         flat: list[dict] = []
-        for bioguide_id, events in self._events_by_member.items():
+        for official_id, events in self._events_by_official.items():
             for evt in events:
-                flat.append({**evt, "bioguide_id": bioguide_id})
+                flat.append({
+                    **evt,
+                    "official_id": official_id,
+                    "bioguide_id": official_id,
+                })
         return self._filter_upcoming(flat)
 
     def reload(self) -> None:

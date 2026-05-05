@@ -66,23 +66,51 @@ def _fetch_rep_events(
 
 @router.get("/upcoming")
 async def get_upcoming_events(
-    bioguide_id: str = Query(..., description="Member bioguide ID (e.g. R000595)"),
+    bioguide_id: Optional[str] = Query(
+        None,
+        description="Member bioguide ID (e.g. R000595). Legacy param — prefer official_id."
+    ),
+    official_id: Optional[str] = Query(
+        None,
+        description=(
+            "Official ID — either a bioguide_id (Congress) or a federal-"
+            "official ID (us-pres-trump, us-vp-vance, us-cabinet-rubio, "
+            "us-scotus-roberts). Task #71 made this the canonical param; "
+            "bioguide_id remains accepted for backward compatibility."
+        ),
+    ),
     db: Session = Depends(get_db),
 ):
-    """Return upcoming public events for a specific member — curated
+    """Return upcoming public events for a specific official — curated
     events.json entries plus any rep-created events whose
-    `official_id` matches the bioguide_id."""
-    curated = events_service.get_member_events(bioguide_id)
-    # Tag curated events with official_id for frontend symmetry.
-    curated = [{**e, "official_id": bioguide_id, "_source": e.get("_source", "curated")} for e in curated]
+    `official_id` matches.
 
-    rep_events = _fetch_rep_events(db, official_id=bioguide_id)
+    Accepts EITHER `official_id` (preferred) OR `bioguide_id` (legacy).
+    If both are sent, official_id wins.
+    """
+    target_id = official_id or bioguide_id
+    if not target_id:
+        return {"official_id": None, "bioguide_id": None, "count": 0, "events": []}
+
+    curated = events_service.get_events_for_official(target_id)
+    # Tag curated events with official_id for frontend symmetry. Keep
+    # bioguide_id alias on the event so older frontend code continues
+    # working (the value is identical — the key in events.json IS the
+    # official_id).
+    curated = [
+        {**e, "official_id": target_id, "bioguide_id": target_id,
+         "_source": e.get("_source", "curated")}
+        for e in curated
+    ]
+
+    rep_events = _fetch_rep_events(db, official_id=target_id)
 
     merged = curated + rep_events
     merged.sort(key=lambda e: e.get("date") or "")
 
     return {
-        "bioguide_id": bioguide_id,
+        "official_id": target_id,
+        "bioguide_id": target_id,  # legacy alias
         "count": len(merged),
         "events": merged,
     }
