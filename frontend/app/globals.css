@@ -268,3 +268,13 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================
+   Mobile utility: hide native scrollbar on horizontally-scrolling
+   strips (e.g. ProfileView's tab bar at narrow widths). The
+   `scrollbarWidth: none` + `msOverflowStyle: none` inline styles
+   handle Firefox / IE; this rule covers WebKit / Blink.
+   ============================================================ */
+.cl-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

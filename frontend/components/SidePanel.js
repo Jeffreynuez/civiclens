@@ -521,17 +521,48 @@ export default function SidePanel({
           NOT torn down: its scroll container stays mounted with its
           scrollTop intact, so when the user hits Back / × the panel
           appears exactly where they left it (no remount, no refetch, no
-          jump to top). */}
+          jump to top).
+
+          On mobile we promote this to a full-viewport overlay (position:
+          fixed, top: 56px so the navbar stays visible). The map takes
+          the top half and the panel takes the bottom in browse mode, so
+          the in-panel overlay would only cover ~60% of the viewport —
+          way too cramped for reading a profile. Going fullscreen below
+          the navbar matches the mobile UX expectation that opening a
+          person's page is a takeover interaction. */}
       {selectedMember && (
         <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'white',
-            display: 'flex',
-            flexDirection: 'column',
-            zIndex: 5,
-          }}
+          style={
+            isMobile
+              ? {
+                  position: 'fixed',
+                  // 56px = the navbar's fixed height. Keep it in sync if
+                  // we ever change the navbar height.
+                  top: 56,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'white',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  // Below the navbar (z:50) so the navbar's logo / search
+                  // / menu stay reachable. The map's NotificationBanner
+                  // is z:50 too, so a transient district-selection
+                  // banner could briefly float over the profile — fine,
+                  // it self-dismisses in 4 seconds and only fires on
+                  // map-side interactions the user isn't doing inside
+                  // a profile.
+                  zIndex: 45,
+                }
+              : {
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'white',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  zIndex: 5,
+                }
+          }
         >
           <ProfileView
             member={selectedMember}
