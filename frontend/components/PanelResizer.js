@@ -136,14 +136,20 @@ export default function PanelResizer({
         overflow: 'visible',
       }
     : {
-        height: 18,
+        // Mobile horizontal drag handle. Bumped from 18 → 28 px tall
+        // so it's noticeably easier to land a thumb on, and switched
+        // from the light surface-soft fill to a navy-primary fill so
+        // the bar reads as a distinct affordance rather than blending
+        // into the panel content beneath. Active-state (drag/hover)
+        // lightens slightly so there's still a feedback flash.
+        height: 28,
         flexShrink: 0,
         cursor: 'ns-resize',
         position: 'relative',
         zIndex: 5,
-        background: active ? 'var(--cl-bg)' : 'var(--cl-bg-soft, #f1f3f5)',
-        borderTop: '1px solid var(--cl-border)',
-        borderBottom: '1px solid var(--cl-border)',
+        background: active ? 'var(--cl-primary-light, #415a77)' : 'var(--cl-primary, #1b263b)',
+        borderTop: '1px solid var(--cl-primary, #1b263b)',
+        borderBottom: '1px solid var(--cl-primary, #1b263b)',
         transition: 'background 0.15s ease',
         // Touch-action: none so the OS doesn't interpret the swipe as
         // a page-scroll while the user is actively resizing.
@@ -217,28 +223,30 @@ export default function PanelResizer({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 10,
               pointerEvents: 'none',
             }}
           >
             <div
               style={{
-                width: 28,
+                width: 32,
                 height: 3,
                 borderRadius: 2,
-                background: 'var(--cl-text-muted, #adb5bd)',
-                opacity: active ? 0.9 : 0.55,
+                // White-on-navy for strong contrast against the new
+                // primary-fill background.
+                background: 'rgba(255,255,255,0.85)',
+                opacity: active ? 1 : 0.7,
                 transition: 'opacity 0.15s ease',
               }}
             />
             {label && (
               <span
                 style={{
-                  fontSize: 'var(--cl-text-2xs)',
+                  fontSize: 'var(--cl-text-xs)',
                   fontWeight: 700,
-                  letterSpacing: '0.06em',
+                  letterSpacing: '0.08em',
                   textTransform: 'uppercase',
-                  color: 'var(--cl-text-light)',
+                  color: 'rgba(255,255,255,0.92)',
                 }}
               >
                 {label}
@@ -246,11 +254,11 @@ export default function PanelResizer({
             )}
             <div
               style={{
-                width: 28,
+                width: 32,
                 height: 3,
                 borderRadius: 2,
-                background: 'var(--cl-text-muted, #adb5bd)',
-                opacity: active ? 0.9 : 0.55,
+                background: 'rgba(255,255,255,0.85)',
+                opacity: active ? 1 : 0.7,
                 transition: 'opacity 0.15s ease',
               }}
             />

@@ -232,11 +232,25 @@ function Hero({ onVerifyClick }) {
   // from /api/all-members + a verified-citizens count from the citizen
   // auth backend. Hardcoding here so the hero feels populated even when
   // the backend is offline.
+  //
+  // "States covered" was dropped (50 is implicit for any US-civic app);
+  // replaced with chamber + SCOTUS counts that give the visitor a
+  // meaningful sense of the surface area covered. "Reps joined" is a
+  // fake CivicLens-side stat (officials with a claimed Page on the
+  // platform) — same scaffolding pattern as "Verified citizens".
   const STATS = [
-    { value: '535',   label: 'Members of Congress' },
-    { value: '50',    label: 'States covered' },
+    { value: '100',   label: 'Senators' },
+    { value: '435',   label: 'Representatives' },
+    { value: '9',     label: 'SCOTUS Justices' },
+    { value: '47',    label: 'Reps joined' },
     { value: '12.4k', label: 'Verified citizens' },
   ];
+
+  // CivicLens Stats dropdown — starts collapsed per design feedback.
+  // The numbers are a "nice to have" peek; collapsing them by default
+  // moves the verify-address CTA closer to the fold and reduces
+  // first-paint cognitive load.
+  const [statsOpen, setStatsOpen] = useState(false);
 
   // Container-width-aware layout. NOP renders inside the resizable
   // SidePanel, which can be anywhere from ~300px to full-viewport. When
@@ -366,37 +380,79 @@ function Hero({ onVerifyClick }) {
             Address used to match your district. Never shared, never sold.
           </div>
 
+          {/* CivicLens Stats — wrapped in a collapsible so the hero CTA
+              ("Find my reps") sits closer to the fold on first paint.
+              The numbers are interesting context but not load-bearing
+              for someone landing here for the first time, so we hide
+              them behind a chevron header that the user can expand
+              when they want to peek. */}
           <div
             style={{
               marginTop: 28,
               paddingTop: 20,
               borderTop: '1px solid var(--cl-border)',
-              display: 'flex',
-              gap: 32,
-              flexWrap: 'wrap',
             }}
           >
-            {STATS.map((s) => (
-              <div key={s.label}>
-                <div
-                  className="cl-num"
-                  style={{
-                    fontSize: 'var(--cl-text-2xl)',
-                    fontWeight: 800,
-                    color: 'var(--cl-text)',
-                    lineHeight: 1.1,
-                  }}
-                >
-                  {s.value}
-                </div>
-                <div
-                  className="cl-eyebrow"
-                  style={{ marginTop: 2 }}
-                >
-                  {s.label}
-                </div>
+            <button
+              type="button"
+              onClick={() => setStatsOpen((v) => !v)}
+              aria-expanded={statsOpen}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                fontFamily: 'var(--cl-font-sans)',
+              }}
+            >
+              <Chevron open={statsOpen} />
+              <span
+                style={{
+                  textTransform: 'uppercase',
+                  letterSpacing: 'var(--cl-tracking-wider)',
+                  fontSize: 'var(--cl-text-2xs)',
+                  fontWeight: 800,
+                  color: 'var(--cl-text-light)',
+                }}
+              >
+                CivicLens Stats
+              </span>
+            </button>
+            {statsOpen && (
+              <div
+                style={{
+                  marginTop: 14,
+                  display: 'flex',
+                  gap: 32,
+                  flexWrap: 'wrap',
+                }}
+              >
+                {STATS.map((s) => (
+                  <div key={s.label}>
+                    <div
+                      className="cl-num"
+                      style={{
+                        fontSize: 'var(--cl-text-2xl)',
+                        fontWeight: 800,
+                        color: 'var(--cl-text)',
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      {s.value}
+                    </div>
+                    <div
+                      className="cl-eyebrow"
+                      style={{ marginTop: 2 }}
+                    >
+                      {s.label}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -446,6 +502,11 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
   const pres = exec.president;
   const vp = exec.vice_president;
   const cabinet = exec.cabinet || [];
+  // Branch sections expand by default — the user wants the surface to
+  // feel populated on first paint, not gated behind 4 chevrons. The
+  // toggle exists so a user who's just looking for SCOTUS or Browse-
+  // by-state can collapse the upstream sections to scroll less.
+  const [open, setOpen] = useState(true);
 
   return (
     <section style={{ padding: '32px 24px 16px' }}>
@@ -459,8 +520,12 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
               : 'The administration in power'
           }
           chip={null}
+          collapsible
+          open={open}
+          onToggle={() => setOpen((v) => !v)}
         />
 
+        {open && (<>
         {/* President + VP — large hero-tier cards, 2 columns at desktop */}
         {(pres || vp) && (
           <div>
@@ -551,6 +616,7 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
             </div>
           </div>
         )}
+        </>)}
       </div>
     </section>
   );
@@ -560,6 +626,11 @@ function ExecutiveBranchSection({ exec, onSelectPerson, onNotify, onCompareToggl
 // 3. SENATE LEADERSHIP
 // ─────────────────────────────────────────────────────────────────
 function SenateLeadershipSection({ senate, congressNumber, onSelectPerson, onNotify, onCompareToggle, compareIds, onOpenPage }) {
+  // Hooks first — Senate may render before data hydrates, in which case
+  // `leadership` is empty and we early-return null below. The useState
+  // call has to happen before any conditional return so React's hook
+  // order stays stable across renders.
+  const [open, setOpen] = useState(true);
   const leadership = senate.leadership || [];
   if (leadership.length === 0) return null;
   const breakdown = senate.party_breakdown || {};
@@ -577,15 +648,20 @@ function SenateLeadershipSection({ senate, congressNumber, onSelectPerson, onNot
               : null
           }
           chip={<PartyBalanceChip breakdown={breakdown} />}
+          collapsible
+          open={open}
+          onToggle={() => setOpen((v) => !v)}
         />
-        <LeadershipGrid
-          leadership={leadership}
-          chamber="U.S. Senate"
-          onSelectPerson={onSelectPerson}
-          onNotify={onNotify}
-          onCompareToggle={onCompareToggle}
-          compareIds={compareIds}
-        />
+        {open && (
+          <LeadershipGrid
+            leadership={leadership}
+            chamber="U.S. Senate"
+            onSelectPerson={onSelectPerson}
+            onNotify={onNotify}
+            onCompareToggle={onCompareToggle}
+            compareIds={compareIds}
+          />
+        )}
       </div>
     </section>
   );
@@ -595,6 +671,10 @@ function SenateLeadershipSection({ senate, congressNumber, onSelectPerson, onNot
 // 4. HOUSE LEADERSHIP
 // ─────────────────────────────────────────────────────────────────
 function HouseLeadershipSection({ house, congressNumber, onSelectPerson, onNotify, onCompareToggle, compareIds, onOpenPage }) {
+  // See SenateLeadershipSection comment — hooks must precede the
+  // conditional early return so we don't violate the rules of hooks
+  // when leadership data hydrates from empty into populated.
+  const [open, setOpen] = useState(true);
   const leadership = house.leadership || [];
   if (leadership.length === 0) return null;
   const breakdown = house.party_breakdown || {};
@@ -612,15 +692,20 @@ function HouseLeadershipSection({ house, congressNumber, onSelectPerson, onNotif
               : null
           }
           chip={<PartyBalanceChip breakdown={breakdown} />}
+          collapsible
+          open={open}
+          onToggle={() => setOpen((v) => !v)}
         />
-        <LeadershipGrid
-          leadership={leadership}
-          chamber="U.S. House of Representatives"
-          onSelectPerson={onSelectPerson}
-          onNotify={onNotify}
-          onCompareToggle={onCompareToggle}
-          compareIds={compareIds}
-        />
+        {open && (
+          <LeadershipGrid
+            leadership={leadership}
+            chamber="U.S. House of Representatives"
+            onSelectPerson={onSelectPerson}
+            onNotify={onNotify}
+            onCompareToggle={onCompareToggle}
+            compareIds={compareIds}
+          />
+        )}
       </div>
     </section>
   );
@@ -630,6 +715,8 @@ function HouseLeadershipSection({ house, congressNumber, onSelectPerson, onNotif
 // 5. SUPREME COURT
 // ─────────────────────────────────────────────────────────────────
 function SCOTUSSection({ sc, onSelectPerson, onNotify, onCompareToggle, compareIds, onOpenPage }) {
+  // Same hook-order contract as the leadership sections above.
+  const [open, setOpen] = useState(true);
   const justices = sc.members || [];
   if (justices.length === 0) return null;
 
@@ -644,29 +731,34 @@ function SCOTUSSection({ sc, onSelectPerson, onNotify, onCompareToggle, compareI
             'Justices are nominated by the President, confirmed by the Senate, and serve during good behavior.'
           }
           chip={null}
+          collapsible
+          open={open}
+          onToggle={() => setOpen((v) => !v)}
         />
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: 10,
-          }}
-        >
-          {justices.map((j) => (
-            <CompactPersonCard
-              key={j.id}
-              person={j}
-              eyebrow={j.role + (j.chief ? ' · presiding' : '')}
-              meta={j.appointed_by ? `Appointed by ${j.appointed_by}` : null}
-              onClick={onSelectPerson ? () => onSelectPerson(j, 'scotus') : null}
-              followTarget={{ ...j, role_type: 'scotus', chamber: sc.body_name || 'Supreme Court' }}
-              onNotify={onNotify}
-              onCompareToggle={onCompareToggle}
-              compareIds={compareIds}
-              onOpenPage={onOpenPage}
-            />
-          ))}
-        </div>
+        {open && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 10,
+            }}
+          >
+            {justices.map((j) => (
+              <CompactPersonCard
+                key={j.id}
+                person={j}
+                eyebrow={j.role + (j.chief ? ' · presiding' : '')}
+                meta={j.appointed_by ? `Appointed by ${j.appointed_by}` : null}
+                onClick={onSelectPerson ? () => onSelectPerson(j, 'scotus') : null}
+                followTarget={{ ...j, role_type: 'scotus', chamber: sc.body_name || 'Supreme Court' }}
+                onNotify={onNotify}
+                onCompareToggle={onCompareToggle}
+                compareIds={compareIds}
+                onOpenPage={onOpenPage}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -891,6 +983,12 @@ const STATES_FOR_GRID = [
 ];
 
 function BrowseByStateSection({ onStatePick }) {
+  // Browse-by-state is collapsed by default — the map already gives the
+  // primary geographic entry point, and the 51-pill grid is a sizable
+  // chunk of vertical real estate. Most visitors won't need to scan the
+  // alphabetical fallback, so we hide it by default and let the curious
+  // tap the chevron to open it.
+  const [open, setOpen] = useState(false);
   return (
     <section style={{ padding: '32px 24px 16px', background: 'var(--cl-bg-soft)' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
@@ -899,27 +997,32 @@ function BrowseByStateSection({ onStatePick }) {
           title="Browse by state"
           subhead="Pick a state to see its governor, senators, House delegation, and state legislature."
           chip={null}
+          collapsible
+          open={open}
+          onToggle={() => setOpen((v) => !v)}
         />
-        {/* Grid: keeps 2 columns even at narrow side-panel widths. The
-            minmax floor of 110px + auto-fit lets the panel fall back to
-            1 column only at extreme narrow widths (<~250px). At wider
-            widths it auto-expands to 3+ columns. */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
-            gap: 6,
-          }}
-        >
-          {STATES_FOR_GRID.map(([code, name]) => (
-            <StatePill
-              key={code}
-              code={code}
-              name={name}
-              onClick={onStatePick ? () => onStatePick(code, name) : null}
-            />
-          ))}
-        </div>
+        {open && (
+          /* Grid: keeps 2 columns even at narrow side-panel widths. The
+             minmax floor of 110px + auto-fit lets the panel fall back to
+             1 column only at extreme narrow widths (<~250px). At wider
+             widths it auto-expands to 3+ columns. */
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+              gap: 6,
+            }}
+          >
+            {STATES_FOR_GRID.map(([code, name]) => (
+              <StatePill
+                key={code}
+                code={code}
+                name={name}
+                onClick={onStatePick ? () => onStatePick(code, name) : null}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -1265,9 +1368,31 @@ function FooterColumn({ heading, links }) {
 // ─────────────────────────────────────────────────────────────────
 // Shared section header
 // ─────────────────────────────────────────────────────────────────
-function SectionHeader({ eyebrow, title, subhead, chip }) {
-  return (
-    <header style={{ marginBottom: 16 }}>
+function SectionHeader({ eyebrow, title, subhead, chip, collapsible = false, open = true, onToggle }) {
+  // When `collapsible`, the entire header becomes a click target that
+  // toggles the parent section's body. The chevron rotates 90° when
+  // open, and the subhead is suppressed in the collapsed state so the
+  // collapsed row stays compact (a single ~32px tall scannable row).
+  const titleNode = (
+    <h2
+      className="cl-h1"
+      style={{
+        margin: 0,
+        fontSize: 'var(--cl-text-2xl)',
+        fontWeight: 700,
+        letterSpacing: 'var(--cl-tracking-tight)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}
+    >
+      {collapsible && <Chevron open={open} />}
+      <span>{title}</span>
+    </h2>
+  );
+
+  const headerInner = (
+    <>
       <div
         style={{
           display: 'flex',
@@ -1280,18 +1405,8 @@ function SectionHeader({ eyebrow, title, subhead, chip }) {
         <Eyebrow tone="accent">{eyebrow}</Eyebrow>
         {chip}
       </div>
-      <h2
-        className="cl-h1"
-        style={{
-          margin: 0,
-          fontSize: 'var(--cl-text-2xl)',
-          fontWeight: 700,
-          letterSpacing: 'var(--cl-tracking-tight)',
-        }}
-      >
-        {title}
-      </h2>
-      {subhead && (
+      {titleNode}
+      {subhead && open && (
         <div
           className="cl-body-sm"
           style={{ color: 'var(--cl-text-light)', marginTop: 4 }}
@@ -1299,8 +1414,34 @@ function SectionHeader({ eyebrow, title, subhead, chip }) {
           {subhead}
         </div>
       )}
-    </header>
+    </>
   );
+
+  if (collapsible) {
+    return (
+      <header style={{ marginBottom: open ? 16 : 0 }}>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          style={{
+            display: 'block',
+            width: '100%',
+            textAlign: 'left',
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            fontFamily: 'var(--cl-font-sans)',
+          }}
+        >
+          {headerInner}
+        </button>
+      </header>
+    );
+  }
+
+  return <header style={{ marginBottom: 16 }}>{headerInner}</header>;
 }
 
 function SubsectionLabel({ children }) {
@@ -1706,4 +1847,34 @@ function formatLongDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// Single-glyph chevron used by every collapsible header on this surface
+// (CivicLens Stats, Executive, Senate, House, SCOTUS, Browse-by-state).
+// Rotates 0° (collapsed) → 90° (open) on a fast standard easing, and
+// inherits color from the parent so it picks up the eyebrow/title hue.
+function Chevron({ open }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      aria-hidden="true"
+      style={{
+        flexShrink: 0,
+        transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+        transition: 'transform var(--cl-duration-fast) var(--cl-ease-standard)',
+        color: 'var(--cl-text-light)',
+      }}
+    >
+      <path
+        d="M3 1.5L8 6L3 10.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
 }

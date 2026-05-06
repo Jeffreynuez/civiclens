@@ -326,15 +326,13 @@ export default function SidePanel({
               onMemberSelect={onMemberSelect}
             />
 
-            {/* Map hint — sits immediately below the address lookup */}
-            <div style={{ textAlign: 'center', padding: '4px 20px 14px', color: 'var(--cl-text-light)' }}>
-              <p style={{ fontSize: '0.78rem', fontStyle: 'italic' }}>
-                or click any state on the map to browse all its elected officials.
-              </p>
-            </div>
-
             {/* National officials — landing-page layout (Hero → Executive
                 → Senate / House Leadership → SCOTUS → CTA strip → Footer).
+                The "or click any state on the map" hint that used to sit
+                here was redundant with the panel header subtitle ("National
+                officials — look up your district or click a state on the
+                map") and was burning ~38px of vertical space the panel
+                content needs more — removed. */}
                 onOpenPage routes through to handleOpenPage in page.js so
                 the Page button on each card opens the rep's PageView. */}
             <NationalOfficialsPanel

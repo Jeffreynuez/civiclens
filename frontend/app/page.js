@@ -72,7 +72,7 @@ export default function Home() {
   const [mapMaxHeightPx, setMapMaxHeightPx] = useState(0);
   useEffect(() => {
     const NAVBAR_PX = 56;
-    const RESIZER_PX = 18;
+    const RESIZER_PX = 28;
     const recompute = () => {
       const visibleH = (typeof window !== 'undefined' && window.visualViewport)
         ? window.visualViewport.height
