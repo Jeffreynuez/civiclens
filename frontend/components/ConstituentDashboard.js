@@ -16,7 +16,7 @@ import {
   ArrowLeft,
   ArrowRight,
 } from './ui';
-import { listTrackedOfficials } from '../lib/trackedOfficials';
+import { getAllTrackedOfficials } from '../lib/trackedOfficials';
 
 /**
  * ConstituentDashboard — the personal civic command center for a verified
@@ -69,7 +69,7 @@ export default function ConstituentDashboard({
   useEffect(() => {
     if (trackedReps !== null) return;
     try {
-      const items = listTrackedOfficials();
+      const items = getAllTrackedOfficials();
       setStoreReps(items || []);
     } catch {
       setStoreReps([]);
