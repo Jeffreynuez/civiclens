@@ -734,8 +734,15 @@ export default function Home() {
           <PanelResizer
             orientation="vertical"
             onResize={setPanelWidth}
-            minWidth={380}
-            maxFraction={0.5}
+            // On mobile-landscape: let the panel cover the map entirely
+            // (symmetric with mobile-portrait, where the slider can
+            // collapse the map to 0). Min drops to 280 so the user has
+            // room to shrink as well as grow. On desktop the original
+            // 380 / 50% range still applies — pointer precision makes
+            // the smaller range comfortable, and a panel can't usefully
+            // exceed half the desktop viewport.
+            minWidth={isMobile ? 280 : 380}
+            maxFraction={isMobile ? 1 : 0.5}
             label="Map"
             // Pass isMobile (touch viewport, not just stacked-layout)
             // so landscape phones still get the chunky thumb-friendly
