@@ -138,10 +138,18 @@ export default function SidePanel({
   // (the panel sits below the map in a vertical stack) and the panel-
   // width prop is ignored.
   isMobile = false,
+  // True on any phone-sized viewport regardless of orientation —
+  // includes mobile-portrait (where isMobile is also true) AND
+  // mobile-landscape (where isMobile is false because the layout
+  // is side-by-side like desktop). Drives touch-specific behaviors
+  // that should apply in both orientations: header collapse on
+  // scroll, etc.
+  isTouch = false,
   // True when the user has dragged the mobile drag handle all the way
-  // down (map height = 0). Used together with scroll position to hide
-  // the panel header on mobile so the rep window gets the full vertical
-  // space. Has no effect on desktop, where the header is always shown.
+  // down (map height = 0) OR widened the panel to fully cover the map
+  // in landscape. Used together with scroll position to hide the panel
+  // header on mobile so the rep window gets the full visible area.
+  // Has no effect on desktop, where the header is always shown.
   mapCollapsed = false,
 }) {
   const isInCompare = (m) => Boolean(compareIds && m && compareIds.has(m.bioguide_id || m.id));
@@ -179,10 +187,30 @@ export default function SidePanel({
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
-  // Header collapses on mobile when the user has scrolled into content
-  // OR when the map has been fully closed. Desktop always shows the
-  // header — the larger viewport doesn't have the same vertical squeeze.
-  const hideHeader = isMobile && (scrolled || mapCollapsed);
+  // Header collapses on any touch viewport (portrait OR landscape) when
+  // the user has scrolled into content OR when the map has been fully
+  // closed/covered. Desktop always shows the header — the larger
+  // viewport doesn't have the same vertical squeeze.
+  const hideHeader = isTouch && (scrolled || mapCollapsed);
+
+  // Measure the header's natural height so the slide-up animation can
+  // transition from 0 → measured-px (and back) smoothly. ResizeObserver
+  // keeps the measurement live as the active-district chip appears /
+  // disappears or the panel is resized. Without a measured height we'd
+  // either have to hardcode a max or use max-height (which animates
+  // clunkily because the easing curve runs to a value larger than the
+  // actual content height).
+  const headerInnerRef = useRef(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  useEffect(() => {
+    const el = headerInnerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([entry]) => {
+      setHeaderHeight(entry.contentRect.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const handleBackToTop = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -248,29 +276,39 @@ export default function SidePanel({
           : { width: `${width}px`, flexShrink: 0, position: 'relative' }
       }
     >
-      {/* Header — collapses on mobile when the user scrolls past 40px
-          OR when the map has been fully closed. The wrapping div uses
-          max-height + opacity transitions so the collapse is animated
-          rather than a hard cut. aria-hidden is toggled in lockstep
-          so screen readers don't read a "hidden" header. */}
+      {/* Header — collapses on touch viewports when the user scrolls
+          past 40px OR when the map has been fully closed/covered.
+          Two-layer animation for a smooth slide:
+            - Outer wrapper: animates `height` from measured-px → 0 so
+              the layout below (tabs, content) flows up to fill the
+              vacated space.
+            - Inner content:  uses `transform: translateY(-100%)` so the
+              header text actually slides up out of frame instead of
+              just being clipped in place.
+          Both transitions share the same duration + easing so they
+          stay locked together. aria-hidden toggles in lockstep so
+          screen readers don't read a hidden header. */}
       <div
         aria-hidden={hideHeader}
         style={{
-          // Generous max-height for the open state — ~200px covers the
-          // worst case (state name + subtitle + active-district chip).
-          // 0 collapses to nothing.
-          maxHeight: hideHeader ? 0 : 200,
-          opacity: hideHeader ? 0 : 1,
+          height: hideHeader ? 0 : headerHeight,
           overflow: 'hidden',
-          transition: 'max-height 0.22s ease, opacity 0.18s ease',
-          // Border + background only render in the open state — without
-          // this you'd see a thin border-line floating above tabs when
-          // collapsed.
+          transition: 'height 0.32s cubic-bezier(0.4, 0, 0.2, 1)',
+          // Border only renders in the open state so we don't get a
+          // thin floating line above the tabs when collapsed.
           borderBottom: hideHeader ? 'none' : '1px solid var(--cl-border)',
           background: 'var(--cl-bg)',
+          flexShrink: 0,
         }}
       >
-        <div style={{ padding: '16px 20px' }}>
+        <div
+          ref={headerInnerRef}
+          style={{
+            transform: hideHeader ? 'translateY(-100%)' : 'translateY(0)',
+            transition: 'transform 0.32s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+        >
+          <div style={{ padding: '16px 20px' }}>
           <h2 style={{ fontSize: '1.1rem', color: 'var(--cl-primary)', marginBottom: '2px', fontWeight: 700 }}>
             {stateName || 'United States'}
           </h2>
@@ -321,6 +359,7 @@ export default function SidePanel({
             </button>
           </div>
         )}
+        </div>
         </div>
       </div>
 

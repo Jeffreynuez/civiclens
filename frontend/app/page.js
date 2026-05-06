@@ -766,11 +766,23 @@ export default function Home() {
             selectedMember={selectedMember}
             width={panelWidth}
             isMobile={useStackedLayout}
+            // Distinct from isMobile (which only flips for stacked
+            // mobile-portrait): true on ANY phone-sized viewport,
+            // including landscape side-by-side. Drives touch-only
+            // behaviors like the collapsing header on scroll, which
+            // we want active in both orientations.
+            isTouch={isMobile}
             // True when the user has dragged the mobile horizontal
-            // resizer all the way down (mapHeightPx === 0). Used by
-            // SidePanel to hide its header when the user has chosen
-            // to give the panel the entire vertical space.
-            mapCollapsed={useStackedLayout && mapHeightPx === 0}
+            // resizer all the way down (mapHeightPx === 0) OR
+            // (in landscape) when the panel has been widened to
+            // fully cover the map (panelWidth ≥ window.innerWidth -
+            // ~30px). Either way the user has chosen to give the
+            // panel the entire visible area — hide the header to
+            // honor that.
+            mapCollapsed={
+              (useStackedLayout && mapHeightPx === 0) ||
+              (isMobile && !useStackedLayout && typeof window !== 'undefined' && panelWidth >= window.innerWidth - 30)
+            }
             onMemberSelect={handleMemberSelect}
             onBack={handleBack}
             onClose={handleCloseProfile}
