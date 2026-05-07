@@ -164,6 +164,50 @@ function resolveRole(member) {
   return 'congress';
 }
 
+// Small square icon button used in the collapsed-hero compact row.
+// 28×28 by default, transparent fill, rounded-square outline. The
+// `active` prop swaps fill + accent border for an "on" treatment that
+// mirrors the full-size buttons it represents (Follow active when
+// following; Compare active when in tray). We pass the icon as
+// children so each call can drop in its own SVG.
+function CompactIconButton({ title, ariaLabel, onClick, children, active = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={ariaLabel || title}
+      style={{
+        width: 28,
+        height: 28,
+        padding: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: active ? 'var(--cl-accent-soft, rgba(46,125,50,0.10))' : 'white',
+        color: active ? 'var(--cl-accent)' : 'var(--cl-text-light)',
+        border: active ? '1px solid var(--cl-accent)' : '1px solid var(--cl-border)',
+        borderRadius: 6,
+        cursor: 'pointer',
+        transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease',
+        flexShrink: 0,
+      }}
+      onMouseOver={(e) => {
+        if (active) return;
+        e.currentTarget.style.borderColor = 'var(--cl-accent)';
+        e.currentTarget.style.color = 'var(--cl-accent)';
+      }}
+      onMouseOut={(e) => {
+        if (active) return;
+        e.currentTarget.style.borderColor = 'var(--cl-border)';
+        e.currentTarget.style.color = 'var(--cl-text-light)';
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function ProfileView({
   member, onBack, onClose, backLabel, onNotify,
   onCompareToggle, isComparing, onCandidatePick, onOnBallotClick,
@@ -183,17 +227,23 @@ export default function ProfileView({
   const [activeTab, setActiveTab] = useState('overview');
 
   // Hero collapse state — when true, the hero is condensed to a single
-  // row (back arrow + small avatar + name + party chip + ✕). Frees up
-  // vertical space so the tabs and tab content stay reachable on
-  // viewports where the full hero would take the entire fold (mobile
-  // landscape especially). Persisted across reloads as a user
-  // preference. Try/catch around localStorage so private-mode Safari
-  // doesn't throw.
-  const [heroCollapsed, setHeroCollapsed] = useState(false);
+  // row (back arrow + small avatar + name + chamber + Follow / Compare
+  // / View Candidate / Page icons + party chip + ✕). Frees up vertical
+  // space so the tabs and tab content stay reachable on viewports
+  // where the full hero would take the entire fold (mobile landscape
+  // especially). DEFAULTS TO COLLAPSED — most repeat visitors recognize
+  // a rep from their portrait + name and want straight access to the
+  // tab content, so we hide the chrome by default and let them tap
+  // the chevron to see the full hero. Persisted across reloads as a
+  // user preference. Try/catch around localStorage so private-mode
+  // Safari doesn't throw.
+  const [heroCollapsed, setHeroCollapsed] = useState(true);
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem('cl:profile:hero-collapsed');
-      if (stored === '1') setHeroCollapsed(true);
+      // Explicit '0' → user has previously expanded; respect that.
+      // Any other value (or no stored value) → default-collapsed.
+      if (stored === '0') setHeroCollapsed(false);
     } catch { /* ignore */ }
   }, []);
   const toggleHero = () => {
@@ -452,11 +502,25 @@ export default function ProfileView({
   };
 
   return (
+    // ProfileView is mounted inside an absolute-positioned overlay
+    // (position: absolute; inset: 0; display: flex; flexDirection:
+    // column) inside SidePanel. For the inner tab panel's
+    // `flex: 1; overflowY: auto` to actually constrain a scroll area,
+    // ProfileView itself needs to take the full height of that overlay
+    // — meaning flex: 1 (grow to fill) and minHeight: 0 (allow inner
+    // overflow:auto to work in a flex column).
+    //
+    // Previously the !isMobile branch only had flexShrink: 0 (no
+    // flex-grow), so ProfileView sized to content and the tab content
+    // never had a constrained height to scroll within. On a tall
+    // desktop the bug was invisible because content fit; on a short
+    // landscape phone the tab content was clipped past the viewport
+    // and couldn't scroll.
     <div
       style={
         isMobile
           ? { width: '100%', flex: 1, minHeight: 0, background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }
-          : { width: `${width}px`, background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0 }
+          : { width: `${width}px`, flex: 1, minHeight: 0, background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }
       }
     >
       {/* Back + Close row — the contextual back label tells the user exactly
@@ -491,9 +555,14 @@ export default function ProfileView({
           <svg width={isMobile ? 18 : 16} height={isMobile ? 18 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
           {backLabel || 'Back to list'}
         </div>
-        {/* Hero collapse toggle — chevron rotates to indicate state.
-            Sits between Back and × so it's always reachable. Choice is
-            persisted to localStorage as cl:profile:hero-collapsed. */}
+        {/* Hero collapse toggle — chevron in a green-tinted pill so it
+            reads as a discoverable affordance (the user feedback on
+            v1 was that the bare chevron disappeared into the row).
+            The pill uses the accent-soft fill + accent border, so it
+            picks up the same green family as the Follow / + Compare
+            buttons below. Sits between Back and × so it's always
+            reachable. Choice is persisted to localStorage as
+            cl:profile:hero-collapsed. */}
         <button
           type="button"
           onClick={toggleHero}
@@ -501,23 +570,29 @@ export default function ProfileView({
           aria-expanded={!heroCollapsed}
           title={heroCollapsed ? 'Expand profile header' : 'Collapse profile header'}
           style={{
-            background: 'transparent',
-            border: 'none',
+            background: 'var(--cl-accent-soft, rgba(46,125,50,0.10))',
+            border: '1px solid var(--cl-accent)',
+            borderRadius: '50%',
             cursor: 'pointer',
-            color: 'var(--cl-text-light)',
-            padding: isMobile ? '12px 14px' : '8px 12px',
-            minWidth: isMobile ? 44 : undefined,
-            minHeight: isMobile ? 44 : undefined,
+            color: 'var(--cl-accent)',
+            // Bigger circular target on touch (44px) so the toggle
+            // clears the recommended tap-target minimum.
+            width: isMobile ? 36 : 30,
+            height: isMobile ? 36 : 30,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
+            padding: 0,
+            margin: isMobile ? '0 4px' : '0 2px',
+            flexShrink: 0,
+            transition: 'background 0.15s ease',
           }}
-          onMouseOver={(e) => (e.currentTarget.style.color = 'var(--cl-text)')}
-          onMouseOut={(e) => (e.currentTarget.style.color = 'var(--cl-text-light)')}
+          onMouseOver={(e) => (e.currentTarget.style.background = 'var(--cl-accent-soft-hover, rgba(46,125,50,0.18))')}
+          onMouseOut={(e) => (e.currentTarget.style.background = 'var(--cl-accent-soft, rgba(46,125,50,0.10))')}
         >
           <svg
-            width="16"
-            height="16"
+            width="14"
+            height="14"
             viewBox="0 0 16 16"
             aria-hidden="true"
             style={{
@@ -553,16 +628,19 @@ export default function ProfileView({
       </div>
 
       {/* Compact hero — visible when the user has collapsed the full
-          hero. Single row: small avatar + name + party chip. Tab strip
-          and tab content land right below, giving them the bulk of the
-          vertical space. */}
+          hero. Single row: small avatar + name/chamber + 4 action
+          icons (Follow / Compare / View Candidate / Page) + party
+          chip. The icons mirror the full-hero buttons so users don't
+          lose access to Follow/etc when the hero is collapsed. Tab
+          strip and tab content land right below, giving them the
+          bulk of the vertical space. */}
       {heroCollapsed && (
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
-            padding: '8px 16px',
+            gap: 8,
+            padding: '8px 12px',
             borderBottom: '1px solid var(--cl-border)',
             background: 'white',
           }}
@@ -600,6 +678,88 @@ export default function ProfileView({
             }}>
               {member.chamber || member.title || ''}
             </div>
+          </div>
+          {/* Action icons — Follow / Compare / View Candidate / Page.
+              28×28 buttons with 3px gap, drawn with simple outlined
+              SVGs. Active states: Follow turns into a filled heart
+              when following; Compare gets the party-color border when
+              the rep is in the compare tray. View Candidate only
+              renders when the rep has an active candidacy; Page only
+              when the parent passed onOpenPage. */}
+          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+            <CompactIconButton
+              title={isFollowing ? 'Following — click to unfollow' : 'Follow'}
+              ariaLabel={isFollowing ? 'Unfollow' : 'Follow'}
+              onClick={toggleFollow}
+              active={isFollowing}
+            >
+              {/* Heart — filled when following, outlined otherwise. */}
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M8 13.5s-4.5-3-4.5-7a2.5 2.5 0 0 1 4.5-1.5A2.5 2.5 0 0 1 12.5 6.5c0 4-4.5 7-4.5 7z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                  fill={isFollowing ? 'currentColor' : 'none'}
+                />
+              </svg>
+            </CompactIconButton>
+            {onCompareToggle && (
+              <CompactIconButton
+                title={isComparing ? 'In compare — click to remove' : 'Add to compare'}
+                ariaLabel={isComparing ? 'Remove from compare' : 'Add to compare'}
+                onClick={() => onCompareToggle(member)}
+                active={isComparing}
+              >
+                {/* Two horizontal arrows — compare/swap. */}
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M2.5 6h9M9 3.5L11.5 6 9 8.5M13.5 10h-9M6 7.5L3.5 10 6 12.5"
+                    stroke="currentColor" strokeWidth="1.4" fill="none"
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </CompactIconButton>
+            )}
+            {member.active_candidacy && onCandidatePick && (
+              <CompactIconButton
+                title="View Candidate"
+                ariaLabel="View candidate profile"
+                onClick={() => onCandidatePick({ id: member.active_candidacy.candidate_id })}
+              >
+                {/* Ballot-style box with checkmark. */}
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M2.5 4h11v9.5h-11zM5 7l2 2 4-4"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </CompactIconButton>
+            )}
+            {onOpenPage && (
+              <CompactIconButton
+                title="Open Page"
+                ariaLabel="Open rep's Page"
+                onClick={() => onOpenPage(member.bioguide_id || member.id, {
+                  displayName: member.name,
+                  role: member.title || member.role || '',
+                  photoUrl: member.photoUrl,
+                })}
+              >
+                {/* Document icon. */}
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M3.5 1.5h6L13 5v9.5h-9.5zM9.5 1.5V5H13"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    fill="none"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </CompactIconButton>
+            )}
           </div>
           <span style={{
             display: 'inline-block', padding: '2px 8px', borderRadius: '12px',
