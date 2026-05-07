@@ -15,9 +15,11 @@ and what they say in their district.
 
 ## Quick start
 
-See [`SETUP_GUIDE.md`](./SETUP_GUIDE.md) for full setup, including how to
-run the frontend and backend locally and how to test on a real phone via
-the same Wi-Fi or Tailscale.
+- [`SETUP_GUIDE.md`](./SETUP_GUIDE.md) — local dev: run the frontend and
+  backend locally, test on a real phone via Wi-Fi or Tailscale.
+- [`DEPLOY.md`](./DEPLOY.md) — production deploy: Vercel + Render +
+  Cloudflare DNS, end-to-end walkthrough for putting the app on
+  `civicview.app`.
 
 ## License
 

@@ -95,13 +95,25 @@ def read_session_token(token: str) -> Optional[int]:
 
 def set_session_cookie(response: Response, rep_id: int) -> None:
     token = issue_session_token(rep_id)
+    # Cookie attributes:
+    #   COOKIE_SAMESITE   — "lax" (default, dev) or "none" (prod cross-
+    #                       origin). When the frontend lives at
+    #                       civicview.app and the backend at
+    #                       civicview-api.onrender.com, browsers refuse
+    #                       to attach the cookie unless SameSite=None.
+    #                       SameSite=None REQUIRES Secure=True.
+    #   COOKIE_SECURE     — "true" in any HTTPS deployment, false locally.
+    #                       Setting Secure=True over plain http: makes the
+    #                       browser silently drop the cookie.
+    samesite = os.getenv("COOKIE_SAMESITE", "lax").lower()
+    secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=True,
-        samesite="lax",
-        secure=os.getenv("COOKIE_SECURE", "false").lower() == "true",
+        samesite=samesite,
+        secure=secure,
         path="/",
     )
 

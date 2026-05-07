@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Jeffrey Nuez. All rights reserved.
 # Proprietary and confidential. See LICENSE at the repository root.
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -54,9 +56,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS allow-list. Defaults cover local development (localhost +
+# 127.0.0.1 + the Tailscale IP used for phone testing). Production
+# overrides via the ALLOWED_ORIGINS env var, comma-separated, e.g.:
+#
+#   ALLOWED_ORIGINS=https://civicview.app,https://www.civicview.app
+#
+# Whitespace around each entry is stripped. Empty entries are dropped.
+_DEFAULT_ALLOWED = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://100.127.231.86:3000",
+]
+_env_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
+ALLOWED_ORIGINS = (
+    [o.strip() for o in _env_origins.split(",") if o.strip()]
+    if _env_origins
+    else _DEFAULT_ALLOWED
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://100.127.231.86:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -31,7 +31,17 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DB_PATH = BACKEND_DIR / "civiclens.db"
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
+_RAW_DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
+
+# Render (and Heroku, and several other managed-Postgres hosts) issues
+# connection strings that start with the legacy `postgres://` scheme.
+# SQLAlchemy 2.x rejects that — it expects `postgresql://`. Normalize
+# here so we can paste the Render-provided URL straight into the env
+# var without thinking about it.
+if _RAW_DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql://" + _RAW_DATABASE_URL[len("postgres://"):]
+else:
+    DATABASE_URL = _RAW_DATABASE_URL
 
 # `check_same_thread=False` is SQLite-specific and required because
 # FastAPI uses a thread pool for sync dependencies. Harmless for other

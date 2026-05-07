@@ -1,0 +1,57 @@
+# CivicView — Render deployment blueprint.
+# Copyright (c) 2026 Jeffrey Nuez. All rights reserved.
+#
+# Render auto-creates the resources defined here when you "New +" →
+# "Blueprint" and point it at this repo. Two pieces:
+#
+#   1. civicview-api   — FastAPI backend (Python, free tier)
+#   2. civicview-db    — Postgres (free tier, 1GB, retained 30 days)
+#
+# After first deploy:
+#   • DATABASE_URL is auto-injected into civicview-api from the DB.
+#   • Set SESSION_SECRET in the dashboard (do NOT commit it). 32+
+#     bytes of randomness — `python -c "import secrets;
+#     print(secrets.token_urlsafe(48))"` in your terminal.
+#   • Set ALLOWED_ORIGINS to the Vercel URL (e.g.
+#     "https://civicview.app,https://www.civicview.app").
+#   • Set GOOGLE_CIVIC_API_KEY if/when you wire BallotTab live data.
+#
+# Free-tier note: services sleep after 15 minutes of inactivity and
+# wake on the next request (~30s cold start). Fine for a demo URL;
+# upgrade to Starter ($7/mo) for always-on if you start showing the
+# app to actual investors.
+
+services:
+  - type: web
+    name: civicview-api
+    env: python
+    region: oregon            # closest US region to Vercel default
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: civicview-db
+          property: connectionString
+      - key: SESSION_SECRET
+        sync: false           # set in the Render dashboard (secret)
+      - key: ALLOWED_ORIGINS
+        sync: false           # set after first Vercel deploy
+      - key: COOKIE_SECURE
+        value: "true"         # production HTTPS — required for SameSite=None
+      - key: COOKIE_SAMESITE
+        value: "none"         # cross-origin cookie (frontend on Vercel)
+      - key: GOOGLE_CIVIC_API_KEY
+        sync: false           # optional — leave unset until BallotTab live data is needed
+      - key: PYTHONUNBUFFERED
+        value: "1"            # flush logs immediately so Render shows them in real time
+
+databases:
+  - name: civicview-db
+    plan: free
+    region: oregon
+    databaseName: civicview
