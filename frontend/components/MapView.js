@@ -62,15 +62,15 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
   const [hoveredState, setHoveredState] = useState(null);
   const [hoveredDistrictLabel, setHoveredDistrictLabel] = useState(null);
   const [currentLabel, setCurrentLabel] = useState('United States');
-  // Lazy initializer reads window.innerWidth once on mount (or returns
-  // the desktop default during SSR) so the zoom slider's starting %
-  // matches whatever zoom the map actually opens at — see the matching
-  // logic inside the map init useEffect below.
-  const [zoomPct, setZoomPct] = useState(() => {
-    if (typeof window === 'undefined') return zoomToPct(3);
-    const initialIsMobile = window.innerWidth <= 900;
-    return zoomToPct(initialIsMobile ? 2 : 3);
-  });
+  // Always start with the desktop-default zoom percentage so the
+  // server-rendered HTML and the client's first render produce the
+  // same text in the slider label. We can't peek at window.innerWidth
+  // during the initial render — that would diverge from SSR and
+  // cause a hydration mismatch ("Server: '8' Client: '0'"). The map
+  // init useEffect below sets the actual mobile starting zoom, and
+  // its on('zoom') handler updates this state in response, so the
+  // slider catches up on the client without a hydration warning.
+  const [zoomPct, setZoomPct] = useState(zoomToPct(3));
   // On mobile we hide the bottom-left zoom dock (MapLibre's built-in
   // NavigationControl + native pinch-zoom cover the same affordance
   // and don't burn screen space the panel needs more than the map).
