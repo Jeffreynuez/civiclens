@@ -20,7 +20,7 @@ import EmptyState from './EmptyState';
 
 const PRESETS = {
   network: {
-    headline: "Couldn't reach CivicLens",
+    headline: "Couldn't reach CivicView",
     body: 'Check your connection and try again.',
     tone: 'danger',
   },

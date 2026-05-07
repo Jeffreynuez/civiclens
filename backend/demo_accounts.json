@@ -4,7 +4,7 @@
   "accounts": [
     {
       "official_id": "D000032",
-      "email": "byron.donalds@civiclens-demo.com",
+      "email": "byron.donalds@civicview-demo.com",
       "password": "***REDACTED-DURING-PUBLIC-FLIP-AUDIT***",
       "display_name": "Byron Donalds",
       "role": "U.S. Representative, FL-19",
@@ -13,7 +13,7 @@
     },
     {
       "official_id": "S000033",
-      "email": "bernie.sanders@civiclens-demo.com",
+      "email": "bernie.sanders@civicview-demo.com",
       "password": "***REDACTED-DURING-PUBLIC-FLIP-AUDIT***",
       "display_name": "Bernie Sanders",
       "role": "U.S. Senator, Vermont",
@@ -21,7 +21,7 @@
     },
     {
       "official_id": "fl-exec-gov",
-      "email": "ron.desantis@civiclens-demo.com",
+      "email": "ron.desantis@civicview-demo.com",
       "password": "***REDACTED-DURING-PUBLIC-FLIP-AUDIT***",
       "display_name": "Ron DeSantis",
       "role": "Governor of Florida",
@@ -29,7 +29,7 @@
     },
     {
       "official_id": "fl-cand-byron-donalds",
-      "email": "donalds.campaign@civiclens-demo.com",
+      "email": "donalds.campaign@civicview-demo.com",
       "password": "***REDACTED-DURING-PUBLIC-FLIP-AUDIT***",
       "display_name": "Byron Donalds (Campaign)",
       "role": "Candidate for Governor of Florida",

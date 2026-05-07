@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'CivicLens - Know Your Representatives',
+  title: 'CivicView - Know Your Representatives',
   description: 'Track your elected officials, legislation, and upcoming elections',
   // PWA hooks. The manifest is the primary signal that triggers the
   // browser's "Add to Home Screen" prompt; theme-color drives the
@@ -12,7 +12,7 @@ export const metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'CivicLens',
+    title: 'CivicView',
   },
   icons: {
     icon: '/logo/civiclens-glyph-color.svg',

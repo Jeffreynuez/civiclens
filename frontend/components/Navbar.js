@@ -230,7 +230,7 @@ export default function Navbar({
       <button
         type="button"
         onClick={() => onHome?.()}
-        aria-label="CivicLens — home"
+        aria-label="CivicView — home"
         className="flex items-center gap-2"
         style={{
           flexShrink: 0,
@@ -247,7 +247,7 @@ export default function Navbar({
             icon on a 360-414px phone, and the wordmark adds important
             brand recognition for a civic-tech app where users may
             be unfamiliar. */}
-        <span className="text-white font-semibold text-lg">CivicLens</span>
+        <span className="text-white font-semibold text-lg">CivicView</span>
       </button>
 
       {/* Search Bar — desktop / tablet renders inline. On mobile it

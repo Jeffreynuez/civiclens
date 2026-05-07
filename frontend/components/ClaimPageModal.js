@@ -119,7 +119,7 @@ export default function ClaimPageModal({
             color: 'var(--cl-text)',
           }}
         >
-          CivicLens
+          CivicView
         </span>
       </div>
 

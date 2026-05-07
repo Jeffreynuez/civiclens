@@ -1,4 +1,4 @@
-# CivicLens - Setup Guide
+# CivicView - Setup Guide
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ npm run dev
 # You should see: ▲ Next.js - Local: http://localhost:3000
 ```
 
-Visit http://localhost:3000 to see CivicLens!
+Visit http://localhost:3000 to see CivicView!
 
 ### 3. Using the App
 
@@ -60,7 +60,7 @@ Visit http://localhost:3000 to see CivicLens!
 ## Testing on Your Phone
 
 By default both servers bind to `localhost`, which the phone can't reach. To
-load CivicLens on a real phone (same Wi-Fi or via hotspot / Tailscale), do
+load CivicView on a real phone (same Wi-Fi or via hotspot / Tailscale), do
 the following one-time setup:
 
 ### 1. Find your computer's local IP

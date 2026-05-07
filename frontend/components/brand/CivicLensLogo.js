@@ -21,7 +21,7 @@ export default function CivicLensLogo({
   size = 32,
   variant = 'color',
   className,
-  title = 'CivicLens',
+  title = 'CivicView',
   ...rest
 }) {
   const uid = useId();

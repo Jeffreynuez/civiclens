@@ -108,7 +108,7 @@ export default function CitizenWaitlistModal({
             color: 'var(--cl-text)',
           }}
         >
-          CivicLens
+          CivicView
         </span>
       </div>
 
