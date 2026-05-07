@@ -231,28 +231,21 @@ export default function ProfileView({
   // / View Candidate / Page icons + party chip + ✕). Frees up vertical
   // space so the tabs and tab content stay reachable on viewports
   // where the full hero would take the entire fold (mobile landscape
-  // especially). DEFAULTS TO COLLAPSED — most repeat visitors recognize
-  // a rep from their portrait + name and want straight access to the
-  // tab content, so we hide the chrome by default and let them tap
-  // the chevron to see the full hero. Persisted across reloads as a
-  // user preference. Try/catch around localStorage so private-mode
-  // Safari doesn't throw.
+  // especially). ALWAYS DEFAULTS TO COLLAPSED — every profile opens
+  // condensed; the user can tap the green chevron pill to expand if
+  // they want the full hero chrome. We deliberately don't persist the
+  // toggle to localStorage so the default never gets overridden by a
+  // prior session's preference (an earlier persisted version of this
+  // hero defaulted to expanded, which made every profile open with
+  // a tall hero that hid the tabs).
   const [heroCollapsed, setHeroCollapsed] = useState(true);
+  // Also clear out any stale value left by previous versions of this
+  // file — first-time mount only, no harm running it once. Ignore
+  // private-mode-Safari throws.
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem('cl:profile:hero-collapsed');
-      // Explicit '0' → user has previously expanded; respect that.
-      // Any other value (or no stored value) → default-collapsed.
-      if (stored === '0') setHeroCollapsed(false);
-    } catch { /* ignore */ }
+    try { window.localStorage.removeItem('cl:profile:hero-collapsed'); } catch { /* ignore */ }
   }, []);
-  const toggleHero = () => {
-    setHeroCollapsed((v) => {
-      const next = !v;
-      try { window.localStorage.setItem('cl:profile:hero-collapsed', next ? '1' : '0'); } catch { /* ignore */ }
-      return next;
-    });
-  };
+  const toggleHero = () => setHeroCollapsed((v) => !v);
 
   const role = resolveRole(member);
   const tabs = ROLE_TABS[role] || ROLE_TABS.congress;
@@ -279,9 +272,14 @@ export default function ProfileView({
   const party = member.party || 'I';
   const partyFull = PARTY_NAMES[party] || 'Independent';
 
-  // Reset tabs & caches whenever the active person changes
+  // Reset tabs, hero collapse, and caches whenever the active person
+  // changes. Without resetting heroCollapsed, navigating from one
+  // profile (where the user expanded the hero) to a new one would
+  // carry the expansion forward — but the per-rep default is
+  // collapsed, so we re-collapse on every new rep.
   useEffect(() => {
     setActiveTab('overview');
+    setHeroCollapsed(true);
     setStatsState({ loading: false, loaded: false, data: null, isLive: false });
     setBillsState({ loading: false, loaded: false, data: null, isLive: false });
     setContactState({ loading: false, loaded: false, data: null, isLive: false });
