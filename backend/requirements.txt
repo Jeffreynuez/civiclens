@@ -20,3 +20,9 @@ itsdangerous>=2.2,<3
 # Required by FastAPI when endpoints accept UploadFile / multipart form
 # data — specifically the post-image upload endpoint.
 python-multipart>=0.0.9,<1
+# Postgres driver — only used in production deployments where
+# DATABASE_URL points at a Postgres server. Local dev keeps using
+# SQLite (no extra dep needed; SQLite ships with Python). The
+# `-binary` distribution avoids needing libpq + a C toolchain on
+# the build machine, which Render's free build tier doesn't have.
+psycopg2-binary>=2.9,<3

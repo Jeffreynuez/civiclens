@@ -59,13 +59,19 @@ def read_citizen_token(token: str) -> Optional[int]:
 
 
 def set_citizen_cookie(response: Response, citizen_id: int) -> None:
+    # See app/auth.py for the rationale on COOKIE_SAMESITE +
+    # COOKIE_SECURE — same env-var-driven cookie config so cross-origin
+    # auth (frontend on civicview.app, backend on Render) works in
+    # production while local dev keeps SameSite=Lax over plain http.
+    samesite = os.getenv("COOKIE_SAMESITE", "lax").lower()
+    secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
     response.set_cookie(
         key=CITIZEN_COOKIE_NAME,
         value=issue_citizen_token(citizen_id),
         max_age=CITIZEN_SESSION_MAX_AGE_SECONDS,
         httponly=True,
-        samesite="lax",
-        secure=os.getenv("COOKIE_SECURE", "false").lower() == "true",
+        samesite=samesite,
+        secure=secure,
         path="/",
     )
 
