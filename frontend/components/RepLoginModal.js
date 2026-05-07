@@ -27,12 +27,12 @@ import { ModalShell, Button } from './ui';
  *                     "Claim this page" CTA we can suggest the rep's email)
  */
 const DEMO_ACCOUNTS = [
-  { label: 'Rep. Byron Donalds (FL-19)', email: 'byron.donalds@civiclens-demo.com' },
-  { label: 'Sen. Bernie Sanders (VT)', email: 'bernie.sanders@civiclens-demo.com' },
-  { label: 'Gov. Ron DeSantis (FL)', email: 'ron.desantis@civiclens-demo.com' },
-  { label: 'Donalds 2026 campaign', email: 'donalds.campaign@civiclens-demo.com' },
+  { label: 'Rep. Byron Donalds (FL-19)', email: 'byron.donalds@civicview-demo.com' },
+  { label: 'Sen. Bernie Sanders (VT)', email: 'bernie.sanders@civicview-demo.com' },
+  { label: 'Gov. Ron DeSantis (FL)', email: 'ron.desantis@civicview-demo.com' },
+  { label: 'Donalds 2026 campaign', email: 'donalds.campaign@civicview-demo.com' },
 ];
-const DEMO_PASSWORD = 'CivicLensDemo!2026';
+const DEMO_PASSWORD = 'CivicViewDemo!2026';
 
 const FIELD_LABEL = {
   display: 'block',
@@ -118,7 +118,7 @@ export default function RepLoginModal({ open, onClose, onSuccess, initialEmail =
             color: 'var(--cl-text)',
           }}
         >
-          CivicLens
+          CivicView
         </span>
       </div>
 

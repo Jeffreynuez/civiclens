@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("CivicLens API starting up...")
+    logger.info("CivicView API starting up...")
     # Phase 1 Pages feature — create tables (idempotent) + seed demo reps.
     # Wrapped in try/except so a DB hiccup on boot doesn't take the whole
     # API down; the read-only endpoints (Congress, States, etc.) still work
@@ -40,11 +40,11 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Pages DB init/seed failed — read-only endpoints will still work.")
     yield
-    logger.info("CivicLens API shutting down...")
+    logger.info("CivicView API shutting down...")
 
 
 app = FastAPI(
-    title="CivicLens API",
+    title="CivicView API",
     description="API for US political representative data",
     version="1.0.0",
     lifespan=lifespan,
@@ -77,7 +77,7 @@ app.include_router(waitlist_router.router, prefix="/api/waitlist", tags=["Pages 
 @app.get("/")
 async def root():
     return {
-        "app": "CivicLens API",
+        "app": "CivicView API",
         "version": "1.0.0",
         "docs": "/docs",
         "endpoints": {

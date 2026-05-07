@@ -289,7 +289,7 @@ export const CHANNEL_SCHEMA = {
     {
       key: 'in_app',
       label: 'In-app toasts',
-      description: 'Show a banner inside CivicLens while you\u2019re using it.',
+      description: 'Show a banner inside CivicView while you\u2019re using it.',
       default: true,
       available: true,
     },
@@ -317,7 +317,7 @@ export const CHANNEL_SCHEMA = {
     {
       key: 'mobile_push',
       label: 'Mobile push',
-      description: 'Alerts through the CivicLens mobile app (coming soon).',
+      description: 'Alerts through the CivicView mobile app (coming soon).',
       default: false,
       available: false,
     },

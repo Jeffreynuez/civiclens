@@ -4,8 +4,8 @@
   "accounts": [
     {
       "official_id": "D000032",
-      "email": "byron.donalds@civiclens-demo.com",
-      "password": "CivicLensDemo!2026",
+      "email": "byron.donalds@civicview-demo.com",
+      "password": "CivicViewDemo!2026",
       "display_name": "Byron Donalds",
       "role": "U.S. Representative, FL-19",
       "owner_state": "FL",
@@ -13,24 +13,24 @@
     },
     {
       "official_id": "S000033",
-      "email": "bernie.sanders@civiclens-demo.com",
-      "password": "CivicLensDemo!2026",
+      "email": "bernie.sanders@civicview-demo.com",
+      "password": "CivicViewDemo!2026",
       "display_name": "Bernie Sanders",
       "role": "U.S. Senator, Vermont",
       "owner_state": "VT"
     },
     {
       "official_id": "fl-exec-gov",
-      "email": "ron.desantis@civiclens-demo.com",
-      "password": "CivicLensDemo!2026",
+      "email": "ron.desantis@civicview-demo.com",
+      "password": "CivicViewDemo!2026",
       "display_name": "Ron DeSantis",
       "role": "Governor of Florida",
       "owner_state": "FL"
     },
     {
       "official_id": "fl-cand-byron-donalds",
-      "email": "donalds.campaign@civiclens-demo.com",
-      "password": "CivicLensDemo!2026",
+      "email": "donalds.campaign@civicview-demo.com",
+      "password": "CivicViewDemo!2026",
       "display_name": "Byron Donalds (Campaign)",
       "role": "Candidate for Governor of Florida",
       "owner_state": "FL"

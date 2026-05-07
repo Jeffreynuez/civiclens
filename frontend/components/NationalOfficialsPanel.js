@@ -468,7 +468,7 @@ function Hero({ onVerifyClick }) {
                   color: 'var(--cl-text-light)',
                 }}
               >
-                CivicLens Stats
+                CivicView Stats
               </span>
             </button>
             {statsOpen && (
@@ -1201,7 +1201,7 @@ function VerificationCTAStrip({ onVerifyClick }) {
           >
             Verify your home address to surface your senators, your
             representative, your committees, and to track and respond to
-            what they say. CivicLens never shares or sells your address.
+            what they say. CivicView never shares or sells your address.
           </p>
         </div>
         <button
@@ -1284,7 +1284,7 @@ function Footer({
                   color: 'var(--cl-text)',
                 }}
               >
-                CivicLens
+                CivicView
               </span>
             </div>
             <p
@@ -1296,7 +1296,7 @@ function Footer({
                 maxWidth: 320,
               }}
             >
-              CivicLens does not endorse any candidate, party, or position.
+              CivicView does not endorse any candidate, party, or position.
               We surface what officials say and do — and let citizens respond
               in their own districts.
             </p>
@@ -1352,7 +1352,7 @@ function Footer({
             flexWrap: 'wrap',
           }}
         >
-          <span>© {new Date().getFullYear()} CivicLens</span>
+          <span>© {new Date().getFullYear()} CivicView</span>
           <span>·</span>
           <span>Data sourced from official chamber records, FEC filings, and verified office staff.</span>
         </div>
