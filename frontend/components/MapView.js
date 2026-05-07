@@ -62,7 +62,15 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
   const [hoveredState, setHoveredState] = useState(null);
   const [hoveredDistrictLabel, setHoveredDistrictLabel] = useState(null);
   const [currentLabel, setCurrentLabel] = useState('United States');
-  const [zoomPct, setZoomPct] = useState(zoomToPct(3));
+  // Lazy initializer reads window.innerWidth once on mount (or returns
+  // the desktop default during SSR) so the zoom slider's starting %
+  // matches whatever zoom the map actually opens at — see the matching
+  // logic inside the map init useEffect below.
+  const [zoomPct, setZoomPct] = useState(() => {
+    if (typeof window === 'undefined') return zoomToPct(3);
+    const initialIsMobile = window.innerWidth <= 900;
+    return zoomToPct(initialIsMobile ? 2 : 3);
+  });
   // On mobile we hide the bottom-left zoom dock (MapLibre's built-in
   // NavigationControl + native pinch-zoom cover the same affordance
   // and don't burn screen space the panel needs more than the map).
@@ -75,15 +83,26 @@ export default function MapView({ onStateSelect, onStateDeselect, onDistrictSele
     const initMap = async () => {
       const maplibregl = await import('maplibre-gl');
 
+      // useIsMobile() returns 'desktop' during the first render
+      // (SSR-safety) so the closure here can't trust the React-state
+      // version of `isMobile`. We read window.innerWidth directly
+      // — it's always accurate on the client.
+      //
+      // Mobile starts fully zoomed out (zoom 2 = MIN_ZOOM) and with
+      // the center shifted south + east so all of the continental US
+      // sits in the upper portion of the small map area, matching
+      // the user's chosen first-paint framing. Desktop keeps the
+      // original [center, zoom 3] which fits the US comfortably in
+      // the larger desktop map area.
+      const isMobileInit = window.innerWidth <= 900;
+      const initialCenter = isMobileInit ? [-93, 37] : [-98.5, 39.8];
+      const initialZoom = isMobileInit ? 2 : 3;
+
       map.current = new maplibregl.Map({
         container: mapContainer.current,
         style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-        center: [-98.5, 39.8],
-        // Zoom 3 frames the entire continental US comfortably (Maine
-        // through California, Florida through northern Minnesota)
-        // even at narrow phone widths. 3.5 was cropping the coasts on
-        // mobile and made the country feel "centered-not-shown".
-        zoom: 3,
+        center: initialCenter,
+        zoom: initialZoom,
         minZoom: MIN_ZOOM,
         maxZoom: MAX_ZOOM,
       });
