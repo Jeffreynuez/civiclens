@@ -377,3 +377,35 @@ body {
     background-size: 70% !important;
   }
 }
+
+/* ============================================================
+   A11y: universal :focus-visible ring (Polish #3)
+
+   Many of our buttons / links / inputs use inline styles, which
+   means CSS focus styling has to come from the cascading global
+   rule rather than per-component. This block pins a 3px accent-
+   green ring on EVERY focusable interactive element when it's
+   focused via keyboard (the :focus-visible pseudo-class only
+   matches keyboard focus, not pointer/mouse, so we don't paint
+   rings around things people just clicked on).
+
+   The ring uses outline (not box-shadow) so it doesn't push
+   neighbors out of layout, and outline-offset: 2px keeps it
+   clear of busy borders. We also explicitly REMOVE the default
+   browser focus outline on :focus (without -visible) so mouse
+   clicks don't show the ring.
+   ============================================================ */
+:focus { outline: none; }
+:focus-visible {
+  outline: 3px solid var(--cl-accent);
+  outline-offset: 2px;
+  border-radius: var(--cl-radius-xs);
+}
+
+/* On dark surfaces (navy navbar, primary-colored CTAs) the same
+   accent green washes out. These overrides bump the ring to a
+   higher-contrast white-tinted version so the ring stays legible. */
+[data-theme="dark"] :focus-visible,
+.cl-on-navy :focus-visible {
+  outline-color: rgba(255, 255, 255, 0.85);
+}

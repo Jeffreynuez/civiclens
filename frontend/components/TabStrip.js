@@ -69,10 +69,33 @@ export default function TabStrip({
     el.scrollBy({ left: dir * 120, behavior: 'smooth' });
   };
 
+  // Keyboard navigation per the ARIA tablist authoring practices:
+  //   ←/→     move focus to prev/next tab
+  //   Home    jump to first tab
+  //   End     jump to last tab
+  // We also activate-on-arrow (call onSelect immediately) which is the
+  // automatic-activation pattern; works well for our shallow tab
+  // panels that don't trigger heavy network work on selection.
+  const handleKeyDown = (e) => {
+    const i = tabs.findIndex((t) => t.id === activeId);
+    if (i < 0) return;
+    let next = i;
+    if (e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    else return;
+    e.preventDefault();
+    onSelect(tabs[next].id);
+  };
+
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <div
         ref={scrollerRef}
+        role="tablist"
+        aria-orientation="horizontal"
+        onKeyDown={handleKeyDown}
         className="cl-no-scrollbar"
         style={{
           display: 'flex',
@@ -88,6 +111,12 @@ export default function TabStrip({
           return (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={isActive}
+              // tabIndex per the WAI-ARIA "roving tabindex" pattern:
+              // only the active tab is in the keyboard tab order; the
+              // others are reachable via arrow keys (handled above).
+              tabIndex={isActive ? 0 : -1}
               onClick={() => onSelect(tab.id)}
               style={{
                 flex: useFlexFill && !isMobile ? 1 : '0 0 auto',

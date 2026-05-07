@@ -709,6 +709,7 @@ export default function Navbar({
           type="button"
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-pressed={theme === 'dark'}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           style={{
             width: 36,
