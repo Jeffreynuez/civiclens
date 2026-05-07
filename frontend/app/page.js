@@ -23,6 +23,7 @@ import { getAllTrackedBills, updateTrackedBill } from '@/lib/trackedBills';
 import { useAuth, logoutRep } from '@/lib/auth';
 import { useCitizenAuth, logoutCitizen } from '@/lib/citizenAuth';
 import { useViewport, useIsLandscape } from '@/lib/useViewport';
+import { loadNavState, saveNavState } from '@/lib/navState';
 
 export default function Home() {
   // Viewport drives the desktop ↔ mobile layout pivot. Computed once at
@@ -480,6 +481,91 @@ export default function Home() {
     setActiveDistrict(null);
     setSelectedMember(null);
   }, []);
+
+  // ─── Restore navigation state on reload ────────────────────────────
+  // Reload should drop the user back where they were (selected state /
+  // open profile / address-lookup district / etc.) instead of always
+  // bouncing them to the NOP home surface. lib/navState.js owns the
+  // persistence; this effect runs once on mount, reads the saved
+  // payload, and reapplies each piece. A `navStateRestoredRef` gate
+  // below blocks the save-effect until restoration finishes, so we
+  // don't clobber the saved payload with the initial defaults during
+  // the restore.
+  const navStateRestoredRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const saved = loadNavState();
+      if (!saved) {
+        navStateRestoredRef.current = true;
+        return;
+      }
+      // 1. UI tweaks — apply immediately, no side-effects.
+      if (typeof saved.panelWidth === 'number') setPanelWidth(saved.panelWidth);
+      if (typeof saved.mapHeightPx === 'number') setMapHeightPx(saved.mapHeightPx);
+      if (saved.sidePanelTab) setSidePanelTab(saved.sidePanelTab);
+
+      // 2. Selected state — fires the state-data fetch synchronously.
+      //    handleStateSelect also clears activeDistrict + selectedMember,
+      //    so we re-apply those AFTER awaiting it.
+      if (saved.selectedState && saved.stateName) {
+        try {
+          await handleStateSelect(saved.selectedState, saved.stateName);
+        } catch {
+          // If the state fetch fails (network down, etc.) we still
+          // try to restore the rest — the user's session shouldn't
+          // be tied to a specific HTTP outcome.
+        }
+        if (cancelled) return;
+      }
+
+      // 3. activeDistrict — JSON-safe blob, set directly.
+      if (saved.activeDistrict) setActiveDistrict(saved.activeDistrict);
+
+      // 4. Open profile / candidate. We saved the full member /
+      //    candidate object so restoration is synchronous — the
+      //    Issues / Bills / etc. tabs do their own lazy fetches when
+      //    activated, so a stale-by-a-minute hero is fine.
+      if (saved.selectedMember) setSelectedMember(saved.selectedMember);
+      if (saved.selectedCandidate) setSelectedCandidate(saved.selectedCandidate);
+
+      // 5. Page overlay (rep's social Page).
+      if (saved.selectedPageOfficialId) {
+        handleOpenPage(saved.selectedPageOfficialId, saved.pageMeta || null);
+      }
+
+      navStateRestoredRef.current = true;
+    })();
+    return () => { cancelled = true; };
+    // Empty deps — runs ONCE on mount. handleStateSelect / handleOpenPage
+    // are stable callbacks (useCallback with []).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Save the navigation state to localStorage whenever any of the
+  // tracked pieces change. Gated on navStateRestoredRef so the
+  // initial defaults don't overwrite a saved payload before
+  // restoration has applied it.
+  useEffect(() => {
+    if (!navStateRestoredRef.current) return;
+    saveNavState({
+      selectedState,
+      stateName,
+      sidePanelTab,
+      selectedMember,
+      selectedCandidate,
+      activeDistrict,
+      selectedPageOfficialId,
+      pageMeta,
+      panelWidth,
+      mapHeightPx,
+    });
+  }, [
+    selectedState, stateName, sidePanelTab,
+    selectedMember, selectedCandidate, activeDistrict,
+    selectedPageOfficialId, pageMeta,
+    panelWidth, mapHeightPx,
+  ]);
 
   // ─── On-load: re-check tracked bills for status changes ────────────
   // Runs once per session. For each tracked bill, fetches the latest snapshot
