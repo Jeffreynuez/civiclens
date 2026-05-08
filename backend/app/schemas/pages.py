@@ -362,3 +362,148 @@ class WaitlistSignup(BaseModel):
 class WaitlistStatus(BaseModel):
     ok: bool
     already_subscribed: bool = False
+
+
+# ── Citizen-authored polls ────────────────────────────────────────────
+# Schemas for the "Subscribed citizens post polls on unclaimed rep
+# pages" feature. The poll itself reuses the existing PollCreate /
+# PollRead shapes — the differences are at the wrapper level (no body,
+# no images, no rep author) and at the list level (citizen-poll
+# context: who created it, archive state, comment count, report count).
+
+# Reasons we accept on a Report. Open list — UI can add new ones, the
+# router only validates against this tuple to catch typos. Free-form
+# `detail` carries any nuance the reporter wants to add.
+POLL_REPORT_REASONS = (
+    "spam",
+    "harassment",
+    "misinformation",
+    "off_topic",
+    "impersonation",
+    "other",
+)
+
+# Reasons a citizen poll can land in the archive. Surfaced to the
+# citizen on their dashboard so they understand what happened.
+POLL_ARCHIVE_REASONS = (
+    "rep_claimed",
+    "citizen_closed",
+    "superseded",
+    "reported",
+)
+
+# Per-page cap on visible (active) citizen polls. When a new poll is
+# posted and the page is already at the cap, the oldest active poll
+# is auto-archived with reason='superseded'. The cap is intentionally
+# generous so a popular unclaimed page stays lively without becoming
+# unreadable.
+PER_PAGE_ACTIVE_POLL_CAP = 20
+
+
+class CitizenPollCreate(BaseModel):
+    """Payload to create a standalone citizen poll on an unclaimed
+    rep page. Same options as a rep would have when creating a poll
+    inside a post — minus body, minus images. Author identity comes
+    from the citizen session cookie; the page is identified by the
+    URL path parameter (/pages/{official_id}/citizen-polls)."""
+    poll: PollCreate
+
+
+class CitizenAuthorSummary(BaseModel):
+    """Lightweight identity payload for the poll author. Includes the
+    'Unverified' geography so the UI can render 'Citizen · FL · Naples'
+    style chips without knowing about the canonical citizen schema.
+    """
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    display_name: str
+    state: Optional[str] = None
+    city: Optional[str] = None
+    congressional_district: Optional[str] = None
+    verified: bool = False
+
+
+class CitizenPollRead(BaseModel):
+    """One citizen-authored poll row. Composes PollRead (the actual
+    voting data) with the authoring + archival metadata."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    target_official_id: str
+    author: CitizenAuthorSummary
+    poll: PollRead
+    created_at: datetime
+    archived_at: Optional[datetime] = None
+    archived_reason: Optional[str] = None
+    # Comment count is denormalized — we run a single SELECT COUNT per
+    # poll in the list builder so the read endpoint stays one round-
+    # trip-per-page rather than N+1 across comments.
+    comment_count: int = 0
+    report_count: int = 0
+    # True if the caller has already reported this poll. Hides the
+    # "Report" button (or shows a "Reported" pill) so they don't keep
+    # mashing it expecting a different result.
+    my_report_filed: bool = False
+    # Whether the caller can close this poll (only the author can).
+    can_close: bool = False
+
+
+class CitizenPollListResponse(BaseModel):
+    """List wrapper for citizen polls on a page. Splits active vs.
+    archived so the page UI can render the active feed at the top and
+    optionally show a 'Pre-claim discussion (N polls)' archive
+    section below for the rep owner.
+    """
+    official_id: str
+    page_claimed: bool
+    # Which slot the caller occupies on this page. 'subscribed' allows
+    # poll creation; 'unsubscribed' shows an upsell; 'rep_owner' shows
+    # the dismiss-archive control. None when anonymous.
+    caller_role: Optional[str] = None
+    # Cap signal so the frontend can disable the "Create poll" button
+    # before the user types a question and gets rejected at submit.
+    active_count: int
+    active_cap: int = PER_PAGE_ACTIVE_POLL_CAP
+    # When True, the caller already has an active poll on this page
+    # and must close it before posting another (rate-limit rule:
+    # 1 active per (citizen, page)).
+    caller_has_active_poll: bool = False
+    active: List[CitizenPollRead] = Field(default_factory=list)
+    archived: List[CitizenPollRead] = Field(default_factory=list)
+
+
+class PollCommentCreate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=1000)
+
+
+class PollCommentRead(BaseModel):
+    """Comment on a citizen poll. Same shape as PostComment minus the
+    post_id (we use poll_id) so the frontend can reuse the same row
+    component with a different parent reference."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    poll_id: int
+    citizen_display_name: str
+    body: str
+    created_at: datetime
+    scope_state: Optional[str] = None
+    scope_district: Optional[str] = None
+    scope_city: Optional[str] = None
+
+
+class PollReportCreate(BaseModel):
+    reason: str = Field(..., max_length=64)
+    detail: Optional[str] = Field(default=None, max_length=1000)
+
+
+class PollReportStatus(BaseModel):
+    ok: bool = True
+    already_reported: bool = False
+
+
+class CitizenPollListMineResponse(BaseModel):
+    """List wrapper for the citizen's dashboard 'My polls' tab.
+    Active and archived are returned separately so the UI's filter
+    pills don't need to do client-side splits.
+    """
+    active: List[CitizenPollRead] = Field(default_factory=list)
+    archived: List[CitizenPollRead] = Field(default_factory=list)

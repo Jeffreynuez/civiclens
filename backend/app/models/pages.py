@@ -231,36 +231,154 @@ Index("uq_comment_reaction_citizen", CommentReaction.comment_id, CommentReaction
 
 
 class Poll(Base):
+    """
+    A poll. Two flavors share this table:
+
+      • Rep-authored polls (the original) attach to a Post via post_id.
+        author_kind='rep', author_citizen_id is NULL. The post is the
+        authoritative content; comments live on PostComment.
+
+      • Citizen-authored polls (added for the "subscribed citizens post
+        on unclaimed pages" feature) are standalone — no Post. post_id
+        is NULL, author_kind='citizen', author_citizen_id is set. The
+        poll sits on a specific rep's page (target_official_id) while
+        that rep hasn't claimed it. Comments live on PollComment
+        (separate table because PostComment keys on post_id).
+
+    Archive lifecycle (citizen polls only):
+      • archived_at NULL                — active and visible on the page
+      • archived_at set, reason='rep_claimed'  — page got claimed; poll
+        moves to the rep's "Pre-claim discussion" archive section and
+        to the citizen's dashboard "My polls > Archived" tab.
+      • archived_at set, reason='citizen_closed' — citizen closed it
+        themselves before posting a new one (rate-limit rule: 1 active
+        per (citizen, page) at a time).
+      • archived_at set, reason='superseded' — the per-page cap (20)
+        knocked the oldest active poll off the visible feed.
+      • archived_at set, reason='reported' — admin took the poll down.
+    """
     __tablename__ = "polls"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    post_id: Mapped[int] = mapped_column(
-        ForeignKey("posts.id", ondelete="CASCADE"), unique=True,
+    # Nullable: rep polls set this; citizen polls leave it NULL.
+    post_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("posts.id", ondelete="CASCADE"), unique=True, default=None,
     )
     question: Mapped[str] = mapped_column(String(500))
     closes_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
-    # Default scope the post author wants viewers to see first.
-    # Values: 'country' | 'state' | 'district' | 'city'. Defaults to
-    # 'country' (inclusive). The frontend lets viewers override this
-    # (Phase 2) — for now it drives the initial render only.
     default_visibility_scope: Mapped[str] = mapped_column(String(16), default="country")
-    # How results are surfaced to viewers. 'full' is the classic "show
-    # bars always" rendering; 'hidden' collapses results and vote
-    # behind toggles so viewers explicitly opt in (useful for polls
-    # the author doesn't want biasing in either direction until the
-    # viewer commits); 'reveal_after_close' pairs with closes_at —
-    # option counts stay hidden until the close time passes, then the
-    # full results appear. The backend enforces the last one by
-    # zeroing counts for non-owner viewers before close.
     presentation_mode: Mapped[str] = mapped_column(
         String(24), default="full", server_default="full",
     )
+    # Author kind drives which join is meaningful: 'rep' means look at
+    # post.author; 'citizen' means look at author_citizen_id +
+    # target_official_id. Default 'rep' is backwards-compatible with
+    # every row that exists today.
+    author_kind: Mapped[str] = mapped_column(
+        String(16), default="rep", server_default="rep",
+    )
+    # Citizen author (when author_kind='citizen'). NULL otherwise.
+    author_citizen_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="SET NULL"),
+        default=None, index=True,
+    )
+    # The rep page this poll lives on. Always set for citizen polls
+    # (that's how we route them to the right page). Always NULL for
+    # rep polls (they reach the rep page through post.official_id).
+    target_official_id: Mapped[Optional[str]] = mapped_column(
+        String(64), default=None, index=True,
+    )
+    # Citizen-author audit columns. NULL on rep polls.
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    archived_reason: Mapped[Optional[str]] = mapped_column(String(32), default=None)
+    # When a rep claims a page, citizen polls archive (reason='rep_claimed')
+    # and surface to the rep as "Pre-claim discussion (N polls)". The rep
+    # can dismiss the section with one click; we record the dismissal
+    # time so the section stays hidden across reloads but the rows still
+    # persist in the citizen's dashboard.
+    dismissed_by_owner_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Rolling moderation counter — bumped each time someone hits "Report".
+    # Admins use it to triage. Stored on the poll (not in PollReport
+    # alone) so list views can sort/filter without the join.
+    report_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Created-at for list ordering of standalone citizen polls. Rep polls
+    # already get their ordering via post.created_at; we still set this
+    # for new rep polls but legacy rows get NULL and fall back.
+    created_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, server_default=func.now(), default=None,
+    )
 
-    post: Mapped["Post"] = relationship(back_populates="poll")
+    post: Mapped[Optional["Post"]] = relationship(back_populates="poll")
     options: Mapped[List["PollOption"]] = relationship(
         back_populates="poll", cascade="all, delete-orphan",
         order_by="PollOption.sort_order",
     )
+    poll_comments: Mapped[List["PollComment"]] = relationship(
+        back_populates="poll", cascade="all, delete-orphan",
+        order_by="PollComment.created_at.desc()",
+    )
+
+
+class PollComment(Base):
+    """
+    Comment attached directly to a standalone (citizen-authored) poll.
+    Mirrors PostComment but keyed on poll_id since citizen polls have
+    no Post row to hang comments off of. Used both by citizens and —
+    once a rep arrives and the page archives — read-only by everyone.
+    """
+    __tablename__ = "poll_comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    poll_id: Mapped[int] = mapped_column(ForeignKey("polls.id", ondelete="CASCADE"), index=True)
+    citizen_id: Mapped[int] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="CASCADE"), index=True,
+    )
+    citizen_display_name: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(String(1000))
+    scope_state: Mapped[Optional[str]] = mapped_column(String(2), default=None, index=True)
+    scope_district: Mapped[Optional[str]] = mapped_column(String(8), default=None, index=True)
+    scope_city: Mapped[Optional[str]] = mapped_column(String(128), default=None, index=True)
+    scope_county: Mapped[Optional[str]] = mapped_column(String(128), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+
+    poll: Mapped["Poll"] = relationship(back_populates="poll_comments")
+
+
+class PollReport(Base):
+    """
+    User-submitted report on a citizen-authored poll. Anyone signed in
+    (citizen or rep) can file one. We keep the reporter id + reason so
+    a future admin queue can review and act. Multiple reports per
+    (poll, reporter) are deduped by a unique index — re-clicking
+    Report is a no-op.
+
+    `acted_at` is set when a moderator resolves the report (either by
+    archiving the poll or dismissing the report as not actionable).
+    """
+    __tablename__ = "poll_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    poll_id: Mapped[int] = mapped_column(ForeignKey("polls.id", ondelete="CASCADE"), index=True)
+    # Either citizen_id or rep_id is set (XOR enforced at the route layer,
+    # not the schema — SQLite won't enforce a CHECK across nullable cols
+    # cleanly).
+    reporter_citizen_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="SET NULL"), default=None, index=True,
+    )
+    reporter_rep_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="SET NULL"), default=None, index=True,
+    )
+    reason: Mapped[str] = mapped_column(String(64))
+    detail: Mapped[Optional[str]] = mapped_column(String(1000), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    acted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+
+
+# Dedupe reports — one per (poll, citizen) and one per (poll, rep) so
+# spamming Report doesn't inflate the count.
+Index("uq_poll_report_citizen", PollReport.poll_id, PollReport.reporter_citizen_id, unique=True)
+Index("uq_poll_report_rep", PollReport.poll_id, PollReport.reporter_rep_id, unique=True)
 
 
 class PollOption(Base):
