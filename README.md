@@ -55,3 +55,32 @@ Tracked in this list rather than as code TODOs:
   as an open-source library (e.g. the design-system tokens or the
   district-geometry helpers), spin those into a separate repo with
   an OSS license rather than trying to dual-license the monorepo.
+
+## Future product features
+
+Product ideas captured for a future release — not in scope for the
+current build, but worth keeping the threads visible:
+
+- **Video posts on rep / candidate Pages** — let verified reps and
+  candidates attach video to their posts, not just text + images.
+  Needs a transcoding pipeline (probably Mux or Cloudflare Stream),
+  a size cap, and a moderation queue tied into the existing
+  takedown / DMCA flow.
+- **Live-streamed town halls** — first-class "Live" affordance on a
+  rep / candidate Page: they go live, citizens get a push
+  notification (using the PWA notification stack already in place),
+  and the stream archives back into their post feed afterward.
+  Pairs naturally with the Pages comment thread for live Q&A.
+- **1-on-1 live debates between reps / candidates** — a request /
+  accept flow where one official can challenge another to a live
+  scheduled debate, surfaced on both their Pages and on the On-the-
+  ballot home-page section while live. Same streaming + archival
+  infrastructure as town halls; the new piece is the invitation /
+  scheduling state machine.
+- **Citizen-authored polls on unclaimed rep Pages** — once a rep's
+  Page has been auto-generated but not yet claimed by the official,
+  let *Subscribed* citizens (paid tier) post polls that show up
+  in the Page feed. Gives the community a way to surface what they
+  care about and creates an incentive for the rep to claim the
+  Page. Needs anti-brigading rate limits and a clear "unclaimed"
+  visual treatment so polls aren't mistaken for the rep's own.
