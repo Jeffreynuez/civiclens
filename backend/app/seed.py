@@ -153,6 +153,22 @@ def seed_demo_accounts(db: Optional[Session] = None) -> int:
             )
             db.add(acct)
             created += 1
+            # Citizen-polls archive trigger: any in-flight citizen polls
+            # on this newly-claimed page move to "Pre-claim discussion"
+            # immediately. Local import avoids a circular at module
+            # load (services → models → db is already deep-loaded by
+            # the time we get here).
+            try:
+                from app.services.citizen_polls_service import archive_polls_for_claim
+                archived_n = archive_polls_for_claim(db, official_id)
+                if archived_n:
+                    logger.info(
+                        "Archived %d citizen polls on newly-claimed page %s",
+                        archived_n, official_id,
+                    )
+            except Exception:
+                # Don't let an archive hiccup take down account seeding.
+                logger.exception("Citizen-poll archive on claim failed for %s", official_id)
 
         # Commit whenever anything changed — new inserts OR top-ups on
         # existing rows. Previously the commit was gated on `created>0`,

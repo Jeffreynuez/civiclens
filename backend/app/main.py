@@ -23,6 +23,7 @@ from app.routers import (
     auth as auth_router,
     auth_citizen as auth_citizen_router,
     pages as pages_router,
+    citizen_polls as citizen_polls_router,
     waitlist as waitlist_router,
 )
 from app.db import init_db
@@ -96,6 +97,11 @@ app.include_router(google_civic.router, prefix="/api/google-civic", tags=["Googl
 app.include_router(auth_router.router, prefix="/api/auth", tags=["Pages — Auth"])
 app.include_router(auth_citizen_router.router, prefix="/api/citizen-auth", tags=["Pages — Citizen Auth"])
 app.include_router(pages_router.router, prefix="/api/pages", tags=["Pages — Feed"])
+# Citizen polls — endpoints are split between page-scoped routes
+# (/api/pages/{official_id}/citizen-polls) and standalone routes
+# (/api/citizen-polls/...), so we mount with prefix="/api" rather than
+# "/api/citizen-polls" — the path parts come from the route decorators.
+app.include_router(citizen_polls_router.router, prefix="/api", tags=["Pages — Citizen Polls"])
 app.include_router(waitlist_router.router, prefix="/api/waitlist", tags=["Pages — Citizen Waitlist"])
 
 
