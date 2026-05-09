@@ -2749,6 +2749,12 @@ function CompactPersonCard({ person, eyebrow, meta, onClick, followTarget, onNot
               {eyebrow}
             </div>
           )}
+          {/* Name row — party chip on the LEFT (so it never gets
+              pushed below the name when the name is long), name on
+              the right with ellipsis truncation. flexWrap is
+              `nowrap` so the chip + name stay on a single line. The
+              chip has flex-shrink: 0 so the name takes any
+              squeeze, never the chip. */}
           <div
             style={{
               fontSize: 'var(--cl-text-sm)',
@@ -2758,30 +2764,46 @@ function CompactPersonCard({ person, eyebrow, meta, onClick, followTarget, onNot
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              flexWrap: 'wrap',
+              flexWrap: 'nowrap',
+              minWidth: 0,
             }}
           >
+            {person.party && (
+              <span style={{ flexShrink: 0 }}>
+                <PartyChip party={person.party} size="xs" />
+              </span>
+            )}
             <span style={{
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               minWidth: 0,
+              flex: 1,
             }}>
               {person.name}
             </span>
-            {person.party && <PartyChip party={person.party} size="xs" />}
           </div>
-          {meta && (
-            <div
-              style={{
-                fontSize: 'var(--cl-text-2xs)',
-                color: 'var(--cl-text-light)',
-                marginTop: 2,
-              }}
-            >
-              {meta}
-            </div>
-          )}
+          {/* Meta line is ALWAYS rendered — even when there's no
+              state/city/residency to show — so every card in a grid
+              has the same height. Without this, candidates whose
+              meta is set are taller than candidates whose meta is
+              null, and any UI that cycles through candidates (the
+              Race-in-Focus shuffle) jumps every 12 seconds as the
+              cards swap. The non-breaking space gives the line its
+              natural height without rendering visible text. */}
+          <div
+            style={{
+              fontSize: 'var(--cl-text-2xs)',
+              color: 'var(--cl-text-light)',
+              marginTop: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            aria-hidden={!meta || undefined}
+          >
+            {meta || ' '}
+          </div>
         </div>
       </div>
       {/* Action row — Follow / Compare / Page sit below the name+meta
