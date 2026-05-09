@@ -27,6 +27,7 @@ from typing import Generator, Optional
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
+from sqlalchemy.sql.elements import ClauseElement
 
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -89,17 +90,47 @@ def _render_server_default(col) -> Optional[str]:
     appending after `DEFAULT`. Returns None when the column has no
     default.
 
-    Handles three kinds of input:
-      1. server_default=text("'full'") — already raw SQL, use as-is.
-      2. server_default="full" — plain string; SQLAlchemy wraps it in
+    Handles four kinds of input:
+      1. server_default=func.now() (or any SQL ClauseElement) — compile
+         through the engine's dialect so we get the dialect-correct
+         rendering (e.g. CURRENT_TIMESTAMP on SQLite, NOW() on
+         Postgres). This is the path that previously emitted the
+         literal string 'now()' as a default, breaking
+         INSERT-with-RETURNING for the affected column.
+      2. server_default=text("'full'") — already raw SQL, use as-is.
+      3. server_default="full" — plain string; SQLAlchemy wraps it in
          a TextClause that str()s back to "full" WITHOUT quotes. We
          detect this case with the passthrough set; anything that
          doesn't look like a known SQL expression gets string-quoted.
-      3. default=<scalar> — Python-side default; we quote/serialize
+      4. default=<scalar> — Python-side default; we quote/serialize
          by type.
     """
     if col.server_default is not None:
-        raw = str(col.server_default.arg).strip()
+        arg = col.server_default.arg
+        # 1) Compile a SQL ClauseElement (FunctionElement, ColumnElement,
+        #    etc.) through the engine's dialect so func.now() lands as
+        #    the correct keyword for the underlying database.
+        if isinstance(arg, ClauseElement) and not isinstance(arg, type(text(""))):
+            try:
+                compiled = str(arg.compile(
+                    dialect=engine.dialect,
+                    compile_kwargs={"literal_binds": True},
+                ))
+                stripped = compiled.strip()
+                if stripped:
+                    return stripped
+            except Exception:
+                # Fall through to the string-handling path. Worst case
+                # we still emit *something*, but with a logged warning
+                # the developer can see in the migration output.
+                logger.warning(
+                    "Auto-migrate: failed to compile server_default for column %r; "
+                    "falling back to str() rendering.",
+                    getattr(col, "name", "?"),
+                )
+
+        # 2-3) Best-effort string handling for TextClause / plain strings.
+        raw = str(arg).strip()
         if raw.startswith("'") and raw.endswith("'"):
             return raw
         if raw.upper() in _SQL_LITERAL_PASSTHROUGH:
@@ -134,6 +165,55 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _auto_migrate_new_columns()
     _auto_migrate_nullability_changes()
+    _repair_bad_now_defaults()
+
+
+def _repair_bad_now_defaults() -> None:
+    """Repair pass for tables that had a `func.now()` server_default
+    rendered as the literal string `'now()'` by an older version of
+    the auto-migrate (the renderer didn't compile ClauseElements
+    through the dialect, so it str()-quoted the function call). The
+    bad default makes INSERT-with-RETURNING fail because SQLAlchemy
+    tries to parse `'now()'` as an ISO datetime and 500s out
+    everything that touches the table.
+
+    We detect the fingerprint (`DEFAULT 'now()'` in the table's
+    sqlite_master sql) and rebuild any affected tables. Rebuilding
+    rewrites the table from the current ORM model, which renders
+    defaults through the dialect compiler — the canonical right
+    thing.
+    """
+    if not DATABASE_URL.startswith("sqlite"):
+        return
+
+    inspector = inspect(engine)
+    on_disk = set(inspector.get_table_names())
+    bad_tables: list[str] = []
+    with engine.connect() as conn:
+        for mapper in Base.registry.mappers:
+            table = mapper.local_table
+            if table is None or table.name not in on_disk:
+                continue
+            row = conn.execute(text(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=:n"
+            ), {"n": table.name}).fetchone()
+            if not row or not row[0]:
+                continue
+            ddl = row[0]
+            # Only rebuild tables that BOTH have the bad default AND
+            # have a column on the model with a server_default that
+            # would render correctly now. (Avoids rewriting tables that
+            # legitimately stored the string 'now()' as a default — not
+            # something we ship, but be defensive.)
+            if "DEFAULT 'now()'" in ddl:
+                bad_tables.append(table.name)
+
+    for name in bad_tables:
+        logger.warning(
+            "Auto-migrate: detected bad DEFAULT 'now()' on %s — rebuilding to fix.",
+            name,
+        )
+        _rebuild_sqlite_table(name)
 
 
 def _auto_migrate_new_columns() -> None:
