@@ -304,8 +304,11 @@ class Poll(Base):
     # Created-at for list ordering of standalone citizen polls. Rep polls
     # already get their ordering via post.created_at; we still set this
     # for new rep polls but legacy rows get NULL and fall back.
+    # Nullable so the auto-migrate can ADD COLUMN to existing rows
+    # without backfilling — old polls just keep created_at=NULL and the
+    # post.created_at fallback covers them.
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, server_default=func.now(), default=None,
+        DateTime, server_default=func.now(),
     )
 
     post: Mapped[Optional["Post"]] = relationship(back_populates="poll")
