@@ -84,3 +84,14 @@ current build, but worth keeping the threads visible:
   care about and creates an incentive for the rep to claim the
   Page. Needs anti-brigading rate limits and a clear "unclaimed"
   visual treatment so polls aren't mistaken for the rep's own.
+- **Optional citizen nicknames** — a verified citizen should be
+  able to choose a display nickname instead of their legal name on
+  any public surface (poll authorship, comment threads, the future
+  citizen-led-poll feature). Identity verification still happens
+  against the real name + address (so vote integrity, district
+  scoping, and abuse moderation aren't weakened), but what the rest
+  of the community *sees* is the user's choice. Profile gets a
+  "Display name" field with a one-time uniqueness check; existing
+  references update on save. Pairs with a small "verified citizen"
+  pill so a nickname doesn't read as anonymous — it reads as
+  "verified, just doesn't want to publish their legal name."
