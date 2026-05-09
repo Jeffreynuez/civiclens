@@ -672,7 +672,11 @@ function OnTheBallotSection({ citizen, onCandidatePick, onRequestVerify, onState
     const id = setInterval(() => setShuffleTick((t) => t + 1), 12000);
     return () => clearInterval(id);
   }, []);
-  const featuredCandidates = useMemo(() => {
+  // Two memos here: one for the deduped pool (drives the "X of N total"
+  // caption — independent of shuffle, so the number is stable), one
+  // for the visible 6 (depends on shuffleTick so the cards rotate).
+  // Splitting them avoids a re-render of the count every 12 seconds.
+  const featuredPool = useMemo(() => {
     if (!headlineRace) return [];
     const all = [
       ...(headlineRace.primary_candidates?.R || []),
@@ -680,8 +684,6 @@ function OnTheBallotSection({ citizen, onCandidatePick, onRequestVerify, onState
       ...(headlineRace.primary_candidates?.I || []),
       ...(headlineRace.general_candidates || []),
     ];
-    // Dedupe by id (a candidate listed in both a primary and the
-    // general should only appear once in the preview).
     const seen = new Set();
     const unique = [];
     for (const c of all) {
@@ -689,8 +691,13 @@ function OnTheBallotSection({ citizen, onCandidatePick, onRequestVerify, onState
       seen.add(c.id);
       unique.push(c);
     }
+    return unique;
+  }, [headlineRace]);
+
+  const featuredCandidates = useMemo(() => {
+    if (featuredPool.length === 0) return [];
     // Fisher-Yates on a copy so we don't mutate the upstream array.
-    const shuffled = unique.slice();
+    const shuffled = featuredPool.slice();
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -699,7 +706,7 @@ function OnTheBallotSection({ citizen, onCandidatePick, onRequestVerify, onState
     // shuffleTick is intentionally a dep — bumping it on the interval
     // re-runs this useMemo and reshuffles the visible 6.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [headlineRace, shuffleTick]);
+  }, [featuredPool, shuffleTick]);
 
   return (
     <section style={{ padding: '32px 24px 16px', background: 'var(--cl-bg-soft)' }}>
@@ -760,6 +767,7 @@ function OnTheBallotSection({ citizen, onCandidatePick, onRequestVerify, onState
                 <FeaturedRaceCards
                   race={headlineRace}
                   candidates={featuredCandidates}
+                  totalCount={featuredPool.length}
                   onCandidatePick={onCandidatePick}
                   stateCode={stateCode}
                   stateName={stateName}
@@ -940,12 +948,18 @@ function FeaturedRaceEmpty({ stateName }) {
 
 // The actual race card grid — header line + 6 candidate cards using
 // the same CompactPersonCard component as Cabinet / SCOTUS.
-function FeaturedRaceCards({ race, candidates, onCandidatePick, stateCode, stateName, onStatePick }) {
+function FeaturedRaceCards({ race, candidates, totalCount, onCandidatePick, stateCode, stateName, onStatePick }) {
   // The full-field link is only meaningful when we know which state
   // to deep-link to AND we have a parent handler wired (page.js's
   // handleStateSelect). If onStatePick is missing, fall back to the
   // existing static caption.
   const canDeepLink = !!(stateCode && onStatePick);
+  // Always show the "Showing X of N" caption when there are >6
+  // candidates in the race, so the user knows there's more to see
+  // on the state page even though only 6 fit on the home surface.
+  // Falls back to candidates.length if totalCount wasn't passed
+  // (older callers pre-dated the count threading).
+  const total = totalCount ?? candidates.length;
   return (
     <div>
       <div
@@ -1002,7 +1016,7 @@ function FeaturedRaceCards({ race, candidates, onCandidatePick, stateCode, state
                 color: 'var(--cl-text-muted)',
               }}
             >
-              Showing 6 — full field on the state page
+              Showing {candidates.length} / {total} total — full field on the state page
             </span>
             {canDeepLink && (
               <button
@@ -1504,7 +1518,9 @@ const POPULAR_POLLS_DEMO = [
   {
     id: 'pp-2',
     authorType: 'citizen',
-    author: 'Subscribed citizen',
+    // Real-name citizen — shows the default identity treatment.
+    // Maria Hernandez is a seeded demo account in Naples, FL.
+    author: 'Maria Hernandez',
     role: 'FL · Naples',
     party: null,
     when: '38m ago',
@@ -1534,8 +1550,11 @@ const POPULAR_POLLS_DEMO = [
   {
     id: 'pp-4',
     authorType: 'citizen',
-    author: 'Subscribed citizen',
-    role: 'CA · Oakland',
+    // Nickname-only citizen — previews the future "verified but
+    // pseudonymous" feature where citizens can hide their legal
+    // name behind a chosen handle.
+    author: 'BallotBoomer',
+    role: 'CA · Los Angeles',
     party: null,
     when: '1h ago',
     question: 'How often do you actually contact your representative in a year?',
@@ -1565,8 +1584,11 @@ const POPULAR_POLLS_DEMO = [
   {
     id: 'pp-6',
     authorType: 'citizen',
-    author: 'Subscribed citizen',
-    role: 'TX · Houston',
+    // Real-name citizen — Daniel Reed is a seeded demo account in
+    // San Antonio, TX. Mixes with the nickname accounts above to
+    // show both privacy modes side by side.
+    author: 'Daniel Reed',
+    role: 'TX · San Antonio',
     party: null,
     when: '3h ago',
     question: 'Should presidential debates require an independent live fact-check overlay?',
@@ -1595,8 +1617,11 @@ const POPULAR_POLLS_DEMO = [
   {
     id: 'pp-8',
     authorType: 'citizen',
-    author: 'Subscribed citizen',
-    role: 'NY · Buffalo',
+    // Nickname-only citizen — second example of the pseudonym
+    // path. Different vibe from BallotBoomer to show it's not a
+    // template.
+    author: 'QuorumQuokka',
+    role: 'NY · New York',
     party: null,
     when: '6h ago',
     question: 'Best lever for reducing healthcare administrative cost?',
