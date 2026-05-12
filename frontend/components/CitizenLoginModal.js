@@ -321,10 +321,12 @@ export default function CitizenLoginModal({ open, onClose, onSuccess }) {
           lineHeight: 1.5,
         }}
       >
-        <strong>Demo preview.</strong> These 60 accounts are self-attested —
-        real identity verification (address check, one-person-one-account)
-        ships in the next phase. Every engagement surface labels this data
-        &ldquo;Unverified.&rdquo;
+        <strong>Demo preview.</strong> Don&rsquo;t have an account?
+        Use &ldquo;Create a demo account&rdquo; below to mint one with a
+        name + state + district of your choice — instant access to the
+        full engagement experience. Demo identities are self-attested
+        and every engagement surface labels them &ldquo;Unverified&rdquo;
+        until real ID.me verification ships.
       </div>
 
       {/* Email */}
