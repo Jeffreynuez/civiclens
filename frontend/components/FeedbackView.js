@@ -19,19 +19,20 @@
  *     Sheet acts as an export-ready archive.
  *
  * Setup steps (user-side):
- *   1. Sign in to civicview@gmail.com (create if needed).
+ *   1. Sign in to a Google account (a free personal Gmail works;
+ *      ownership of the form is what matters, not the address).
  *   2. forms.google.com → blank form titled "CivicView feedback".
  *   3. Add fields: Type of feedback (multiple choice: Bug / Feature
  *      request / Content correction / General), Description (long
  *      answer), Email (optional, short answer), Page or URL (short
- *      answer, optional).
+ *      answer, optional). Have form submissions forward to
+ *      civicview@civicview.app in the form's response settings.
  *   4. Send → Embed HTML → copy the iframe src URL.
  *   5. Paste the URL into FEEDBACK_FORM_URL below; flip
  *      FEEDBACK_FORM_LIVE to true.
  *
  * Until the form is live, the overlay shows a friendly placeholder
- * pointing the user at the Help-build-this page so they have
- * somewhere to channel their energy.
+ * with the contact email so visitors can still reach us.
  *
  * Props:
  *   onClose() — collapse the overlay
@@ -167,31 +168,57 @@ function Intro() {
 // ─────────────────────────────────────────────────────────────────────
 function FormEmbed() {
   return (
-    <div
-      style={{
-        background: 'var(--cl-card)',
-        border: '1px solid var(--cl-border)',
-        borderRadius: 12,
-        overflow: 'hidden',
-      }}
-    >
-      <iframe
-        title="CivicView feedback form"
-        src={FEEDBACK_FORM_URL}
-        // Aspect-ratio-based height: 1200px is a reasonable default for
-        // a 4–6 field form. Google's iframe handles internal scroll
-        // when the form is taller than this.
+    <>
+      <div
         style={{
-          width: '100%',
-          height: 1200,
-          border: 'none',
-          display: 'block',
+          background: 'var(--cl-card)',
+          border: '1px solid var(--cl-border)',
+          borderRadius: 12,
+          overflow: 'hidden',
         }}
-        loading="lazy"
       >
-        Loading feedback form…
-      </iframe>
-    </div>
+        <iframe
+          title="CivicView feedback form"
+          src={FEEDBACK_FORM_URL}
+          // Aspect-ratio-based height: 1200px is a reasonable default for
+          // a 4–6 field form. Google's iframe handles internal scroll
+          // when the form is taller than this.
+          style={{
+            width: '100%',
+            height: 1200,
+            border: 'none',
+            display: 'block',
+          }}
+          loading="lazy"
+        >
+          Loading feedback form…
+        </iframe>
+      </div>
+      <p
+        style={{
+          marginTop: 12,
+          fontSize: '0.78rem',
+          lineHeight: 1.5,
+          color: 'var(--cl-text-light)',
+          fontStyle: 'italic',
+          textAlign: 'center',
+        }}
+      >
+        Prefer email? Reach us at{' '}
+        <a
+          href="mailto:civicview@civicview.app?subject=CivicView%20feedback"
+          style={{
+            color: 'var(--cl-accent)',
+            fontStyle: 'normal',
+            fontWeight: 700,
+            textDecoration: 'none',
+          }}
+        >
+          civicview@civicview.app
+        </a>
+        .
+      </p>
+    </>
   );
 }
 
@@ -233,9 +260,43 @@ function Placeholder() {
       </h2>
       <p style={{ fontSize: '0.88rem', lineHeight: 1.55, margin: 0, color: 'var(--cl-text-light)' }}>
         We&rsquo;re setting up the inbox so every submission goes into a
-        moderation-friendly queue. Until it&rsquo;s live, the
-        &ldquo;Help build this&rdquo; tab covers what&rsquo;s shipped,
-        what&rsquo;s in progress, and what&rsquo;s blocked on funding.
+        moderation-friendly queue. Until it&rsquo;s live, you can email
+        us directly:
+      </p>
+      <div
+        style={{
+          marginTop: 14,
+          display: 'inline-block',
+          padding: '10px 14px',
+          background: 'var(--cl-bg-soft)',
+          border: '1px solid var(--cl-border)',
+          borderRadius: 'var(--cl-radius-md)',
+          fontFamily: 'var(--cl-font-mono)',
+          fontSize: 'var(--cl-text-sm)',
+          fontWeight: 700,
+        }}
+      >
+        <a
+          href="mailto:civicview@civicview.app?subject=CivicView%20feedback"
+          style={{ color: 'var(--cl-accent)', textDecoration: 'none' }}
+        >
+          civicview@civicview.app
+        </a>
+      </div>
+      <p
+        style={{
+          marginTop: 14,
+          fontSize: '0.78rem',
+          lineHeight: 1.5,
+          color: 'var(--cl-text-light)',
+          fontStyle: 'italic',
+          margin: '14px 0 0',
+        }}
+      >
+        Bug reports, feature requests, content corrections, or general
+        thoughts — all welcome. The &ldquo;Help build this&rdquo; tab
+        also covers what&rsquo;s shipped, what&rsquo;s in progress, and
+        what&rsquo;s blocked on funding.
       </p>
     </div>
   );
