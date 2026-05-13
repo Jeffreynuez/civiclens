@@ -101,6 +101,14 @@ export default function Home() {
   // landscape and back doesn't strand the map at a stale height.
   const [mapHeightPx, setMapHeightPx] = useState(0);
   const [mapMaxHeightPx, setMapMaxHeightPx] = useState(0);
+  // Tracks whether the first viewport measurement has happened yet, so
+  // subsequent recomputes (resize / orientation flip) preserve the
+  // user's open/closed choice instead of treating "current is 0" as
+  // "not yet initialized, default to open." Without this distinction,
+  // flipping landscape → portrait reset the map to its 40% default
+  // because the recompute couldn't tell "user closed it" from
+  // "first run, no value set yet."
+  const mapHeightInitialized = useRef(false);
   useEffect(() => {
     const NAVBAR_PX = 56;
     const RESIZER_PX = 28;
@@ -111,7 +119,20 @@ export default function Home() {
       const available = Math.max(0, visibleH - NAVBAR_PX - RESIZER_PX);
       const max = Math.round(available * 0.4);
       setMapMaxHeightPx(max);
-      setMapHeightPx((current) => (current === 0 || current > max ? max : current));
+      const wasFirstRun = !mapHeightInitialized.current;
+      mapHeightInitialized.current = true;
+      setMapHeightPx((current) => {
+        if (wasFirstRun) {
+          // Fresh page load → default to open at the freshly-computed
+          // 40% height.
+          return max;
+        }
+        // Subsequent recomputes (orientation flip, URL bar show/hide):
+        // preserve the binary open/closed state. 0 stays 0 (user
+        // closed it); anything > 0 was "open" — re-clamp to the new
+        // max so the map fills the freshly-measured space.
+        return current > 0 ? max : 0;
+      });
     };
     recompute();
     window.addEventListener('resize', recompute);
