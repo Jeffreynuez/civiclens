@@ -22,7 +22,7 @@
  *   compactNavbar — the slim Navbar shown at the top of the overlay
  *                   for consistency with PageView's chrome.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Navbar from './Navbar';
 
 // Placeholder until the user has the actual crowdfund URL. Updating
@@ -215,49 +215,70 @@ export default function HelpBuildThisView({ onClose, compactNavbarProps = {} }) 
         <div style={{ width: 60 }} aria-hidden /> {/* spacer for layout balance */}
       </div>
 
-      {/* Scrollable content. Single scroll container so the in-page
-          anchor links (if we add them later) work without juggling
-          multiple scroll contexts. */}
+      {/* Scrollable content. Each section is wrapped in a collapsible
+          so the page reads as a high-level summary first; visitors
+          drill into whichever section interests them. All start
+          collapsed except the funding breakdown, which is the
+          primary call-to-trust for backers — opening it by default
+          makes the dollar accountability visible on first paint. */}
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ maxWidth: 880, margin: '0 auto', padding: '32px 24px 64px' }}>
-          {/* Hero */}
           <HeroBlock />
 
-          <SectionTitle eyebrow="What's shipped" title="Already built" />
-          <CheckList items={DONE} icon="check" />
+          <CollapsibleSection
+            eyebrow="What's shipped"
+            title="Already built"
+            count={DONE.length}
+          >
+            <CheckList items={DONE} icon="check" />
+          </CollapsibleSection>
 
-          <SectionTitle eyebrow="What's next" title="In progress" />
-          <CheckList items={WIP} icon="gear" />
+          <CollapsibleSection
+            eyebrow="What's next"
+            title="In progress"
+            count={WIP.length}
+          >
+            <CheckList items={WIP} icon="gear" />
+          </CollapsibleSection>
 
-          <SectionTitle
+          <CollapsibleSection
             eyebrow="Where the money goes"
             title="Blocked on funding"
+            count={FUNDING.length}
             subtitle="Every line below is an exact cost with a citation. Backers can verify the numbers themselves; we'd rather over-disclose than handwave."
-          />
-          <FundingTable rows={FUNDING} />
+            defaultOpen
+          >
+            <FundingTable rows={FUNDING} />
+          </CollapsibleSection>
 
-          <SectionTitle
+          <CollapsibleSection
             eyebrow="On the roadmap"
             title="Future product features"
+            count={FUTURE_FEATURES.length}
             subtitle="What we want to build once the funding side gets stable. Each entry is a real feature with real infra implications, not a wish list."
-          />
-          <FeatureCardList items={FUTURE_FEATURES} />
-
-          <SectionTitle eyebrow="Future direction" title={AI_FEATURES.title} />
-          <p
-            style={{
-              fontSize: '0.95rem',
-              lineHeight: 1.55,
-              color: 'var(--cl-text)',
-              background: 'var(--cl-card)',
-              border: '1px solid var(--cl-border)',
-              borderRadius: 12,
-              padding: 16,
-              margin: 0,
-            }}
           >
-            {AI_FEATURES.detail}
-          </p>
+            <FeatureCardList items={FUTURE_FEATURES} />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            eyebrow="Future direction"
+            title={AI_FEATURES.title}
+          >
+            <p
+              style={{
+                fontSize: '0.95rem',
+                lineHeight: 1.55,
+                color: 'var(--cl-text)',
+                background: 'var(--cl-card)',
+                border: '1px solid var(--cl-border)',
+                borderRadius: 12,
+                padding: 16,
+                margin: 0,
+              }}
+            >
+              {AI_FEATURES.detail}
+            </p>
+          </CollapsibleSection>
 
           {/* Footer CTA — second crack at the GoFundMe button after the
               user has read the whole pitch. */}
@@ -279,6 +300,143 @@ export default function HelpBuildThisView({ onClose, compactNavbarProps = {} }) 
         </div>
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Collapsible section wrapper. Each major content block on the page
+// lives inside one of these so the page reads as a quick scannable
+// outline up front; visitors expand whichever sections actually
+// interest them.
+//
+// Props:
+//   eyebrow    — small uppercase label above the title
+//   title      — section heading
+//   subtitle   — optional secondary copy below the title
+//   count      — optional number badge (e.g. "14") next to the title
+//   defaultOpen — start expanded; defaults to false
+// ─────────────────────────────────────────────────────────────────────
+function CollapsibleSection({ eyebrow, title, subtitle, count, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const headerId = `${title.replace(/\s+/g, '-').toLowerCase()}-header`;
+  const panelId = `${title.replace(/\s+/g, '-').toLowerCase()}-panel`;
+  return (
+    <section style={{ marginTop: 16 }}>
+      <button
+        type="button"
+        id={headerId}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          background: 'var(--cl-card)',
+          border: '1px solid var(--cl-border)',
+          borderRadius: 12,
+          padding: '16px 18px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+          fontFamily: 'inherit',
+          color: 'var(--cl-text)',
+          transition: 'border-color var(--cl-duration-fast) var(--cl-ease-standard)',
+        }}
+        onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--cl-accent)'; }}
+        onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--cl-border)'; }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {eyebrow && (
+            <div
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--cl-accent)',
+                marginBottom: 4,
+              }}
+            >
+              {eyebrow}
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <h2
+              style={{
+                fontSize: '1.15rem',
+                fontWeight: 700,
+                margin: 0,
+                color: 'var(--cl-text)',
+                fontFamily: 'var(--cl-font-display)',
+              }}
+            >
+              {title}
+            </h2>
+            {typeof count === 'number' && (
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  background: 'var(--cl-bg-soft)',
+                  color: 'var(--cl-text-light)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {count}
+              </span>
+            )}
+          </div>
+          {subtitle && (
+            <p
+              style={{
+                fontSize: '0.85rem',
+                lineHeight: 1.5,
+                color: 'var(--cl-text-light)',
+                margin: 0,
+                marginTop: 6,
+              }}
+            >
+              {subtitle}
+            </p>
+          )}
+        </div>
+        {/* Chevron — rotates from "▶" (closed) to "▼" (open). 90deg
+            CSS rotation keeps the icon a single character without
+            having to swap SVGs. */}
+        <span
+          aria-hidden
+          style={{
+            flexShrink: 0,
+            width: 24,
+            height: 24,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--cl-text-light)',
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.18s var(--cl-ease-standard)',
+            marginTop: 2,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <div
+          id={panelId}
+          role="region"
+          aria-labelledby={headerId}
+          style={{ marginTop: 12 }}
+        >
+          {children}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -319,7 +477,7 @@ function HeroBlock() {
         }}
       >
         Every civic app stops at &ldquo;here&apos;s your rep.&rdquo; <br />
-        We&rsquo;re making politicians actually answerable.
+        We&rsquo;re making politicians actually accessible.
       </h1>
       <p
         style={{
@@ -396,54 +554,6 @@ function FundButton({ primary = false, inline = false }) {
     >
       {label}
     </a>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Section title with optional eyebrow + subtitle.
-// ─────────────────────────────────────────────────────────────────────
-function SectionTitle({ eyebrow, title, subtitle }) {
-  return (
-    <div style={{ marginTop: 32, marginBottom: 14 }}>
-      {eyebrow && (
-        <div
-          style={{
-            fontSize: '0.72rem',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            color: 'var(--cl-accent)',
-            marginBottom: 6,
-          }}
-        >
-          {eyebrow}
-        </div>
-      )}
-      <h2
-        style={{
-          fontSize: '1.3rem',
-          fontWeight: 700,
-          margin: 0,
-          color: 'var(--cl-text)',
-          fontFamily: 'var(--cl-font-display)',
-        }}
-      >
-        {title}
-      </h2>
-      {subtitle && (
-        <p
-          style={{
-            fontSize: '0.88rem',
-            lineHeight: 1.5,
-            color: 'var(--cl-text-light)',
-            margin: 0,
-            marginTop: 6,
-          }}
-        >
-          {subtitle}
-        </p>
-      )}
-    </div>
   );
 }
 
