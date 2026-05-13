@@ -530,7 +530,7 @@ export default function PageView({
                 </strong>{' '}
                 (or working with their office)? Email{' '}
                 <a
-                  href={`mailto:civicview@gmail.com?subject=Claim%20${encodeURIComponent(
+                  href={`mailto:civicview@civicview.app?subject=Claim%20${encodeURIComponent(
                     ownerName,
                   )}'s%20CivicView%20page`}
                   style={{
@@ -539,7 +539,7 @@ export default function PageView({
                     textDecoration: 'none',
                   }}
                 >
-                  civicview@gmail.com
+                  civicview@civicview.app
                 </a>{' '}
                 to claim this page until automated verified-rep
                 sign-in ships.

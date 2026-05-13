@@ -13,8 +13,8 @@ import { ModalShell, Button } from './ui';
  *
  * Current state (pre-ID.me): there are no rep accounts to sign into.
  * The modal renders a contact-us panel pointing real reps at the
- * civicview@gmail.com mailbox; we onboard them manually until the
- * verified rep flow ships. The legacy credentials form is kept in
+ * civicview@civicview.app mailbox; we onboard them manually until
+ * the verified rep flow ships. The legacy credentials form is kept in
  * the file (gated by REP_LOGIN_LIVE) so it can be re-enabled in one
  * flag flip when verified rep auth lands.
  *
@@ -38,7 +38,7 @@ import { ModalShell, Button } from './ui';
 const REP_LOGIN_LIVE = false;
 // Mailbox surfaced in the placeholder panel + the unclaimed-page
 // banner. Update this in one place to propagate.
-const REP_CONTACT_EMAIL = 'civicview@gmail.com';
+const REP_CONTACT_EMAIL = 'civicview@civicview.app';
 // Inert placeholders for the legacy demo-accounts UI inside the
 // REP_LOGIN_LIVE branch. The seed list and shared password were
 // retired when we removed demo rep accounts (see DEPLOY.md fresh-
