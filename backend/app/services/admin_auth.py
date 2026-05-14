@@ -69,42 +69,57 @@ def get_current_admin(
 
     Defense-in-depth: citizens must be verified=True to wield admin
     powers. Reps don't have a verified flag — they're vetted at
-    onboarding, so a matching email is sufficient. The check guards
-    against a future feature that lets unverified demo users pick
-    their own email (today demo emails are auto-generated, so this
-    can't happen, but it costs nothing to enforce now).
+    onboarding, so a matching email is sufficient.
 
-    The mutually-exclusive-sessions contract means at most one of
-    me_rep / me_citizen is populated per request. We check whichever
-    is present.
+    Why we check BOTH sessions independently rather than "rep first,
+    else citizen": the client-side mutually-exclusive-session
+    teardown can fail silently (network blip during loginCitizenApi
+    when it tries to clear the rep cookie, etc.). When that happens,
+    the user thinks they're signed in only as a citizen but a stale
+    rep cookie is still riding along. Falling back to "rep wins" in
+    that case denies admin to a verified citizen-admin just because
+    they have a leftover rep cookie — confusing failure mode. So we
+    accept whichever side actually matches ADMIN_EMAILS.
+
+    If BOTH emails are admin (unusual but legitimate — operator who
+    set up both a rep and a citizen account with admin-listed emails)
+    we prefer the verified citizen for the audit log identity.
     """
-    actor_email: Optional[str] = None
-    kind: Optional[str] = None
-    actor_id: Optional[int] = None
+    candidates = []  # list of (kind, id, email, verified-or-None)
     if me_rep is not None:
-        actor_email = me_rep.email
-        kind = "rep"
-        actor_id = me_rep.id
-    elif me_citizen is not None:
-        actor_email = me_citizen.email
-        kind = "citizen"
-        actor_id = me_citizen.id
+        candidates.append(("rep", me_rep.id, me_rep.email, None))
+    if me_citizen is not None:
+        candidates.append(("citizen", me_citizen.id, me_citizen.email, me_citizen.verified))
 
-    if actor_email is None:
+    if not candidates:
         # Not signed in at all — 401, distinct from 403 below.
         raise HTTPException(status_code=401, detail="Sign in to access admin.")
 
-    if not is_admin_email(actor_email):
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required.",
-        )
+    # Find a candidate whose email is in ADMIN_EMAILS AND (for citizens)
+    # is verified. Prefer citizens over reps on tie because verified
+    # citizens are the documented operator-admin path and audit logs
+    # read more cleanly that way.
+    matched: list[tuple] = []
+    rejected_unverified = False
+    for cand in candidates:
+        kind, _id, email, verified = cand
+        if not is_admin_email(email):
+            continue
+        if kind == "citizen" and not verified:
+            rejected_unverified = True
+            continue
+        matched.append(cand)
 
-    # Citizen path: require verified=True. Returning 403 with a
-    # specific message helps the operator realize "right email, wrong
-    # account state" — most likely cause is they signed in as a demo
-    # citizen instead of the seeded verified-admin citizen.
-    if kind == "citizen" and me_citizen is not None and not me_citizen.verified:
+    if matched:
+        # Prefer citizen if any matched (sort puts 'citizen' before 'rep').
+        matched.sort(key=lambda c: 0 if c[0] == "citizen" else 1)
+        kind, actor_id, actor_email, _ = matched[0]
+        return {"kind": kind, "id": actor_id, "email": actor_email}
+
+    # No match. Differentiate the failure mode so the operator can
+    # debug — "your email isn't on the list" vs. "your email IS on
+    # the list but the account isn't verified."
+    if rejected_unverified:
         raise HTTPException(
             status_code=403,
             detail=(
@@ -113,9 +128,4 @@ def get_current_admin(
                 "DEMO_CITIZEN_ACCOUNTS_JSON with \"verified\": true)."
             ),
         )
-
-    return {
-        "kind": kind,
-        "id": actor_id,
-        "email": actor_email,
-    }
+    raise HTTPException(status_code=403, detail="Admin access required.")
