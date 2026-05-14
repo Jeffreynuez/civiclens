@@ -67,6 +67,13 @@ def get_current_admin(
     success; raises 403 otherwise — 401 would be misleading because
     the user IS authenticated, just not authorized.
 
+    Defense-in-depth: citizens must be verified=True to wield admin
+    powers. Reps don't have a verified flag — they're vetted at
+    onboarding, so a matching email is sufficient. The check guards
+    against a future feature that lets unverified demo users pick
+    their own email (today demo emails are auto-generated, so this
+    can't happen, but it costs nothing to enforce now).
+
     The mutually-exclusive-sessions contract means at most one of
     me_rep / me_citizen is populated per request. We check whichever
     is present.
@@ -91,6 +98,20 @@ def get_current_admin(
         raise HTTPException(
             status_code=403,
             detail="Admin access required.",
+        )
+
+    # Citizen path: require verified=True. Returning 403 with a
+    # specific message helps the operator realize "right email, wrong
+    # account state" — most likely cause is they signed in as a demo
+    # citizen instead of the seeded verified-admin citizen.
+    if kind == "citizen" and me_citizen is not None and not me_citizen.verified:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Admin email matched but the citizen account isn't verified. "
+                "Sign in as a verified account (or seed one via "
+                "DEMO_CITIZEN_ACCOUNTS_JSON with \"verified\": true)."
+            ),
         )
 
     return {

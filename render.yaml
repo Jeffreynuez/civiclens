@@ -68,9 +68,19 @@ services:
         sync: false
       # Comma-separated list of email addresses with admin powers
       # (access to /api/admin/* + the /admin page). Any rep or
-      # citizen account whose email matches gets in. Leaving this
-      # unset means NOBODY is admin — every admin endpoint 403s.
+      # citizen account whose email matches gets in. Citizen admins
+      # also need verified=True on their account — see
+      # DEMO_CITIZEN_ACCOUNTS_JSON below for the seed path. Leaving
+      # ADMIN_EMAILS unset means NOBODY is admin — every admin
+      # endpoint 403s.
       - key: ADMIN_EMAILS
+        sync: false
+      # JSON blob seeding citizen accounts at boot. Same shape as
+      # backend/demo_citizen_accounts.json. Use this to seed your own
+      # admin login without waiting for ID.me — set "verified": true
+      # on the entry to mark it non-demo, then add the same email to
+      # ADMIN_EMAILS. Idempotent on email.
+      - key: DEMO_CITIZEN_ACCOUNTS_JSON
         sync: false
       - key: PYTHONUNBUFFERED
         value: "1"            # flush logs immediately so Render shows them in real time
