@@ -342,12 +342,23 @@ export default function AdminPage() {
                                 `Suspend ${r.target_author_name}? They'll be signed out and unable to sign back in until you unsuspend them.`
                               );
                               if (!ok) return;
+                              // Ask for a suspension reason. Defaults
+                              // to the report's reason so the admin
+                              // can press Enter to accept, OR type
+                              // their own. Cancel → abort the
+                              // entire suspension (admin changed
+                              // their mind after the first confirm).
+                              const reason = window.prompt(
+                                `Reason for suspending ${r.target_author_name}? (Press Enter to accept the default.)`,
+                                r.reason || '',
+                              );
+                              if (reason === null) return;
                               const cascade = window.confirm(
                                 `ALSO hide every post / comment / poll ${r.target_author_name} has visible right now?\n\nClick OK to suspend AND hide all their content. Click Cancel to just suspend the account; their existing content stays visible.`
                               );
                               runAction(key, () => adminSuspendUser(
                                 r.target_author_kind, r.target_author_id,
-                                { reason: r.reason, cascadeHide: cascade },
+                                { reason: (reason || '').trim() || null, cascadeHide: cascade },
                               ));
                             }}
                             busy={isBusy}
