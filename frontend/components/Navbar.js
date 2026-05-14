@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchAllMembers, fetchAllCandidates } from '@/lib/api';
 import { adminWhoami, adminUnreadCount } from '@/lib/pagesApi';
+import { useAuth } from '@/lib/auth';
 import { useTrackedBills } from '@/lib/trackedBills';
 import { useTrackedOfficials } from '@/lib/trackedOfficials';
 import { useTrackedElections } from '@/lib/trackedElections';
@@ -137,14 +138,27 @@ export default function Navbar({
   // badge if count > 0. Non-admin users never see the pill and never
   // hit unread-count (so we don't generate 401 noise on every poll).
   //
-  // The probe is intentionally fire-and-forget on failure — admins
-  // who happen to be offline / unauthed / mid-session-rotation just
-  // see no admin pill, same as a non-admin. Refreshes when the
-  // `citizen` prop changes (login + logout in the citizen flow)
-  // because admin status can change with role.
+  // The probe re-runs whenever EITHER auth state changes (citizen OR
+  // rep). The earlier version only depended on `citizen`, which meant
+  // signing out as a citizen while a stale rep cookie was still valid
+  // left the admin pill showing — the probe would fire, find the
+  // valid rep session on the backend, and stay green. Now we also
+  // depend on rep auth so any sign-in/out on either side re-checks.
+  //
+  // Belt-and-suspenders: we ALSO clamp isAdmin to false whenever
+  // BOTH client-side auth stores report "signed out" — so even if
+  // the backend has a leftover cookie we couldn't clear (network
+  // blip during the mutually-exclusive logout cleanup), the UI
+  // honors the user's intent of "I clicked sign out."
+  const { me: repAuth } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [unreadReports, setUnreadReports] = useState(0);
+  const clientSignedOut = !citizen && !repAuth;
   useEffect(() => {
+    if (clientSignedOut) {
+      setIsAdmin(false);
+      return undefined;
+    }
     let cancelled = false;
     (async () => {
       const { status } = await adminWhoami();
@@ -152,7 +166,7 @@ export default function Navbar({
       setIsAdmin(status === 200);
     })();
     return () => { cancelled = true; };
-  }, [citizen]);
+  }, [citizen, repAuth, clientSignedOut]);
   useEffect(() => {
     if (!isAdmin) {
       setUnreadReports(0);
@@ -740,32 +754,10 @@ export default function Navbar({
                 Help build this
               </button>
             )}
-            {/* Feedback — outlined treatment so it visually de-emphasizes
-                vs the primary Help-build-this CTA. Hidden when no
-                handler is wired, and on compact viewports (same
-                rationale as Help-build above). */}
-            {onOpenFeedback && !isCompact && (
-              <button
-                onClick={() => onOpenFeedback?.()}
-                title="Send feedback, report a bug, or request a feature"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '6px 12px',
-                  background: 'rgba(255,255,255,0.1)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  borderRadius: '8px', cursor: 'pointer',
-                  fontSize: '0.82rem', fontWeight: 600,
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.18)')}
-                onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                Feedback
-              </button>
-            )}
+            {/* Feedback moved to the hamburger popover at every
+                viewport (per user request). Same with Committees and
+                Admin below — see the popover content for where they
+                live now. */}
             <button
               onClick={() => onSubscribe?.()}
               title="Get notified when verified citizen accounts open up"
@@ -784,25 +776,7 @@ export default function Navbar({
               </svg>
               Subscribe
             </button>
-            {!compact && (
-            <button
-              onClick={() => onOpenCommittees?.()}
-              title="Browse Committees"
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '6px 12px', background: 'rgba(255,255,255,0.1)',
-                color: 'white', border: '1px solid rgba(255,255,255,0.25)',
-                borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600,
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.18)')}
-              onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h1M9 13h1M9 17h1M14 9h1M14 13h1M14 17h1" />
-              </svg>
-              Committees
-            </button>
-            )}
+            {/* Committees moved to the hamburger popover. */}
             <button
               onClick={() => onOpenTracked?.()}
               title="My tracked subjects"
@@ -833,46 +807,10 @@ export default function Navbar({
                 </span>
               )}
             </button>
-            {/* Admin pill — only renders when /api/admin/whoami
-                returned 200 on mount. Shows the unread-reports count
-                badge when > 0 so the operator knows there's queue
-                pressure without having to open /admin first.
-                Hidden entirely for non-admins (no flash + no extra
-                401 noise in logs). */}
-            {isAdmin && (
-              <a
-                href="/admin"
-                title={unreadReports > 0 ? `${unreadReports} open report(s)` : 'Moderation queue'}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '6px 12px',
-                  background: unreadReports > 0 ? '#d63031' : 'rgba(255,255,255,0.1)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  borderRadius: '8px', cursor: 'pointer',
-                  fontSize: '0.82rem', fontWeight: 600,
-                  textDecoration: 'none',
-                  position: 'relative',
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-                Admin
-                {unreadReports > 0 && (
-                  <span
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      minWidth: '18px', height: '18px', padding: '0 5px',
-                      background: 'white', color: '#d63031',
-                      borderRadius: '9px', fontSize: '0.7rem', fontWeight: 800,
-                    }}
-                  >
-                    {unreadReports}
-                  </span>
-                )}
-              </a>
-            )}
+            {/* Admin moved to the hamburger popover. The unread-
+                reports count surfaces as a red dot on the hamburger
+                button itself so the operator still gets the at-a-
+                glance signal without opening the menu. */}
           </>
         )}
 
@@ -880,11 +818,15 @@ export default function Navbar({
             own dropdown handles its mobile layout. */}
         <NotificationBellMenu />
 
-        {/* Mobile-only hamburger menu — opens a popover with the
-            secondary actions that don't fit inline at phone widths.
-            Wears a yellow dot when something inside the menu has a
-            count (My Tracked) so the user knows it's not empty. */}
-        {isCompact && (
+        {/* Hamburger menu — always visible. On desktop it holds the
+            three secondary actions the user wanted collapsed
+            (Committees, Feedback, Admin). On compact viewports it
+            holds the full secondary cluster including items that
+            were inline on desktop. The popover gates each entry on
+            isCompact so the right set renders per viewport.
+            Wears a yellow dot if there's something inside that has
+            a count (tracked items, or open admin reports). */}
+        {(
           <div ref={mobileMenuRef} style={{ position: 'relative' }}>
             <button
               type="button"
@@ -907,7 +849,22 @@ export default function Navbar({
                 <line x1="3" y1="12" x2="21" y2="12" />
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
-              {trackedCount > 0 && (
+              {/* Admin open-reports dot takes priority over tracked
+                  dot because moderation queue is more time-sensitive
+                  than a personal tracked-list signal. Falls through
+                  to the yellow tracked dot otherwise. */}
+              {isAdmin && unreadReports > 0 ? (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    top: 4, right: 4,
+                    width: 8, height: 8,
+                    background: '#d63031',
+                    borderRadius: 999,
+                  }}
+                />
+              ) : trackedCount > 0 ? (
                 <span
                   aria-hidden="true"
                   style={{
@@ -918,7 +875,7 @@ export default function Navbar({
                     borderRadius: 999,
                   }}
                 />
-              )}
+              ) : null}
             </button>
             {mobileMenuOpen && (
               <div
@@ -936,7 +893,10 @@ export default function Navbar({
                   zIndex: 70,
                 }}
               >
-                {onOpenHelpBuild && (
+                {/* Help build this — already inline on desktop, so
+                    only surface in the hamburger on compact viewports
+                    where it isn't inline. */}
+                {onOpenHelpBuild && isCompact && (
                   <MobileMenuItem
                     icon={
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
@@ -948,6 +908,8 @@ export default function Navbar({
                     onClick={() => { setMobileMenuOpen(false); onOpenHelpBuild?.(); }}
                   />
                 )}
+                {/* Feedback — in the hamburger at every viewport per
+                    user request. */}
                 {onOpenFeedback && (
                   <MobileMenuItem
                     icon={
@@ -959,17 +921,22 @@ export default function Navbar({
                     onClick={() => { setMobileMenuOpen(false); onOpenFeedback?.(); }}
                   />
                 )}
-                <MobileMenuItem
-                  icon={
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                      <path d="M4 4h16v16l-4-3-4 3-4-3-4 3z" />
-                      <path d="M8 10h8M8 14h5" />
-                    </svg>
-                  }
-                  label="Subscribe"
-                  accent="#ffba08"
-                  onClick={() => { setMobileMenuOpen(false); onSubscribe?.(); }}
-                />
+                {/* Subscribe — inline on desktop, so only show in
+                    hamburger on compact. */}
+                {isCompact && (
+                  <MobileMenuItem
+                    icon={
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                        <path d="M4 4h16v16l-4-3-4 3-4-3-4 3z" />
+                        <path d="M8 10h8M8 14h5" />
+                      </svg>
+                    }
+                    label="Subscribe"
+                    accent="#ffba08"
+                    onClick={() => { setMobileMenuOpen(false); onSubscribe?.(); }}
+                  />
+                )}
+                {/* Committees — in the hamburger at every viewport. */}
                 {!compact && (
                   <MobileMenuItem
                     icon={
@@ -981,16 +948,24 @@ export default function Navbar({
                     onClick={() => { setMobileMenuOpen(false); onOpenCommittees?.(); }}
                   />
                 )}
-                <MobileMenuItem
-                  icon={
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                    </svg>
-                  }
-                  label="My Tracked"
-                  badge={trackedCount > 0 ? trackedCount : null}
-                  onClick={() => { setMobileMenuOpen(false); onOpenTracked?.(); }}
-                />
+                {/* My Tracked — inline on desktop, so only show in
+                    hamburger on compact. */}
+                {isCompact && (
+                  <MobileMenuItem
+                    icon={
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                      </svg>
+                    }
+                    label="My Tracked"
+                    badge={trackedCount > 0 ? trackedCount : null}
+                    onClick={() => { setMobileMenuOpen(false); onOpenTracked?.(); }}
+                  />
+                )}
+                {/* Admin — in the hamburger at every viewport per
+                    user request. Badge surfaces the open-reports
+                    count so the user doesn't have to open the menu
+                    to see urgency. */}
                 {isAdmin && (
                   <MobileMenuItem
                     icon={
@@ -1006,7 +981,9 @@ export default function Navbar({
                     }}
                   />
                 )}
-                {citizen && (
+                {/* Sign out — inline on desktop next to the citizen
+                    pill, so only show in hamburger on compact. */}
+                {citizen && isCompact && (
                   <>
                     <div style={{ height: 1, background: 'var(--cl-border)', margin: '4px 6px' }} />
                     <MobileMenuItem
