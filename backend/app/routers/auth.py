@@ -70,6 +70,20 @@ def login(
             detail="Invalid email or password",
         )
 
+    # Suspended accounts: distinct from "invalid creds" because the
+    # creds ARE valid. Returning the suspension state to the user is
+    # the expected pattern (vs. silently failing as 401) — they know
+    # something happened and can appeal. The 403 status differentiates
+    # from generic auth failure.
+    if rep.suspended_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "This account has been suspended. "
+                "Contact civicview@civicview.app if you think this is in error."
+            ),
+        )
+
     set_session_cookie(response, rep.id)
     rep.last_login_at = datetime.utcnow()
     db.commit()

@@ -127,6 +127,10 @@ def get_optional_citizen(
     citizen = db.get(CitizenAccount, cid)
     if citizen is None or not citizen.is_active:
         return None
+    # Suspended accounts are treated as not-signed-in. Admins can
+    # restore via /api/admin/users/citizen/{id}/unsuspend.
+    if citizen.suspended_at is not None:
+        return None
     return citizen
 
 

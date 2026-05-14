@@ -30,7 +30,7 @@ from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -92,6 +92,17 @@ class ReportRow(BaseModel):
     reporter_kind: Literal["citizen", "rep"]
     created_at: datetime
     acted_at: Optional[datetime] = None
+    # Deep-link affordance: where on the public site does this target
+    # live? Frontend opens this in a new tab from the admin queue so
+    # the admin can read full thread context before acting. NULL when
+    # we couldn't resolve a hosting page (e.g. content references an
+    # official_id we don't have data for — shouldn't happen, but be
+    # defensive). `target_author_*` lets the suspend-author action
+    # find the right account row to suspend.
+    context_official_id: Optional[str] = None
+    target_author_kind: Optional[Literal["citizen", "rep"]] = None
+    target_author_id: Optional[int] = None
+    target_author_name: Optional[str] = None
 
 
 class ReportListResponse(BaseModel):
@@ -122,6 +133,92 @@ def _reporter_label(
     return ("(anonymous)", "citizen")  # shouldn't happen — endpoints require auth
 
 
+def _resolve_target_context(db: Session, kind: str, target: Any) -> dict:
+    """For a given report target (Post / PostComment / Poll / PollComment),
+    return:
+      - context_official_id : the rep page this content lives on
+      - target_author_kind  : 'citizen' | 'rep' | None
+      - target_author_id    : the author account id, for the suspend action
+      - target_author_name  : display name of the author
+
+    The official_id resolution walks the FK chain:
+      Post           → Post.official_id
+      PostComment    → PostComment.post_id → Post.official_id
+      Poll (rep)     → Poll.post_id → Post.official_id
+      Poll (citizen) → Poll.target_official_id
+      PollComment    → poll → (rep or citizen branch above)
+
+    Returns {} keyed dict-style; caller spreads onto ReportRow. Missing
+    fields stay None which the schema allows.
+    """
+    out: dict = {
+        "context_official_id": None,
+        "target_author_kind": None,
+        "target_author_id": None,
+        "target_author_name": None,
+    }
+    if target is None:
+        return out
+
+    if kind == "post":
+        out["context_official_id"] = target.official_id
+        # The post author is a rep — look up via author_id.
+        author = db.get(RepAccount, target.author_id) if target.author_id else None
+        if author is not None:
+            out["target_author_kind"] = "rep"
+            out["target_author_id"] = author.id
+            out["target_author_name"] = author.display_name
+
+    elif kind == "post_comment":
+        post = db.get(Post, target.post_id) if target.post_id else None
+        if post is not None:
+            out["context_official_id"] = post.official_id
+        # Comment authors are citizens.
+        author = db.get(CitizenAccount, target.citizen_id) if target.citizen_id else None
+        if author is not None:
+            out["target_author_kind"] = "citizen"
+            out["target_author_id"] = author.id
+            out["target_author_name"] = author.display_name
+
+    elif kind == "poll":
+        # Two flavors of poll: rep-authored (attached to a Post) or
+        # citizen-authored (target_official_id points at the page).
+        if target.author_kind == "citizen":
+            out["context_official_id"] = target.target_official_id
+            author = (
+                db.get(CitizenAccount, target.author_citizen_id)
+                if target.author_citizen_id else None
+            )
+            if author is not None:
+                out["target_author_kind"] = "citizen"
+                out["target_author_id"] = author.id
+                out["target_author_name"] = author.display_name
+        else:
+            post = db.get(Post, target.post_id) if target.post_id else None
+            if post is not None:
+                out["context_official_id"] = post.official_id
+                author = db.get(RepAccount, post.author_id) if post.author_id else None
+                if author is not None:
+                    out["target_author_kind"] = "rep"
+                    out["target_author_id"] = author.id
+                    out["target_author_name"] = author.display_name
+
+    elif kind == "poll_comment":
+        poll = db.get(Poll, target.poll_id) if target.poll_id else None
+        if poll is not None:
+            # Recurse on the parent poll to get its official_id (but
+            # author is the COMMENT author, not the poll author).
+            poll_ctx = _resolve_target_context(db, "poll", poll)
+            out["context_official_id"] = poll_ctx["context_official_id"]
+        author = db.get(CitizenAccount, target.citizen_id) if target.citizen_id else None
+        if author is not None:
+            out["target_author_kind"] = "citizen"
+            out["target_author_id"] = author.id
+            out["target_author_name"] = author.display_name
+
+    return out
+
+
 @router.get("/reports", response_model=ReportListResponse)
 def list_reports(
     include_acted: bool = False,
@@ -148,6 +245,7 @@ def list_reports(
         name, kind = _reporter_label(
             db, citizen_id=r.reporter_citizen_id, rep_id=r.reporter_rep_id,
         )
+        ctx = _resolve_target_context(db, "post", target)
         out.append(ReportRow(
             id=r.id, kind="post", target_id=r.post_id,
             target_preview=_snippet(target.body if target else None),
@@ -155,6 +253,7 @@ def list_reports(
             reason=r.reason, detail=r.detail,
             reporter_name=name, reporter_kind=kind,
             created_at=r.created_at, acted_at=r.acted_at,
+            **ctx,
         ))
 
     # ── PostComment reports ──────────────────────────────────────
@@ -166,6 +265,7 @@ def list_reports(
         name, kind = _reporter_label(
             db, citizen_id=r.reporter_citizen_id, rep_id=r.reporter_rep_id,
         )
+        ctx = _resolve_target_context(db, "post_comment", target)
         out.append(ReportRow(
             id=r.id, kind="post_comment", target_id=r.comment_id,
             target_preview=_snippet(target.body if target else None),
@@ -173,6 +273,7 @@ def list_reports(
             reason=r.reason, detail=r.detail,
             reporter_name=name, reporter_kind=kind,
             created_at=r.created_at, acted_at=r.acted_at,
+            **ctx,
         ))
 
     # ── Poll reports ─────────────────────────────────────────────
@@ -184,6 +285,7 @@ def list_reports(
         name, kind = _reporter_label(
             db, citizen_id=r.reporter_citizen_id, rep_id=r.reporter_rep_id,
         )
+        ctx = _resolve_target_context(db, "poll", target)
         out.append(ReportRow(
             id=r.id, kind="poll", target_id=r.poll_id,
             target_preview=_snippet(target.question if target else None),
@@ -191,6 +293,7 @@ def list_reports(
             reason=r.reason, detail=r.detail,
             reporter_name=name, reporter_kind=kind,
             created_at=r.created_at, acted_at=r.acted_at,
+            **ctx,
         ))
 
     # ── PollComment reports ──────────────────────────────────────
@@ -202,6 +305,7 @@ def list_reports(
         name, kind = _reporter_label(
             db, citizen_id=r.reporter_citizen_id, rep_id=r.reporter_rep_id,
         )
+        ctx = _resolve_target_context(db, "poll_comment", target)
         out.append(ReportRow(
             id=r.id, kind="poll_comment", target_id=r.poll_comment_id,
             target_preview=_snippet(target.body if target else None),
@@ -209,6 +313,7 @@ def list_reports(
             reason=r.reason, detail=r.detail,
             reporter_name=name, reporter_kind=kind,
             created_at=r.created_at, acted_at=r.acted_at,
+            **ctx,
         ))
 
     # Newest first across all types, then cap.
@@ -385,3 +490,134 @@ def unhide_target(
         actor["email"], kind, target_id, newly_unhidden,
     )
     return ActionResult(ok=True, target_hidden=False)
+
+
+# ── User suspend / unsuspend ────────────────────────────────────────
+# `kind` is 'rep' | 'citizen'. Suspending sets suspended_at + optional
+# reason; the auth dependencies pick that up immediately and treat
+# the account as not-signed-in on subsequent requests. The login
+# endpoints also check the column so re-auth attempts get a clear
+# 403 + contact-us message rather than silent failure.
+#
+# Operators with admin access in ADMIN_EMAILS can NEVER suspend
+# themselves (defensive — would lock the operator out of /admin if
+# they fat-finger the wrong user id).
+
+UserKind = Literal["rep", "citizen"]
+
+
+class UserSuspendPayload(BaseModel):
+    reason: Optional[str] = None
+
+
+class UserActionResult(BaseModel):
+    ok: bool = True
+    suspended: bool
+
+
+def _load_user_account_or_404(db: Session, kind: str, user_id: int):
+    if kind == "rep":
+        acc = db.get(RepAccount, user_id)
+    elif kind == "citizen":
+        acc = db.get(CitizenAccount, user_id)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown user kind: {kind!r}")
+    if acc is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return acc
+
+
+@router.post(
+    "/users/{kind}/{user_id}/suspend",
+    response_model=UserActionResult,
+)
+def suspend_user(
+    kind: UserKind,
+    user_id: int,
+    payload: UserSuspendPayload,
+    db: Session = Depends(get_db),
+    actor: dict = Depends(get_current_admin),
+) -> UserActionResult:
+    """Suspend a rep or citizen account. Sets suspended_at to now and
+    records a short reason. Idempotent — re-suspending an already-
+    suspended account just updates the reason (no audit log of
+    multiple suspensions today; if abuse history becomes relevant
+    a separate `user_suspensions` table is the right shape)."""
+    acc = _load_user_account_or_404(db, kind, user_id)
+    # Self-suspension guard.
+    if kind == actor["kind"] and actor["id"] == user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Can't suspend your own account — that would lock you out of /admin.",
+        )
+    # Don't suspend other admins through this endpoint either — they
+    # have to be removed from ADMIN_EMAILS first. Otherwise admin A
+    # could lock out admin B and there's no in-band recovery.
+    from app.services.admin_auth import is_admin_email
+    if is_admin_email(getattr(acc, "email", None)):
+        raise HTTPException(
+            status_code=400,
+            detail="Can't suspend a fellow admin. Remove them from ADMIN_EMAILS first.",
+        )
+
+    if acc.suspended_at is None:
+        acc.suspended_at = datetime.utcnow()
+    if payload.reason:
+        acc.suspended_reason = payload.reason.strip()[:255]
+    db.commit()
+    logger.warning(
+        "Admin %s suspended %s user_id=%d (reason=%r).",
+        actor["email"], kind, user_id, acc.suspended_reason,
+    )
+    return UserActionResult(ok=True, suspended=True)
+
+
+@router.post(
+    "/users/{kind}/{user_id}/unsuspend",
+    response_model=UserActionResult,
+)
+def unsuspend_user(
+    kind: UserKind,
+    user_id: int,
+    db: Session = Depends(get_db),
+    actor: dict = Depends(get_current_admin),
+) -> UserActionResult:
+    """Lift a suspension. Clears suspended_at + suspended_reason. Does
+    NOT restore any content the user had hidden — that's a separate
+    explicit unhide per piece."""
+    acc = _load_user_account_or_404(db, kind, user_id)
+    if acc.suspended_at is None:
+        return UserActionResult(ok=True, suspended=False)
+    acc.suspended_at = None
+    acc.suspended_reason = None
+    db.commit()
+    logger.warning(
+        "Admin %s un-suspended %s user_id=%d.",
+        actor["email"], kind, user_id,
+    )
+    return UserActionResult(ok=True, suspended=False)
+
+
+# ── Unread-count endpoint for the navbar badge ──────────────────────
+class UnreadCountResponse(BaseModel):
+    count: int
+
+
+@router.get("/reports/unread-count", response_model=UnreadCountResponse)
+def unread_report_count(
+    db: Session = Depends(get_db),
+    _actor: dict = Depends(get_current_admin),
+) -> UnreadCountResponse:
+    """Count of open (acted_at IS NULL) reports across all four
+    target types. Polled by the admin navbar badge so admins know
+    there's something in the queue without visiting /admin first.
+
+    Cheap query — four COUNTs with a WHERE on an indexed column
+    (acted_at). Polling every 30s from a single admin session is
+    fine; if we ever have multiple admins hammering this together,
+    layer Redis or in-memory caching on top.
+    """
+    n = 0
+    for cls in (PostReport, CommentReport, PollReport, PollCommentReport):
+        n += db.query(func.count(cls.id)).filter(cls.acted_at.is_(None)).scalar() or 0
+    return UnreadCountResponse(count=int(n))
