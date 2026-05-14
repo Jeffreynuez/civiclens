@@ -458,12 +458,19 @@ def hide_target(
             db.commit()
         return ActionResult(ok=True, target_hidden=True)
     newly_hidden = _hide_target(target, kind)
-    if report.acted_at is None:
-        report.acted_at = datetime.utcnow()
+    # Resolve EVERY open report against this same target, not just
+    # the one that triggered the hide. If 3 different users reported
+    # the same comment, hiding it answers all 3 — the queue
+    # shouldn't keep showing the remaining 2 as open.
+    resolved_n = _resolve_reports_against_target(
+        db, kind=kind, target_id=getattr(target, "id", -1),
+    )
     db.commit()
     logger.warning(
-        "Admin %s hid %s target_id=%d (via report id=%d, newly_hidden=%s).",
-        actor["email"], kind, getattr(target, "id", -1), report_id, newly_hidden,
+        "Admin %s hid %s target_id=%d (via report id=%d, newly_hidden=%s, "
+        "resolved %d open report(s) against the target).",
+        actor["email"], kind, getattr(target, "id", -1), report_id,
+        newly_hidden, resolved_n,
     )
     return ActionResult(ok=True, target_hidden=True)
 
@@ -523,6 +530,11 @@ class UserActionResult(BaseModel):
     # Useful for the UI to show "Suspended + hid N posts and M
     # comments" after the action.
     hidden_counts: dict = {}
+    # Reports against this user's content that got auto-resolved by
+    # the suspend action. Keyed by report kind. Sum lets the UI flash
+    # "...and closed 3 open reports against them" in a confirmation
+    # toast / inline message.
+    resolved_reports: dict = {}
 
 
 def _load_user_account_or_404(db: Session, kind: str, user_id: int):
@@ -535,6 +547,118 @@ def _load_user_account_or_404(db: Session, kind: str, user_id: int):
     if acc is None:
         raise HTTPException(status_code=404, detail="User not found")
     return acc
+
+
+def _resolve_reports_against_user(
+    db: Session, *, user_kind: str, user_id: int,
+) -> dict:
+    """When the admin acts against a user (suspend), every open report
+    targeting content authored by that user is implicitly resolved —
+    the admin's action IS the moderation outcome. Without this the
+    queue stays cluttered with reports for hidden content authored
+    by suspended users, which is the bug the user just hit.
+
+    Each branch matches the report's target FK back to the user via
+    the authoring chain:
+      Post / RepEvent     → author_id (rep_accounts.id)
+      PostComment         → citizen_id (citizen_accounts.id)
+      Poll (rep flavor)   → post.author_id (rep)
+      Poll (citizen)      → author_citizen_id
+      PollComment         → citizen_id
+
+    Returns counts per type, useful for the response body so the UI
+    can flash "Suspended Sweeny Tod and resolved 3 open reports."
+    """
+    now = datetime.utcnow()
+    counts = {"post": 0, "post_comment": 0, "poll": 0, "poll_comment": 0}
+
+    if user_kind == "rep":
+        # PostReports against this rep's posts.
+        for r in (
+            db.query(PostReport)
+            .join(Post, Post.id == PostReport.post_id)
+            .filter(Post.author_id == user_id, PostReport.acted_at.is_(None))
+            .all()
+        ):
+            r.acted_at = now
+            counts["post"] += 1
+        # PollReports against this rep's rep-authored polls (via the
+        # attached post).
+        for r in (
+            db.query(PollReport)
+            .join(Poll, Poll.id == PollReport.poll_id)
+            .join(Post, Post.id == Poll.post_id)
+            .filter(
+                Poll.author_kind == "rep",
+                Post.author_id == user_id,
+                PollReport.acted_at.is_(None),
+            )
+            .all()
+        ):
+            r.acted_at = now
+            counts["poll"] += 1
+        return counts
+
+    # Citizen — comments, polls, poll-comments.
+    for r in (
+        db.query(CommentReport)
+        .join(PostComment, PostComment.id == CommentReport.comment_id)
+        .filter(PostComment.citizen_id == user_id, CommentReport.acted_at.is_(None))
+        .all()
+    ):
+        r.acted_at = now
+        counts["post_comment"] += 1
+    for r in (
+        db.query(PollReport)
+        .join(Poll, Poll.id == PollReport.poll_id)
+        .filter(
+            Poll.author_kind == "citizen",
+            Poll.author_citizen_id == user_id,
+            PollReport.acted_at.is_(None),
+        )
+        .all()
+    ):
+        r.acted_at = now
+        counts["poll"] += 1
+    for r in (
+        db.query(PollCommentReport)
+        .join(PollComment, PollComment.id == PollCommentReport.poll_comment_id)
+        .filter(PollComment.citizen_id == user_id, PollCommentReport.acted_at.is_(None))
+        .all()
+    ):
+        r.acted_at = now
+        counts["poll_comment"] += 1
+    return counts
+
+
+def _resolve_reports_against_target(
+    db: Session, *, kind: str, target_id: int,
+) -> int:
+    """Mark every open report for a specific piece of content as
+    resolved. Called when an admin hides content — the report that
+    triggered the hide is one of N reports against the same target;
+    the rest are implicitly resolved by the same action.
+
+    Returns the count of reports newly resolved (excludes those
+    already acted on)."""
+    now = datetime.utcnow()
+    table_map = {
+        "post":         (PostReport, "post_id"),
+        "post_comment": (CommentReport, "comment_id"),
+        "poll":         (PollReport, "poll_id"),
+        "poll_comment": (PollCommentReport, "poll_comment_id"),
+    }
+    if kind not in table_map:
+        return 0
+    cls, fk = table_map[kind]
+    rows = (
+        db.query(cls)
+        .filter(getattr(cls, fk) == target_id, cls.acted_at.is_(None))
+        .all()
+    )
+    for r in rows:
+        r.acted_at = now
+    return len(rows)
 
 
 @router.post(
@@ -644,15 +768,23 @@ def suspend_user(
                 pc.deleted_at = now
             hidden_counts["poll_comments"] = len(poll_comments)
 
+    # Implicit moderation outcome: suspending the user resolves every
+    # open report against their authored content. Without this the
+    # moderation queue stays cluttered with hidden / acted-on content.
+    resolved_reports = _resolve_reports_against_user(
+        db, user_kind=kind, user_id=user_id,
+    )
+
     db.commit()
     logger.warning(
-        "Admin %s suspended %s user_id=%d (reason=%r, cascade=%s, hidden=%s).",
+        "Admin %s suspended %s user_id=%d (reason=%r, cascade=%s, hidden=%s, resolved=%s).",
         actor["email"], kind, user_id, acc.suspended_reason,
-        payload.cascade_hide, hidden_counts,
+        payload.cascade_hide, hidden_counts, resolved_reports,
     )
     return UserActionResult(
         ok=True, suspended=True,
         hidden_counts=hidden_counts,
+        resolved_reports=resolved_reports,
     )
 
 
