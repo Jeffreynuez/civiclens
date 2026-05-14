@@ -255,7 +255,7 @@ export default function PageView({
   const { me: repMe } = useAuth();
   const isOwner = !!payload?.is_owner
     && !!repMe
-    && repMe.official_id === official_id;
+    && repMe.official_id === officialId;
   const claimed = !!payload?.claimed;
   const ownerName = payload?.owner?.display_name || displayName || 'This official';
   const ownerRole = payload?.owner?.role || role || '';
