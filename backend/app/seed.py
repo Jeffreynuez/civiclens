@@ -228,8 +228,27 @@ def _validate_citizen(entry: Dict[str, Any]) -> bool:
 
 def seed_demo_citizens(db: Optional[Session] = None) -> int:
     """
-    Insert any demo citizen accounts that aren't already present.
+    Insert any seeded citizen accounts that aren't already present.
     Idempotent — matches on email, so running twice is a no-op.
+
+    Two use cases share this path:
+      • Demo / test citizens — verified=False (default). Used to be a
+        committed list of 60 names; that's now retired and the
+        committed seed file is empty. Operators can re-add demo
+        citizens via the DEMO_CITIZEN_ACCOUNTS_JSON env var if
+        desired for local testing.
+      • Operator-seeded "real" accounts — verified=True. An entry
+        with "verified": true in its JSON gets a verified account
+        on the next boot, which together with ADMIN_EMAILS lets the
+        operator create themselves an admin login without waiting
+        for the Phase-2 ID.me-backed signup flow. Example JSON:
+          {"citizens":[{
+            "email": "civicview@civicview.app",
+            "password": "...",
+            "display_name": "CivicView Admin",
+            "city": "Internal", "state": "FL",
+            "verified": true
+          }]}
 
     Returns the number of newly-created accounts.
     """
@@ -261,6 +280,13 @@ def seed_demo_citizens(db: Optional[Session] = None) -> int:
             if existing:
                 continue
 
+            # `verified` defaults to False (demo seed); operator-seeded
+            # accounts set "verified": true to mark themselves as
+            # non-demo. We coerce explicitly so a stray string in the
+            # JSON ("true" instead of bool true) isn't silently
+            # interpreted as truthy.
+            is_verified = entry.get("verified") is True
+
             acct = CitizenAccount(
                 email=email,
                 password_hash=hash_password(entry["password"]),
@@ -271,11 +297,17 @@ def seed_demo_citizens(db: Optional[Session] = None) -> int:
                 state=entry["state"].strip().upper()[:2],
                 zip_code=(entry.get("zip_code") or None),
                 congressional_district=(entry.get("congressional_district") or None),
-                verified=False,   # demo seeds are never verified
+                verified=is_verified,
                 is_active=True,
             )
             db.add(acct)
             created += 1
+            if is_verified:
+                logger.info(
+                    "Seeded VERIFIED citizen %s (display_name=%r). "
+                    "If this email is in ADMIN_EMAILS, the account is now admin.",
+                    email, acct.display_name,
+                )
 
         if created:
             db.commit()
