@@ -265,12 +265,19 @@ def seed_demo_citizens(db: Optional[Session] = None) -> int:
     owns_session = db is None
     db = db or SessionLocal()
     created = 0
+    topped_up = 0
     try:
         for entry in citizens:
             if not _validate_citizen(entry):
                 continue
 
             email = entry["email"].strip().lower()
+            # `verified` defaults to False (demo seed); operator-seeded
+            # accounts set "verified": true to mark themselves as
+            # non-demo. We coerce explicitly so a stray string in the
+            # JSON ("true" instead of bool true) isn't silently
+            # interpreted as truthy.
+            is_verified = entry.get("verified") is True
 
             existing = (
                 db.query(CitizenAccount)
@@ -278,14 +285,24 @@ def seed_demo_citizens(db: Optional[Session] = None) -> int:
                 .first()
             )
             if existing:
+                # Top-up path. The seed is idempotent on email, but
+                # we WANT to flip verified=True on a row that was
+                # previously seeded under an older code path that
+                # ignored "verified". Top-ups never DOWNGRADE — we
+                # don't flip True→False just because the operator
+                # took the flag off, since that would be confusing
+                # if the user already became admin and we then
+                # silently revoked. Operator can DELETE the row in
+                # the DB if they want to fully reset.
+                if is_verified and not existing.verified:
+                    existing.verified = True
+                    topped_up += 1
+                    logger.info(
+                        "Topped up VERIFIED on existing citizen %s — "
+                        "previously seeded as unverified.",
+                        email,
+                    )
                 continue
-
-            # `verified` defaults to False (demo seed); operator-seeded
-            # accounts set "verified": true to mark themselves as
-            # non-demo. We coerce explicitly so a stray string in the
-            # JSON ("true" instead of bool true) isn't silently
-            # interpreted as truthy.
-            is_verified = entry.get("verified") is True
 
             acct = CitizenAccount(
                 email=email,
@@ -309,11 +326,11 @@ def seed_demo_citizens(db: Optional[Session] = None) -> int:
                     email, acct.display_name,
                 )
 
-        if created:
+        if created or topped_up:
             db.commit()
             logger.info(
-                "Seeded %d demo citizen account(s). Log in with any email from demo_citizen_accounts.json.",
-                created,
+                "Citizen seed: %d new, %d topped up (verified flag).",
+                created, topped_up,
             )
         else:
             logger.info("Demo citizen accounts already present — nothing to seed.")
