@@ -58,6 +58,14 @@ class RepAccount(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Admin moderation — when set, the account can't sign in or act.
+    # Distinct from is_active (which is the "account exists but hasn't
+    # been activated yet" state) so we can tell soft-suspension from
+    # never-activated. Auth dependencies treat both states as
+    # "not signed in" for callers; admin endpoints can list+restore
+    # the suspended set.
+    suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    suspended_reason: Mapped[Optional[str]] = mapped_column(String(255), default=None)
 
     posts: Mapped[List["Post"]] = relationship(
         back_populates="author", cascade="all, delete-orphan",
@@ -668,6 +676,11 @@ class CitizenAccount(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Admin moderation — mirrors RepAccount.suspended_at. When set,
+    # the auth dependencies treat the account as not-signed-in and
+    # the citizen-login endpoint refuses with a clear error.
+    suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    suspended_reason: Mapped[Optional[str]] = mapped_column(String(255), default=None)
 
 
 # ── Citizen waitlist ──────────────────────────────────────────────────

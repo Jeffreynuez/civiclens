@@ -203,6 +203,28 @@ export async function adminUnhideTarget(kind, targetId) {
   );
 }
 
+// Suspend / unsuspend a user account. `kind` is 'rep' | 'citizen';
+// `userId` is the account row id (returned in ReportRow.target_author_id).
+export async function adminSuspendUser(kind, userId, { reason } = {}) {
+  return request(
+    `/api/admin/users/${encodeURIComponent(kind)}/${encodeURIComponent(userId)}/suspend`,
+    { method: 'POST', body: { reason } },
+  );
+}
+
+export async function adminUnsuspendUser(kind, userId) {
+  return request(
+    `/api/admin/users/${encodeURIComponent(kind)}/${encodeURIComponent(userId)}/unsuspend`,
+    { method: 'POST' },
+  );
+}
+
+// Lightweight count for the navbar badge. Polled every ~30s when
+// an admin is signed in; doesn't pull the full report list.
+export async function adminUnreadCount() {
+  return request('/api/admin/reports/unread-count');
+}
+
 // ── Home-page feed (National activity + Popular polls) ───────────────
 // Lightweight aggregates that power the two large landing-page
 // sections in NationalOfficialsPanel. Both return { items: [...] }

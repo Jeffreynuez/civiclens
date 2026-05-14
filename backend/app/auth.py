@@ -166,6 +166,10 @@ def get_optional_rep(
     rep = db.get(RepAccount, rep_id)
     if rep is None or not rep.is_active:
         return None
+    # Suspended accounts are treated as not-signed-in to every
+    # caller. Admins can list+restore via /api/admin/users/...
+    if rep.suspended_at is not None:
+        return None
     return rep
 
 

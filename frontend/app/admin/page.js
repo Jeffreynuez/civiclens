@@ -32,6 +32,7 @@ import {
   adminDismissReport,
   adminHideTarget,
   adminUnhideTarget,
+  adminSuspendUser,
 } from '@/lib/pagesApi';
 
 // Human-friendly labels for the kind enum. Keep in sync with the
@@ -275,6 +276,28 @@ export default function AdminPage() {
                     </Td>
                     <Td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {/* "View" opens the hosting rep page in a new tab.
+                            Useful for reading the full thread / surrounding
+                            comments before deciding what to do. */}
+                        {r.context_official_id && (
+                          <a
+                            href={`/?page=${encodeURIComponent(r.context_official_id)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              padding: '4px 10px',
+                              border: '1px solid var(--cl-border)',
+                              background: 'white',
+                              color: 'var(--cl-text)',
+                              borderRadius: 6,
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              textDecoration: 'none',
+                            }}
+                          >
+                            View
+                          </a>
+                        )}
                         {!resolved && (
                           <ActionButton
                             label="Dismiss"
@@ -295,6 +318,28 @@ export default function AdminPage() {
                             label="Unhide"
                             onClick={() => runAction(key, () => adminUnhideTarget(r.kind, r.target_id))}
                             busy={isBusy}
+                          />
+                        )}
+                        {/* Suspend the AUTHOR of the reported content,
+                            not the reporter. Confirms via window.confirm
+                            (no reason picker in this iteration — author
+                            name is enough context). Hidden for rep
+                            authors with admin emails because the backend
+                            will reject anyway; we skip the round-trip. */}
+                        {r.target_author_id && r.target_author_kind && (
+                          <ActionButton
+                            label={`Suspend ${r.target_author_kind === 'citizen' ? 'citizen' : 'rep'}`}
+                            onClick={() => {
+                              const ok = window.confirm(
+                                `Suspend ${r.target_author_name}? They'll be signed out and unable to sign back in until you unsuspend them.`
+                              );
+                              if (!ok) return;
+                              runAction(key, () => adminSuspendUser(
+                                r.target_author_kind, r.target_author_id, { reason: r.reason },
+                              ));
+                            }}
+                            busy={isBusy}
+                            destructive
                           />
                         )}
                       </div>

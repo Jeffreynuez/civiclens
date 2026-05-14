@@ -189,6 +189,18 @@ def login(
             detail="Invalid email or password",
         )
 
+    # Suspended accounts get an explicit 403 with a contact path so
+    # the user knows the credentials were correct but the account is
+    # in a suspended state — see the rep login for the same pattern.
+    if citizen.suspended_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "This account has been suspended. "
+                "Contact civicview@civicview.app if you think this is in error."
+            ),
+        )
+
     set_citizen_cookie(response, citizen.id)
     citizen.last_login_at = datetime.utcnow()
     db.commit()

@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchAllMembers, fetchAllCandidates } from '@/lib/api';
+import { adminWhoami, adminUnreadCount } from '@/lib/pagesApi';
 import { useTrackedBills } from '@/lib/trackedBills';
 import { useTrackedOfficials } from '@/lib/trackedOfficials';
 import { useTrackedElections } from '@/lib/trackedElections';
@@ -129,6 +130,43 @@ export default function Navbar({
       setLoading(false);
     });
   }, [focused, allMembers.length, allCandidates.length, loading]);
+
+  // Admin badge — probe whoami once on mount; if the current user is
+  // an admin, poll the unread-report count every 60s. The admin
+  // navbar pill appears only when isAdmin is true, with a red dot
+  // badge if count > 0. Non-admin users never see the pill and never
+  // hit unread-count (so we don't generate 401 noise on every poll).
+  //
+  // The probe is intentionally fire-and-forget on failure — admins
+  // who happen to be offline / unauthed / mid-session-rotation just
+  // see no admin pill, same as a non-admin. Refreshes when the
+  // `citizen` prop changes (login + logout in the citizen flow)
+  // because admin status can change with role.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [unreadReports, setUnreadReports] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { status } = await adminWhoami();
+      if (cancelled) return;
+      setIsAdmin(status === 200);
+    })();
+    return () => { cancelled = true; };
+  }, [citizen]);
+  useEffect(() => {
+    if (!isAdmin) {
+      setUnreadReports(0);
+      return undefined;
+    }
+    let cancelled = false;
+    const fetchCount = async () => {
+      const { data } = await adminUnreadCount();
+      if (!cancelled && data) setUnreadReports(Number(data.count) || 0);
+    };
+    fetchCount();
+    const id = setInterval(fetchCount, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [isAdmin]);
 
   // Keyboard shortcut: `/` focuses the search
   useEffect(() => {
@@ -795,6 +833,46 @@ export default function Navbar({
                 </span>
               )}
             </button>
+            {/* Admin pill — only renders when /api/admin/whoami
+                returned 200 on mount. Shows the unread-reports count
+                badge when > 0 so the operator knows there's queue
+                pressure without having to open /admin first.
+                Hidden entirely for non-admins (no flash + no extra
+                401 noise in logs). */}
+            {isAdmin && (
+              <a
+                href="/admin"
+                title={unreadReports > 0 ? `${unreadReports} open report(s)` : 'Moderation queue'}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '6px 12px',
+                  background: unreadReports > 0 ? '#d63031' : 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  borderRadius: '8px', cursor: 'pointer',
+                  fontSize: '0.82rem', fontWeight: 600,
+                  textDecoration: 'none',
+                  position: 'relative',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                Admin
+                {unreadReports > 0 && (
+                  <span
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      minWidth: '18px', height: '18px', padding: '0 5px',
+                      background: 'white', color: '#d63031',
+                      borderRadius: '9px', fontSize: '0.7rem', fontWeight: 800,
+                    }}
+                  >
+                    {unreadReports}
+                  </span>
+                )}
+              </a>
+            )}
           </>
         )}
 
@@ -913,6 +991,21 @@ export default function Navbar({
                   badge={trackedCount > 0 ? trackedCount : null}
                   onClick={() => { setMobileMenuOpen(false); onOpenTracked?.(); }}
                 />
+                {isAdmin && (
+                  <MobileMenuItem
+                    icon={
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                    }
+                    label="Admin"
+                    badge={unreadReports > 0 ? unreadReports : null}
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      if (typeof window !== 'undefined') window.location.href = '/admin';
+                    }}
+                  />
+                )}
                 {citizen && (
                   <>
                     <div style={{ height: 1, background: 'var(--cl-border)', margin: '4px 6px' }} />
