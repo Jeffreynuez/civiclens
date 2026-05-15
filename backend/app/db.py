@@ -165,7 +165,63 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _auto_migrate_new_columns()
     _auto_migrate_nullability_changes()
+    _auto_migrate_string_widening()
     _repair_bad_now_defaults()
+
+
+def _auto_migrate_string_widening() -> None:
+    """Widen on-disk VARCHAR columns when the model declares a longer
+    type. Example: `appellant_kind` was String(8) in Phase 1 to fit
+    'rep' / 'citizen'; Phase 2 widens it to String(16) to fit
+    'candidate'.
+
+    SQLite doesn't enforce VARCHAR length, so this is a no-op there.
+    Postgres does, and inserts longer strings will fail until the
+    column is widened. We use ALTER COLUMN ... TYPE which is fast and
+    non-destructive on Postgres (just updates the catalog).
+
+    Only widens — never narrows. A model that shrinks String(N) is
+    skipped with a log warning so existing data isn't truncated.
+    """
+    if _is_sqlite():
+        return
+    inspector = inspect(engine)
+    on_disk_tables = set(inspector.get_table_names())
+    plans: list[tuple[str, str, int]] = []
+    for mapper in Base.registry.mappers:
+        table = mapper.local_table
+        if table is None or table.name not in on_disk_tables:
+            continue
+        on_disk_cols = {c["name"]: c for c in inspector.get_columns(table.name)}
+        for col in table.columns:
+            on_disk = on_disk_cols.get(col.name)
+            if on_disk is None:
+                continue  # ADD COLUMN pass handles missing columns
+            model_type = col.type
+            disk_type = on_disk["type"]
+            model_len = getattr(model_type, "length", None)
+            disk_len = getattr(disk_type, "length", None)
+            if model_len is None or disk_len is None:
+                continue  # not VARCHAR-shaped on either side
+            if model_len > disk_len:
+                plans.append((table.name, col.name, model_len))
+            elif model_len < disk_len:
+                logger.warning(
+                    "Auto-migrate skipped %s.%s — model wants VARCHAR(%d) but disk has VARCHAR(%d). "
+                    "Narrowing would truncate existing rows; widen the model or migrate manually.",
+                    table.name, col.name, model_len, disk_len,
+                )
+
+    if not plans:
+        return
+    with engine.begin() as conn:
+        for table_name, col_name, new_len in plans:
+            ddl = (
+                f'ALTER TABLE "{table_name}" '
+                f'ALTER COLUMN "{col_name}" TYPE VARCHAR({new_len})'
+            )
+            logger.info("Auto-migrate: widening %s.%s → VARCHAR(%d)", table_name, col_name, new_len)
+            conn.execute(text(ddl))
 
 
 def _repair_bad_now_defaults() -> None:
