@@ -51,6 +51,10 @@ export default function Navbar({
   // Tracked still render — those are the ones the user needs reach
   // to without backing out of the page.
   compact = false,
+  // When true, hide the inline "Polls" link on the right cluster. The
+  // /polls page itself sets this so the navbar doesn't render a
+  // redundant self-link.
+  hidePollsLink = false,
 }) {
   const { list: trackedList } = useTrackedBills();
   const { list: trackedOfficialsList } = useTrackedOfficials();
@@ -779,8 +783,10 @@ export default function Navbar({
             {/* Committees moved to the hamburger popover. */}
             {/* Polls — the global polls feed. Inline on desktop next
                 to My Tracked because it's a primary engagement
-                surface; mobile gets it via the hamburger. */}
-            {!isCompact && (
+                surface; mobile gets it via the hamburger.
+                Hidden via `hidePollsLink` on /polls itself so the
+                navbar doesn't render a redundant self-link. */}
+            {!isCompact && !hidePollsLink && (
               <a
                 href="/polls"
                 title="Browse every active poll across the app"
@@ -987,8 +993,9 @@ export default function Navbar({
                 )}
                 {/* Polls — inline on desktop, in the hamburger on
                     compact viewports (matches the My Tracked
-                    distribution). */}
-                {isCompact && (
+                    distribution). Suppressed when `hidePollsLink` is
+                    set, e.g. on the /polls page itself. */}
+                {isCompact && !hidePollsLink && (
                   <MobileMenuItem
                     icon={
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
