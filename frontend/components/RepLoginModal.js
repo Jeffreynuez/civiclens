@@ -86,6 +86,15 @@ export default function RepLoginModal({ open, onClose, onSuccess, initialEmail =
   const [err, setErr] = useState(null);
   const [showDemo, setShowDemo] = useState(false);
 
+  // Suspension-appeal flow state — see CitizenLoginModal.js for the
+  // full reasoning, and why these MUST be declared above the
+  // `if (!open) return null;` guard below (calling hooks
+  // conditionally throws React #310 on open-transition).
+  const [suspendedMessage, setSuspendedMessage] = useState(null);
+  const [appealRationale, setAppealRationale] = useState('');
+  const [appealBusy, setAppealBusy] = useState(false);
+  const [appealResult, setAppealResult] = useState(null);
+
   useEffect(() => {
     if (open) {
       setEmail(initialEmail || '');
@@ -94,19 +103,18 @@ export default function RepLoginModal({ open, onClose, onSuccess, initialEmail =
       setErr(null);
       setBusy(false);
       setShowDemo(false);
+      // Reset appeal flow too so a reopened modal doesn't surface
+      // stale state from a previous suspended-login attempt.
+      setSuspendedMessage(null);
+      setAppealRationale('');
+      setAppealBusy(false);
+      setAppealResult(null);
     }
   }, [open, initialEmail]);
 
   if (!open) return null;
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
-
-  // Suspension-appeal flow state — same shape as the citizen modal,
-  // see CitizenLoginModal.js for the full reasoning.
-  const [suspendedMessage, setSuspendedMessage] = useState(null);
-  const [appealRationale, setAppealRationale] = useState('');
-  const [appealBusy, setAppealBusy] = useState(false);
-  const [appealResult, setAppealResult] = useState(null);
 
   const submit = async () => {
     if (!canSubmit) return;

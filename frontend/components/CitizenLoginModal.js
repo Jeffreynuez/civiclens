@@ -176,6 +176,21 @@ export default function CitizenLoginModal({ open, onClose, onSuccess }) {
   // after via onSuccess().
   const [issuedCreds, setIssuedCreds] = useState(null);
 
+  // Suspended-user appeal flow state. MUST be declared above the
+  // `if (!open) return null;` guard below — calling hooks
+  // conditionally (or after a conditional return) breaks the
+  // hook-count invariant React relies on, throwing #310 on the
+  // open-transition. Render decided to learn that the hard way.
+  // When the login endpoint returns 403 (account suspended), we
+  // flip the modal into "you can appeal this" mode — pre-loaded
+  // with the email + password the user just submitted so the
+  // appeal endpoint can re-verify them without a second
+  // credential entry.
+  const [suspendedMessage, setSuspendedMessage] = useState(null);
+  const [appealRationale, setAppealRationale] = useState('');
+  const [appealBusy, setAppealBusy] = useState(false);
+  const [appealResult, setAppealResult] = useState(null);
+
   useEffect(() => {
     if (open) {
       setEmail('');
@@ -191,6 +206,13 @@ export default function CitizenLoginModal({ open, onClose, onSuccess }) {
       setDemoBusy(false);
       setDemoErr(null);
       setIssuedCreds(null);
+      // Reset the appeal flow state too so reopening the modal
+      // doesn't surface a stale suspension message from a
+      // previous attempt.
+      setSuspendedMessage(null);
+      setAppealRationale('');
+      setAppealBusy(false);
+      setAppealResult(null);
     }
   }, [open]);
 
@@ -217,16 +239,6 @@ export default function CitizenLoginModal({ open, onClose, onSuccess }) {
   if (!open) return null;
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
-
-  // Suspended-user appeal flow state. When the login endpoint returns
-  // 403 (account suspended), we flip the modal into "you can appeal
-  // this" mode — pre-loaded with the email + password the user just
-  // submitted so the appeal endpoint can re-verify them without a
-  // second credential entry.
-  const [suspendedMessage, setSuspendedMessage] = useState(null);
-  const [appealRationale, setAppealRationale] = useState('');
-  const [appealBusy, setAppealBusy] = useState(false);
-  const [appealResult, setAppealResult] = useState(null);
 
   const submit = async () => {
     if (!canSubmit) return;
