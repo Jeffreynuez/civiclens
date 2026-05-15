@@ -21,7 +21,8 @@ import {
   ArrowRight,
 } from './ui';
 import { getAllTrackedOfficials } from '../lib/trackedOfficials';
-import { fetchMyCitizenPolls, closeCitizenPoll } from '../lib/pagesApi';
+import { fetchMyCitizenPolls, closeCitizenPoll, fetchMyHiddenContent } from '../lib/pagesApi';
+import AppealModal from './AppealModal';
 
 /**
  * ConstituentDashboard — the personal civic command center for a verified
@@ -175,6 +176,7 @@ export default function ConstituentDashboard({
             <UpcomingInDistrict items={upcoming} citizen={citizen} onSeeCalendar={onNavigate.districtCalendar} />
             <RecentActivity items={recent} onSeeAll={onNavigate.viewActivity} />
             <MyPollsSection citizen={citizen} onOpenPage={onNavigate.openPage} />
+            <HiddenByModerationSection citizen={citizen} />
           </div>
 
           {/* RIGHT RAIL */}
@@ -1061,6 +1063,184 @@ function prettyRaceLabel(key) {
 // the dashboard once a citizen is signed in, so we just bail to a
 // muted placeholder if the citizen prop arrives null somehow.
 // ─────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────
+// HiddenByModerationSection — the citizen's recourse surface.
+// Lists their content currently hidden by admin / auto-moderation
+// within the 30-day appeal window. Each row shows preview + when
+// hidden + appeal status (or an Appeal button if eligible).
+// Hidden when the citizen has no hidden content (the empty state
+// is "you have nothing to appeal" which is a happy state — we
+// don't surface an empty card cluttering the dashboard).
+// ─────────────────────────────────────────────────────────────────
+function HiddenByModerationSection({ citizen }) {
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [appealTarget, setAppealTarget] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await fetchMyHiddenContent();
+    setLoading(false);
+    setItems(data?.items || []);
+  };
+  useEffect(() => { if (citizen) load(); }, [citizen]);
+
+  if (!citizen) return null;
+  // Hide the section entirely when there's nothing — empty state
+  // would otherwise just say "great, no hidden content!" which is
+  // noise on a dashboard that already has plenty of cards.
+  if (!loading && (!items || items.length === 0)) return null;
+
+  const onAppealSuccess = (appeal) => {
+    setAppealTarget(null);
+    // Patch the row in place — newly-pending state — without a
+    // refetch round-trip.
+    setItems((prev) =>
+      (prev || []).map((row) =>
+        row.target_kind === appeal.target_kind && row.target_id === appeal.target_id
+          ? { ...row, appeal_status: 'pending', appealable: false }
+          : row,
+      ),
+    );
+  };
+
+  return (
+    <Card title="Hidden by moderation" icon={<ShieldIcon />} tone="warning">
+      <p style={{ margin: '0 0 12px', fontSize: '0.85rem', color: 'var(--cl-text-light)', lineHeight: 1.5 }}>
+        Content of yours that admins or the community-reports
+        threshold removed. You can appeal each item once, within
+        30 days of when it was hidden.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map((row) => (
+          <HiddenContentRow
+            key={`${row.target_kind}-${row.target_id}`}
+            row={row}
+            onAppeal={() => setAppealTarget({
+              kind: row.target_kind,
+              id: row.target_id,
+              preview: row.preview,
+              hide_reason: row.hide_reason,
+              hidden_at: row.hidden_at,
+            })}
+          />
+        ))}
+      </div>
+      <AppealModal
+        open={!!appealTarget}
+        target={appealTarget}
+        onClose={() => setAppealTarget(null)}
+        onSuccess={onAppealSuccess}
+      />
+    </Card>
+  );
+}
+
+const HIDDEN_KIND_LABEL = {
+  post: 'Post',
+  post_comment: 'Comment',
+  poll: 'Poll',
+  poll_comment: 'Poll comment',
+};
+
+function HiddenContentRow({ row, onAppeal }) {
+  const status = row.appeal_status; // null | 'pending' | 'granted' | 'denied'
+  const statusChip =
+    status === 'pending'
+      ? { label: 'Appeal pending', bg: 'var(--cl-accent-soft)', color: 'var(--cl-accent)' }
+      : status === 'granted'
+      ? { label: 'Appeal granted ✓', bg: 'var(--cl-up-soft)', color: 'var(--cl-up)' }
+      : status === 'denied'
+      ? { label: 'Appeal denied', bg: 'var(--cl-danger-soft)', color: 'var(--cl-danger-text)' }
+      : null;
+
+  return (
+    <div
+      style={{
+        background: 'white',
+        border: '1px solid var(--cl-border)',
+        borderRadius: 8,
+        padding: '10px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--cl-text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          {HIDDEN_KIND_LABEL[row.target_kind] || row.target_kind}
+        </div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--cl-text-light)' }}>
+          Hidden {timeAgo(row.hidden_at)} · {row.hide_reason === 'auto_hidden' ? 'community reports' : 'admin action'}
+        </div>
+      </div>
+      <div
+        style={{
+          fontSize: '0.88rem',
+          color: 'var(--cl-text)',
+          maxHeight: 80,
+          overflow: 'auto',
+          whiteSpace: 'pre-wrap',
+          background: 'var(--cl-bg-soft)',
+          padding: '6px 8px',
+          borderRadius: 6,
+        }}
+      >
+        {row.preview || <em style={{ color: 'var(--cl-text-muted)' }}>(empty)</em>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        {statusChip ? (
+          <span
+            style={{
+              padding: '3px 10px',
+              background: statusChip.bg,
+              color: statusChip.color,
+              borderRadius: 999,
+              fontSize: '0.74rem',
+              fontWeight: 700,
+            }}
+          >
+            {statusChip.label}
+          </span>
+        ) : <span />}
+        {row.appealable && (
+          <button
+            type="button"
+            onClick={onAppeal}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid var(--cl-accent)',
+              background: 'var(--cl-accent)',
+              color: 'white',
+              borderRadius: 8,
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Appeal
+          </button>
+        )}
+      </div>
+      {status && row.appeal_admin_note && (
+        <div style={{ fontSize: '0.78rem', color: 'var(--cl-text-light)', fontStyle: 'italic', borderTop: '1px solid var(--cl-border)', paddingTop: 6 }}>
+          Admin note: {row.appeal_admin_note}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  );
+}
+
 function MyPollsSection({ citizen, onOpenPage }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
