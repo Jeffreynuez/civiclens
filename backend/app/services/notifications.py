@@ -246,3 +246,178 @@ def notify_new_report(
                 "notify_new_report: sent to %s (kind=%s target_id=%d).",
                 addr, kind, target_id,
             )
+
+
+# Same kind-label set used by the appeals UI so the email subject
+# line matches what the admin sees in /admin/appeals.
+_APPEAL_KIND_LABELS = {
+    "post":               "Hidden post",
+    "post_comment":       "Hidden comment",
+    "poll":               "Hidden poll",
+    "poll_comment":       "Hidden poll comment",
+    "suspension_rep":     "Rep suspension",
+    "suspension_citizen": "Citizen suspension",
+}
+
+
+def notify_new_appeal(
+    *,
+    target_kind: str,
+    target_id: int,
+    appellant_name: str,
+    appellant_email: str,
+    rationale: str,
+) -> None:
+    """Email every admin in ADMIN_EMAILS when an appeal arrives.
+
+    Mirror of notify_new_report: same fire-and-forget shape, same
+    HTML escaping for user-supplied strings, one send per admin
+    recipient. Subject line tagged so admins can route appeals into
+    a dedicated mailbox folder if they want.
+    """
+    if not _enabled():
+        return
+    recipients = _admin_emails()
+    if not recipients:
+        logger.info("notify_new_appeal: no ADMIN_EMAILS configured — no-op.")
+        return
+
+    kind_label = _APPEAL_KIND_LABELS.get(target_kind, target_kind)
+    subject = f"[CivicView] New appeal: {kind_label}"
+    admin_url = f"{_public_app_url()}/admin/appeals"
+
+    safe_name = _html.escape(appellant_name or "(unknown)")
+    safe_email = _html.escape(appellant_email or "")
+    safe_rationale = _html.escape(rationale or "")
+
+    html_body = f"""\
+<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
+            color:#222;max-width:560px;line-height:1.5;">
+  <h2 style="margin:0 0 6px;font-size:18px;">New appeal in the queue</h2>
+  <p style="margin:0 0 14px;color:#555;font-size:14px;">
+    <strong>{kind_label}</strong> — appeal filed by <strong>{safe_name}</strong>
+    &lt;{safe_email}&gt;
+  </p>
+  <div style="background:#f4f4f6;border:1px solid #e1e1e6;border-radius:8px;
+              padding:12px 14px;font-size:14px;white-space:pre-wrap;">
+    <div style="font-weight:700;margin-bottom:6px;">Their rationale:</div>
+    {safe_rationale}
+  </div>
+  <p style="margin:18px 0 6px;">
+    <a href="{admin_url}" style="background:#1e6b56;color:white;text-decoration:none;
+       padding:10px 16px;border-radius:6px;font-weight:600;display:inline-block;">
+       Open the appeals queue
+    </a>
+  </p>
+  <hr style="margin:24px 0;border:0;border-top:1px solid #e1e1e6;" />
+  <p style="font-size:12px;color:#888;margin:0;">
+    Sent because your email is on the ADMIN_EMAILS allowlist.
+    To stop receiving these, set REPORT_NOTIFICATIONS_ENABLED=false
+    on Render or remove your address from ADMIN_EMAILS.
+  </p>
+</div>
+"""
+    text_body = (
+        f"New appeal — {kind_label}\n"
+        f"Appellant: {appellant_name} <{appellant_email}>\n\n"
+        f"Rationale:\n{rationale}\n\n"
+        f"Open the queue: {admin_url}\n"
+    )
+
+    for addr in recipients:
+        ok = notification_send(
+            to=addr,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+        )
+        if ok:
+            logger.info(
+                "notify_new_appeal: sent to %s (kind=%s target_id=%d).",
+                addr, target_kind, target_id,
+            )
+
+
+def notify_appeal_decision(
+    *,
+    appellant_email: str,
+    appellant_name: str,
+    target_kind: str,
+    decision: str,
+    admin_note: Optional[str] = None,
+) -> None:
+    """Email the appellant when their appeal is decided.
+
+    Decision is 'granted' or 'denied'. Admin's optional note is
+    included verbatim (HTML-escaped). Sender / from-address reuses
+    the same NOTIFICATION_FROM_EMAIL config as report notifications.
+    """
+    if not _enabled():
+        return
+    if not appellant_email:
+        logger.info("notify_appeal_decision: no appellant email — no-op.")
+        return
+
+    kind_label = _APPEAL_KIND_LABELS.get(target_kind, target_kind)
+    headline = "Your appeal was granted" if decision == "granted" else "Your appeal was denied"
+    subject = f"[CivicView] {headline} — {kind_label}"
+
+    safe_name = _html.escape(appellant_name or "")
+    safe_note = _html.escape(admin_note or "")
+
+    granted_body = (
+        '<p style="margin:0 0 12px;">Your content has been restored, '
+        'or your account is no longer suspended. You should see the '
+        'change reflected immediately the next time you sign in.</p>'
+    )
+    denied_body = (
+        '<p style="margin:0 0 12px;">An admin reviewed your appeal '
+        'and decided to uphold the moderation decision. This is the '
+        'final outcome on this item — you can&rsquo;t re-appeal it. '
+        'If you think the decision is wrong on substantive grounds, '
+        'email civicview@civicview.app with additional context and '
+        'an admin will take another look manually.</p>'
+    )
+    body_block = granted_body if decision == "granted" else denied_body
+    note_block = (
+        f'<div style="background:#f4f4f6;border:1px solid #e1e1e6;'
+        f'border-radius:8px;padding:12px 14px;font-size:14px;'
+        f'white-space:pre-wrap;margin:12px 0;">'
+        f'<div style="font-weight:700;margin-bottom:6px;">Admin note:</div>'
+        f'{safe_note}</div>'
+        if safe_note else ""
+    )
+
+    html_body = f"""\
+<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
+            color:#222;max-width:560px;line-height:1.5;">
+  <h2 style="margin:0 0 6px;font-size:18px;">{headline}</h2>
+  <p style="margin:0 0 12px;color:#555;font-size:14px;">
+    {('Hi ' + safe_name + ',') if safe_name else 'Hi,'} this is about your appeal of: <strong>{kind_label}</strong>.
+  </p>
+  {body_block}
+  {note_block}
+  <hr style="margin:24px 0;border:0;border-top:1px solid #e1e1e6;" />
+  <p style="font-size:12px;color:#888;margin:0;">
+    Reply directly to this email to reach a CivicView admin.
+  </p>
+</div>
+"""
+    text_body = (
+        f"{headline} — {kind_label}\n\n"
+        f"{('Hi ' + appellant_name + ',') if appellant_name else 'Hi,'}\n\n"
+        + ("Your content has been restored / suspension lifted. "
+           "Sign in to confirm.\n\n" if decision == "granted"
+           else "An admin upheld the moderation decision. This is "
+                "final on this item; you can't re-appeal it. Email "
+                "civicview@civicview.app if you have additional "
+                "context for manual review.\n\n")
+        + (f"Admin note:\n{admin_note}\n\n" if admin_note else "")
+    )
+
+    notification_send(
+        to=appellant_email,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+    )
