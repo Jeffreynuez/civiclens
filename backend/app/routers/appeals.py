@@ -49,7 +49,7 @@ import time
 from datetime import datetime, timedelta
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -143,6 +143,7 @@ def _content_is_appealable(target, kind: str) -> bool:
 @router.post("/appeals", response_model=AppealRead, status_code=201)
 def submit_appeal(
     payload: AppealSubmitRequest,
+    bg_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
@@ -214,6 +215,25 @@ def submit_appeal(
         appeal.id, appeal.target_kind, appeal.target_id,
         appeal.appellant_kind, appeal.appellant_id,
     )
+
+    # Email admins. Fire-and-forget; SMTP latency stays out of the
+    # appellant's request path. Resolves the appellant's display
+    # name + email here while we have them in scope.
+    if expected_appellant_kind == "rep":
+        appellant_name = me_rep.display_name
+        appellant_email = me_rep.email
+    else:
+        appellant_name = me_citizen.display_name
+        appellant_email = me_citizen.email
+    from app.services.notifications import notify_new_appeal
+    bg_tasks.add_task(
+        notify_new_appeal,
+        target_kind=appeal.target_kind,
+        target_id=appeal.target_id,
+        appellant_name=appellant_name,
+        appellant_email=appellant_email,
+        rationale=appeal.rationale,
+    )
     return AppealRead.model_validate(appeal, from_attributes=True)
 
 
@@ -266,6 +286,7 @@ class SuspensionAppealResponse(BaseModel):
 def submit_suspension_appeal(
     payload: SuspensionAppealRequest,
     request: Request,
+    bg_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> SuspensionAppealResponse:
     """Public endpoint — no session required. The caller proves identity
@@ -360,6 +381,17 @@ def submit_suspension_appeal(
     logger.info(
         "Suspension appeal filed: id=%d by %s/%d",
         appeal.id, appellant_kind, appellant_id,
+    )
+
+    # Email admins. acc is the resolved RepAccount or CitizenAccount.
+    from app.services.notifications import notify_new_appeal
+    bg_tasks.add_task(
+        notify_new_appeal,
+        target_kind=appeal.target_kind,
+        target_id=appeal.target_id,
+        appellant_name=acc.display_name,
+        appellant_email=acc.email,
+        rationale=appeal.rationale,
     )
     return SuspensionAppealResponse(
         ok=True,
@@ -732,6 +764,7 @@ def _decide_appeal(
     decision: str,
     admin_note: Optional[str],
     actor: dict,
+    bg_tasks: BackgroundTasks,
 ) -> AdminAppealDecisionResult:
     """Shared core for grant + deny. Sets acted_at, decision, admin_email,
     admin_note. Grant additionally tries to restore the target."""
@@ -758,6 +791,25 @@ def _decide_appeal(
         "Admin %s %s appeal id=%d (target_restored=%s).",
         actor["email"], decision, appeal_id, restored,
     )
+
+    # Email the appellant. Resolve their account email — the appeal
+    # row carries the FK loosely (no joined relationship), so we
+    # look up by appellant_kind + appellant_id.
+    if appeal.appellant_kind == "rep":
+        appellant = db.get(RepAccount, appeal.appellant_id)
+    else:
+        appellant = db.get(CitizenAccount, appeal.appellant_id)
+    if appellant is not None and appellant.email:
+        from app.services.notifications import notify_appeal_decision
+        bg_tasks.add_task(
+            notify_appeal_decision,
+            appellant_email=appellant.email,
+            appellant_name=appellant.display_name,
+            target_kind=appeal.target_kind,
+            decision=decision,
+            admin_note=appeal.admin_note,
+        )
+
     return AdminAppealDecisionResult(
         ok=True, decision=decision, target_restored=restored,
     )
@@ -770,10 +822,11 @@ def _decide_appeal(
 def grant_appeal(
     appeal_id: int,
     payload: AdminAppealDecisionPayload,
+    bg_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     actor: dict = Depends(get_current_admin),
 ) -> AdminAppealDecisionResult:
-    return _decide_appeal(db, appeal_id, "granted", payload.admin_note, actor)
+    return _decide_appeal(db, appeal_id, "granted", payload.admin_note, actor, bg_tasks)
 
 
 @router.post(
@@ -783,7 +836,8 @@ def grant_appeal(
 def deny_appeal(
     appeal_id: int,
     payload: AdminAppealDecisionPayload,
+    bg_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     actor: dict = Depends(get_current_admin),
 ) -> AdminAppealDecisionResult:
-    return _decide_appeal(db, appeal_id, "denied", payload.admin_note, actor)
+    return _decide_appeal(db, appeal_id, "denied", payload.admin_note, actor, bg_tasks)
