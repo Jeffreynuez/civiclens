@@ -96,6 +96,18 @@ class Post(Base):
     report_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0",
     )
+    # Distinguishes admin/auto moderation from author-deleted content.
+    # When the author hits Delete: stays NULL (and deleted_at is set).
+    # When an admin hides via /admin: 'admin_hidden'.
+    # When the auto-hide threshold is crossed by reports: 'auto_hidden'.
+    # When cascade-hide fires during a user suspend: 'admin_hidden'
+    # (the trigger is an admin action, not the report threshold).
+    # The "Hidden by moderation" surface on the author's dashboard
+    # filters on hide_reason IS NOT NULL so author-deletes don't
+    # surface there. Appeal eligibility checks the same column.
+    hide_reason: Mapped[Optional[str]] = mapped_column(
+        String(32), default=None, index=True,
+    )
 
     poll: Mapped[Optional["Poll"]] = relationship(
         back_populates="post", uselist=False, cascade="all, delete-orphan",
@@ -238,6 +250,13 @@ class PostComment(Base):
     # and as the comparand for the auto-hide threshold.
     report_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0",
+    )
+    # Mirrors Post.hide_reason — see that column for the full
+    # explanation. NULL = author-deleted (no appeal surface);
+    # 'admin_hidden' / 'auto_hidden' = moderation action eligible
+    # for appeal within the 30-day window.
+    hide_reason: Mapped[Optional[str]] = mapped_column(
+        String(32), default=None, index=True,
     )
 
     post: Mapped["Post"] = relationship(back_populates="comments")
@@ -434,6 +453,11 @@ class PollComment(Base):
     # can ADD COLUMN on existing rows without backfill.
     report_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0",
+    )
+    # Mirrors PostComment.hide_reason — see Post.hide_reason for the
+    # full explanation. Drives the appeal-eligibility surface.
+    hide_reason: Mapped[Optional[str]] = mapped_column(
+        String(32), default=None, index=True,
     )
 
     poll: Mapped["Poll"] = relationship(back_populates="poll_comments")
@@ -725,3 +749,75 @@ class CitizenWaitlist(Base):
     # waitlist path this stays null.
     note: Mapped[Optional[str]] = mapped_column(String(2000), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ── Appeals ───────────────────────────────────────────────────────────
+class Appeal(Base):
+    """
+    A user-filed appeal against a moderation action. Six target shapes:
+      • 'post'                — rep's hidden post (appellant: rep)
+      • 'post_comment'        — citizen's hidden comment (appellant: citizen)
+      • 'poll'                — citizen's archived poll (appellant: citizen)
+      • 'poll_comment'        — citizen's hidden poll-comment (appellant: citizen)
+      • 'suspension_rep'      — suspended rep account (appellant: that rep)
+      • 'suspension_citizen'  — suspended citizen (appellant: that citizen)
+
+    Lifecycle:
+      created_at         — submission timestamp
+      acted_at IS NULL   — pending in admin queue
+      acted_at SET       — admin granted or denied (decision col)
+
+    Rules enforced at the row level:
+      • UNIQUE (appellant_kind, appellant_id, target_kind, target_id) —
+        one appeal per (appellant, target) ever. A denied appeal is the
+        final word on that piece of content / suspension.
+      • 30-day submission window enforced at the endpoint, not here
+        (we'd need the moderation timestamp denormalized to enforce
+        in-DB; cheaper to check at submit time).
+
+    Future: candidates aren't appellants today (no account model). When
+    Phase 2 ships verified-candidate accounts, add 'candidate' to
+    appellant_kind and 'suspension_candidate' to target_kind. No schema
+    rewrite needed.
+    """
+    __tablename__ = "appeals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    target_kind: Mapped[str] = mapped_column(String(24), index=True)
+    # NOT a foreign key — target_id's table varies by target_kind, so
+    # we keep it loose. The endpoints validate the (kind, id) pair on
+    # write and on read.
+    target_id: Mapped[int] = mapped_column(Integer, index=True)
+
+    appellant_kind: Mapped[str] = mapped_column(String(8))   # 'rep' | 'citizen'
+    # Same loose-FK rationale — appellant_id refers to either
+    # rep_accounts.id or citizen_accounts.id depending on
+    # appellant_kind. We don't ON DELETE CASCADE because we WANT the
+    # appeal row to survive an account deletion (audit trail).
+    appellant_id: Mapped[int] = mapped_column(Integer, index=True)
+
+    rationale: Mapped[str] = mapped_column(String(1000))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+
+    # Decision fields. NULL = pending in queue.
+    acted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None, index=True)
+    decision: Mapped[Optional[str]] = mapped_column(String(8), default=None)  # 'granted' | 'denied'
+    admin_email: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    # Optional admin note surfaced in the appellant's outcome email
+    # and in their dashboard view of the resolved appeal.
+    admin_note: Mapped[Optional[str]] = mapped_column(String(1000), default=None)
+
+
+# Dedupe index: one appeal per (appellant, target) lifetime. Denied
+# is final; the unique constraint blocks resubmission with a clear
+# violation the endpoint converts to a 409.
+Index(
+    "uq_appeal_appellant_target",
+    Appeal.appellant_kind, Appeal.appellant_id,
+    Appeal.target_kind, Appeal.target_id,
+    unique=True,
+)

@@ -77,16 +77,22 @@ def record_report(db: Session, target: Any, *, kind: str) -> bool:
         return False
 
     # Don't re-hide content that's already hidden. The check is per
-    # content type because each uses a different hide column.
+    # content type because each uses a different hide column. Also
+    # stamp hide_reason / archived_reason='auto_hidden' so the
+    # author's appeals surface correctly distinguishes auto-hide from
+    # an admin Hide click — both are appealable, but the audit log
+    # carries the difference.
     if kind == "poll":
         if getattr(target, "archived_at", None) is not None:
             return False
         target.archived_at = datetime.utcnow()
-        target.archived_reason = "reported"
+        target.archived_reason = "auto_hidden"
     else:
         if getattr(target, "deleted_at", None) is not None:
             return False
         target.deleted_at = datetime.utcnow()
+        if hasattr(target, "hide_reason"):
+            target.hide_reason = "auto_hidden"
 
     logger.warning(
         "Auto-hidden %s id=%s after %d reports (threshold=%d).",

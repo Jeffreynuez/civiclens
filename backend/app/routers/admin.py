@@ -376,22 +376,32 @@ def _target_for_report(db: Session, kind: str, report) -> Any:
 
 def _hide_target(target: Any, kind: str) -> bool:
     """Apply the right hide attribute for the target type. Returns
-    True if the target was newly hidden (False if already hidden)."""
+    True if the target was newly hidden (False if already hidden).
+    Also stamps hide_reason / archived_reason='admin_hidden' so the
+    appeals surface knows this was a moderator action (not an
+    author-deletion) and shows the Appeal button to the author."""
     if kind == "poll":
         if target.archived_at is not None:
             return False
         target.archived_at = datetime.utcnow()
-        target.archived_reason = "reported"
+        target.archived_reason = "admin_hidden"
         return True
     if target.deleted_at is not None:
         return False
     target.deleted_at = datetime.utcnow()
+    # hide_reason exists on Post / PostComment / PollComment. Set
+    # defensively in case the column is missing on some other future
+    # target type (extra hasattr guards the assignment).
+    if hasattr(target, "hide_reason"):
+        target.hide_reason = "admin_hidden"
     return True
 
 
 def _unhide_target(target: Any, kind: str) -> bool:
     """Inverse of _hide_target. Returns True if the target was just
-    un-hidden, False if it wasn't hidden to begin with."""
+    un-hidden, False if it wasn't hidden to begin with. Also clears
+    hide_reason / archived_reason so the appeals surface stops
+    treating the row as moderation-hidden."""
     if kind == "poll":
         if target.archived_at is None:
             return False
@@ -401,6 +411,8 @@ def _unhide_target(target: Any, kind: str) -> bool:
     if target.deleted_at is None:
         return False
     target.deleted_at = None
+    if hasattr(target, "hide_reason"):
+        target.hide_reason = None
     return True
 
 
@@ -725,6 +737,7 @@ def suspend_user(
             )
             for p in posts:
                 p.deleted_at = now
+                p.hide_reason = "admin_hidden"
             hidden_counts["posts"] = len(posts)
             events = (
                 db.query(RepEvent)
@@ -733,6 +746,9 @@ def suspend_user(
             )
             for e in events:
                 e.deleted_at = now
+                # RepEvent doesn't have hide_reason — events aren't an
+                # appealable surface today (no event-detail UI for the
+                # author). If we ever ship that, mirror the column here.
             hidden_counts["events"] = len(events)
         else:  # citizen
             # Citizen content: post comments, citizen-authored polls
@@ -745,6 +761,7 @@ def suspend_user(
             )
             for c in comments:
                 c.deleted_at = now
+                c.hide_reason = "admin_hidden"
             hidden_counts["post_comments"] = len(comments)
             polls = (
                 db.query(Poll)
@@ -757,7 +774,13 @@ def suspend_user(
             )
             for p in polls:
                 p.archived_at = now
-                p.archived_reason = "reported_user_suspended"
+                # Reuse 'admin_hidden' for consistency with the
+                # appeals surface — the author can appeal these even
+                # though the trigger was a user suspension. The
+                # earlier 'reported_user_suspended' value was finer-
+                # grained but not surfaced anywhere; admin_hidden is
+                # the appealable bucket.
+                p.archived_reason = "admin_hidden"
             hidden_counts["polls"] = len(polls)
             poll_comments = (
                 db.query(PollComment)
@@ -766,6 +789,7 @@ def suspend_user(
             )
             for pc in poll_comments:
                 pc.deleted_at = now
+                pc.hide_reason = "admin_hidden"
             hidden_counts["poll_comments"] = len(poll_comments)
 
     # Implicit moderation outcome: suspending the user resolves every
