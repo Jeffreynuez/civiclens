@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1400" />
+  <title>CivicView /admin — Moderation queue (design)</title>
+  <link rel="stylesheet" href="admin-styles.css?v=4" />
+  <style>
+    html, body, #root { margin: 0; padding: 0; height: 100%; font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { background: #ececec; }
+
+    /* In a DCArtboard, the AdminPage's `.ad-root` should fill the artboard. */
+    .ad-root { width: 100%; height: 100%; }
+
+    /* DC artboard label color tweak for legibility. */
+    .dc-artboard__label { font-family: 'Geist', sans-serif !important; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="admin-data.js"></script>
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="admin-glyphs.jsx"></script>
+  <script type="text/babel" src="admin-shell.jsx"></script>
+  <script type="text/babel" src="admin-queue.jsx"></script>
+  <script type="text/babel" src="admin-modals.jsx"></script>
+  <script type="text/babel" src="admin-page.jsx"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      return (
+        <DesignCanvas>
+          <DCSection id="viewports" title="Moderation queue — viewport variants" subtitle="Desktop 1440 · Tablet 820 (horizontal-scroll for the action cell) · Mobile 390 (card list, horizontal-scroll sub-nav). All three render the same /admin shell (page header band, sub-nav row, KPI strip, filter row, queue). Engineering: 'Suspend' button label is dynamic — 'Suspend citizen' or 'Suspend rep' based on target.author_kind; the modal title swaps to 'Suspend Rep. {name}?' when the target is a rep. Auto-flagged rows (Auto-detect reporter, ⚡ tag) should skip any 'suspend reporter' affordance since there is no human reporter.">
+            <DCArtboard id="desktop" label="Desktop · 1440 · Queue with mixed states" width={1440} height={1520}>
+              <AdminPage variant="desktop" />
+            </DCArtboard>
+            <DCArtboard id="tablet" label="Tablet · 820 · Same table, horizontal scroll" width={820} height={1520}>
+              <AdminPage variant="tablet" />
+            </DCArtboard>
+            <DCArtboard id="mobile" label="Mobile · 390 · Card list, horizontal sub-nav scroll" width={390} height={2300}>
+              <AdminPage variant="mobile" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="modals" title="Destructive-action modals" subtitle="Replacements for the current window.confirm. Hide is single-click. Suspend is single-screen but two sections — confirm + textarea on top, separate 'also hide existing content' opt-in below.">
+            <DCArtboard id="hide-modal" label="Hide content · single-click confirm" width={720} height={620}>
+              <AdminPage variant="desktop" bareNoNav modal="hide" modalRowIndex={0} />
+            </DCArtboard>
+            <DCArtboard id="suspend-modal" label="Suspend user · two-section, opt-in hide-history" width={720} height={780}>
+              <AdminPage variant="desktop" bareNoNav modal="suspend" modalRowIndex={0} />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="empty" title="Empty states" subtitle="Two distinct copies: 'no open reports, but resolved exist' celebrates Jeff's day; 'no reports at all' is honest about a brand-new system. Neither uses an exclamation point in the headline.">
+            <DCArtboard id="empty-open" label="Zero open reports (resolved history exists)" width={1320} height={780}>
+              <AdminPage variant="desktop" emptyState="open" />
+            </DCArtboard>
+            <DCArtboard id="empty-all" label="Zero reports ever" width={1320} height={780}>
+              <AdminPage variant="desktop" emptyState="all" initialIncludeResolved={false} />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="error" title="Inline error banner" subtitle="Sits above the table when an action fails. Uses cl-danger-soft / -border / -text. Dismissible. Table below stays interactive so Jeff can retry from the View link.">
+            <DCArtboard id="error-state" label="Action failed · banner above table" width={1440} height={1560}>
+              <AdminPage variant="desktop" showError />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="access" title="Access states" subtitle="Server-side gated. Probing is the ≤1s in-between; unauthed is for signed-out viewers; denied is for signed-in but off-allowlist accounts.">
+            <DCArtboard id="probing" label="Probing · ≤1s skeleton" width={1100} height={720}>
+              <AdminPage variant="desktop" accessState="probing" />
+            </DCArtboard>
+            <DCArtboard id="unauthed" label="Sign in required" width={1100} height={720}>
+              <AdminPage variant="desktop" accessState="unauthed" />
+            </DCArtboard>
+            <DCArtboard id="denied" label="Admin access required · off-allowlist" width={1100} height={720}>
+              <AdminPage variant="desktop" accessState="denied" />
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
