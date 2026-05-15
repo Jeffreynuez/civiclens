@@ -28,6 +28,7 @@ from app.routers import (
     feed as feed_router,
     ai as ai_router,
     admin as admin_router,
+    appeals as appeals_router,
 )
 from app.db import init_db
 from app.seed import (
@@ -118,6 +119,10 @@ app.include_router(waitlist_router.router, prefix="/api/waitlist", tags=["Pages 
 app.include_router(feed_router.router, prefix="/api/feed", tags=["Pages — Home Feed"])
 app.include_router(ai_router.router, prefix="/api/ai", tags=["AI"])
 app.include_router(admin_router.router, prefix="/api/admin", tags=["Admin"])
+# Appeals router declares its own paths under /api/appeals AND
+# /api/me/appeals AND /api/admin/appeals/... so we mount with
+# prefix="/api" rather than baking the segmentation into one prefix.
+app.include_router(appeals_router.router, prefix="/api", tags=["Appeals"])
 
 
 @app.get("/")
