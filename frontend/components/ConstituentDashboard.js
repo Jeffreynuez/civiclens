@@ -1087,10 +1087,14 @@ function HiddenByModerationSection({ citizen }) {
   useEffect(() => { if (citizen) load(); }, [citizen]);
 
   if (!citizen) return null;
-  // Hide the section entirely when there's nothing — empty state
-  // would otherwise just say "great, no hidden content!" which is
-  // noise on a dashboard that already has plenty of cards.
-  if (!loading && (!items || items.length === 0)) return null;
+  // Hide the section entirely during the initial fetch AND when
+  // the fetch confirms there's nothing — empty state would just
+  // say "great, no hidden content!" which is noise on a dashboard
+  // that already has plenty of cards. Hiding during load also
+  // prevents the .map() below from crashing on items=null, which
+  // was the original bug here.
+  if (loading) return null;
+  if (!items || items.length === 0) return null;
 
   const onAppealSuccess = (appeal) => {
     setAppealTarget(null);
