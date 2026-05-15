@@ -286,9 +286,15 @@ export default function PollsPage() {
           top: 56px assuming a 56px-tall navbar pinned above it. The
           shared Navbar component is position:relative by default; the
           wrapper here promotes it to sticky so the filter bar's sticky
-          offset lines up with what's actually on screen. */}
+          offset lines up with what's actually on screen.
+          `compact` drops the global search bar (this page is itself a
+          full-screen destination, search would compete with the polls
+          feed) and `hidePollsLink` suppresses the redundant Polls
+          self-link in the right cluster + hamburger. */}
       <div style={{ position: 'sticky', top: 0, zIndex: 100 }}>
         <Navbar
+          compact
+          hidePollsLink
           onMemberPick={handleMemberPick}
           onCandidatePick={handleCandidatePick}
           onOpenTracked={() => setTrackedOpen(true)}
@@ -299,6 +305,24 @@ export default function PollsPage() {
           onCitizenDashboard={() => setDashboardOpen(true)}
           onHome={handleHome}
         />
+      </div>
+
+      {/* Page-level top bar — back to home. Sits between the navbar
+          and the hero so the user always has a one-tap escape regardless
+          of whether they arrived from the home map, a deep link, or a
+          bookmark. */}
+      <div className="polls-topbar">
+        <button
+          type="button"
+          className="polls-topbar__back"
+          onClick={handleHome}
+          aria-label="Back to CivicView home"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 6 L8 12 L14 18" />
+          </svg>
+          <span>Back to map</span>
+        </button>
       </div>
 
       <PollsHero counts={branchCounts} />
