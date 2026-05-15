@@ -372,6 +372,172 @@ class MyAppealsResponse(BaseModel):
     items: List[AppealRead]
 
 
+# ── Caller's hidden content (drives the dashboard surface) ───────────
+class HiddenContentRow(BaseModel):
+    """One piece of moderation-hidden content the caller authored.
+    Sized for the dashboard surface — preview + when it was hidden +
+    current appeal status (so the UI knows whether to show the
+    Appeal button, 'Pending', 'Granted ✓', or 'Denied'). The
+    backend bakes appeal_status in so the frontend doesn't have to
+    cross-reference /me/appeals row-by-row.
+    """
+    target_kind: Literal["post", "post_comment", "poll", "poll_comment"]
+    target_id: int
+    preview: str
+    hidden_at: datetime
+    hide_reason: str  # 'admin_hidden' | 'auto_hidden'
+    # Appeal lifecycle for this specific row. NULL if no appeal
+    # exists yet AND we're inside the 30-day window. NULL with
+    # appealable=False means the window has closed.
+    appeal_status: Optional[Literal["pending", "granted", "denied"]] = None
+    appeal_admin_note: Optional[str] = None
+    appealable: bool   # is the Appeal button surfaceable right now?
+
+
+class HiddenContentResponse(BaseModel):
+    items: List[HiddenContentRow]
+
+
+def _appeal_status_for(
+    appeals_index: dict, kind: str, target_id: int,
+) -> tuple[Optional[str], Optional[str]]:
+    """Look up an existing appeal for (kind, target_id) in the
+    pre-built index. Returns (status, admin_note) or (None, None)."""
+    appeal = appeals_index.get((kind, target_id))
+    if appeal is None:
+        return (None, None)
+    if appeal.acted_at is None:
+        return ("pending", None)
+    return (appeal.decision, appeal.admin_note)
+
+
+@router.get("/me/hidden-content", response_model=HiddenContentResponse)
+def list_my_hidden_content(
+    db: Session = Depends(get_db),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+) -> HiddenContentResponse:
+    """List every piece of moderation-hidden content the caller
+    authored, with the current appeal status per row.
+
+    Filters:
+      • hide_reason / archived_reason IS NOT NULL — author-deletes
+        don't surface here.
+      • Within the 30-day window — older items are excluded since
+        they can no longer be appealed (frontend shouldn't show
+        them as actionable). If we ever want a "history" view of
+        old hides, that's a separate endpoint.
+
+    Pre-fetches the caller's appeals once so the per-row appeal-
+    status lookup is O(1) instead of a SELECT-per-row.
+    """
+    if me_rep is None and me_citizen is None:
+        raise HTTPException(status_code=401, detail="Sign in.")
+
+    cutoff = datetime.utcnow() - timedelta(days=APPEAL_WINDOW_DAYS)
+    appellant_kind = "rep" if me_rep is not None else "citizen"
+    appellant_id = me_rep.id if me_rep is not None else me_citizen.id
+
+    # Build the (target_kind, target_id) -> Appeal index once.
+    appeals = (
+        db.query(Appeal)
+        .filter(
+            Appeal.appellant_kind == appellant_kind,
+            Appeal.appellant_id == appellant_id,
+        )
+        .all()
+    )
+    appeals_index = {(a.target_kind, a.target_id): a for a in appeals}
+
+    out: List[HiddenContentRow] = []
+
+    if me_rep is not None:
+        # Rep's own hidden posts.
+        posts = (
+            db.query(Post)
+            .filter(
+                Post.author_id == me_rep.id,
+                Post.deleted_at.is_not(None),
+                Post.hide_reason.is_not(None),
+                Post.deleted_at >= cutoff,
+            )
+            .order_by(Post.deleted_at.desc())
+            .all()
+        )
+        for p in posts:
+            status, note = _appeal_status_for(appeals_index, "post", p.id)
+            preview = (p.body or "")[:200]
+            out.append(HiddenContentRow(
+                target_kind="post", target_id=p.id, preview=preview,
+                hidden_at=p.deleted_at, hide_reason=p.hide_reason,
+                appeal_status=status, appeal_admin_note=note,
+                appealable=(status is None),
+            ))
+    else:
+        # Citizen's hidden post-comments + polls + poll-comments.
+        comments = (
+            db.query(PostComment)
+            .filter(
+                PostComment.citizen_id == me_citizen.id,
+                PostComment.deleted_at.is_not(None),
+                PostComment.hide_reason.is_not(None),
+                PostComment.deleted_at >= cutoff,
+            )
+            .order_by(PostComment.deleted_at.desc())
+            .all()
+        )
+        for c in comments:
+            status, note = _appeal_status_for(appeals_index, "post_comment", c.id)
+            out.append(HiddenContentRow(
+                target_kind="post_comment", target_id=c.id, preview=(c.body or "")[:200],
+                hidden_at=c.deleted_at, hide_reason=c.hide_reason,
+                appeal_status=status, appeal_admin_note=note,
+                appealable=(status is None),
+            ))
+        polls = (
+            db.query(Poll)
+            .filter(
+                Poll.author_kind == "citizen",
+                Poll.author_citizen_id == me_citizen.id,
+                Poll.archived_at.is_not(None),
+                Poll.archived_reason.in_(("admin_hidden", "auto_hidden")),
+                Poll.archived_at >= cutoff,
+            )
+            .order_by(Poll.archived_at.desc())
+            .all()
+        )
+        for p in polls:
+            status, note = _appeal_status_for(appeals_index, "poll", p.id)
+            out.append(HiddenContentRow(
+                target_kind="poll", target_id=p.id, preview=(p.question or "")[:200],
+                hidden_at=p.archived_at, hide_reason=p.archived_reason,
+                appeal_status=status, appeal_admin_note=note,
+                appealable=(status is None),
+            ))
+        poll_comments = (
+            db.query(PollComment)
+            .filter(
+                PollComment.citizen_id == me_citizen.id,
+                PollComment.deleted_at.is_not(None),
+                PollComment.hide_reason.is_not(None),
+                PollComment.deleted_at >= cutoff,
+            )
+            .order_by(PollComment.deleted_at.desc())
+            .all()
+        )
+        for pc in poll_comments:
+            status, note = _appeal_status_for(appeals_index, "poll_comment", pc.id)
+            out.append(HiddenContentRow(
+                target_kind="poll_comment", target_id=pc.id, preview=(pc.body or "")[:200],
+                hidden_at=pc.deleted_at, hide_reason=pc.hide_reason,
+                appeal_status=status, appeal_admin_note=note,
+                appealable=(status is None),
+            ))
+
+    out.sort(key=lambda r: r.hidden_at, reverse=True)
+    return HiddenContentResponse(items=out)
+
+
 @router.get("/me/appeals", response_model=MyAppealsResponse)
 def list_my_appeals(
     db: Session = Depends(get_db),

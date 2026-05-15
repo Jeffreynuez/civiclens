@@ -238,6 +238,42 @@ export async function adminUnreadCount() {
   return request('/api/admin/reports/unread-count');
 }
 
+// ── Appeals (user side) ─────────────────────────────────────────────
+// "Hidden by moderation" content for the dashboard surface — every
+// piece of moderation-hidden content the caller authored, within
+// the 30-day appeal window, with current appeal status per row.
+export async function fetchMyHiddenContent() {
+  return request('/api/me/hidden-content');
+}
+
+// Caller's full appeal history (pending + resolved). Currently
+// powers any view that wants to show resolved appeals beyond the
+// 30-day "Hidden by moderation" window.
+export async function fetchMyAppeals() {
+  return request('/api/me/appeals');
+}
+
+// Submit an appeal on a piece of hidden content the caller authored.
+// `targetKind` is 'post' | 'post_comment' | 'poll' | 'poll_comment'.
+// rationale must be 50-1000 chars (server enforces; UI should too).
+// Returns 409 if already appealed (denied is final).
+export async function submitAppeal({ targetKind, targetId, rationale }) {
+  return request('/api/appeals', {
+    method: 'POST',
+    body: { target_kind: targetKind, target_id: targetId, rationale },
+  });
+}
+
+// Suspended-user appeal — public endpoint that re-verifies email +
+// password (no session granted). Used in the login modal's 403
+// fallback flow. Per-IP rate-limited server-side (5/24h).
+export async function submitSuspensionAppeal({ email, password, rationale }) {
+  return request('/api/appeals/suspension', {
+    method: 'POST',
+    body: { email, password, rationale },
+  });
+}
+
 // List all suspended user accounts (rep + citizen) for the admin
 // /admin/users page. Newest suspension first, capped at 200.
 export async function adminListSuspendedUsers() {

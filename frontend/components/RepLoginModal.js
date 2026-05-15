@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { loginRep } from '../lib/auth';
+import { submitSuspensionAppeal } from '../lib/pagesApi';
 import CivicLensLogo from './brand/CivicLensLogo';
 import { ModalShell, Button } from './ui';
 
@@ -100,19 +101,57 @@ export default function RepLoginModal({ open, onClose, onSuccess, initialEmail =
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
 
+  // Suspension-appeal flow state — same shape as the citizen modal,
+  // see CitizenLoginModal.js for the full reasoning.
+  const [suspendedMessage, setSuspendedMessage] = useState(null);
+  const [appealRationale, setAppealRationale] = useState('');
+  const [appealBusy, setAppealBusy] = useState(false);
+  const [appealResult, setAppealResult] = useState(null);
+
   const submit = async () => {
     if (!canSubmit) return;
     setBusy(true);
     setErr(null);
-    const { ok, error } = await loginRep(email.trim(), password);
+    const { ok, error, status } = await loginRep(email.trim(), password);
     setBusy(false);
-    if (!ok) {
-      // Security note: do NOT reveal whether the email exists.
-      // Combined message keeps enumeration attacks at bay.
-      setErr(error || "Email or password didn't match. Try again or reset it.");
+    if (ok) {
+      if (onSuccess) onSuccess();
       return;
     }
-    if (onSuccess) onSuccess();
+    if (status === 403) {
+      // 403 = creds matched, account is suspended. Switch into the
+      // appeal flow so the rep can file recourse without bouncing
+      // through a separate page.
+      setSuspendedMessage(error || 'This account has been suspended.');
+      return;
+    }
+    // Security note: do NOT reveal whether the email exists.
+    // Combined message keeps enumeration attacks at bay.
+    setErr(error || "Email or password didn't match. Try again or reset it.");
+  };
+
+  const submitAppeal = async () => {
+    const trimmed = appealRationale.trim();
+    if (trimmed.length < 50 || appealBusy) return;
+    setAppealBusy(true);
+    const { data, error } = await submitSuspensionAppeal({
+      email: email.trim(),
+      password,
+      rationale: trimmed,
+    });
+    setAppealBusy(false);
+    if (error || !data) {
+      setAppealResult({ ok: false, message: error || 'Could not file appeal.' });
+      return;
+    }
+    setAppealResult({ ok: true, message: data.message });
+  };
+
+  const cancelAppealFlow = () => {
+    setSuspendedMessage(null);
+    setAppealRationale('');
+    setAppealBusy(false);
+    setAppealResult(null);
   };
 
   const fillDemo = (account) => {
@@ -295,17 +334,128 @@ export default function RepLoginModal({ open, onClose, onSuccess, initialEmail =
         </div>
       )}
 
-      {/* Actions */}
-      <Button
-        variant="primary"
-        size="lg"
-        onClick={submit}
-        loading={busy}
-        disabled={!canSubmit}
-        style={{ width: '100%', marginBottom: 8 }}
-      >
-        Sign in
-      </Button>
+      {/* Suspension-appeal flow — same UX pattern as the citizen
+          login. Triggered by 403 from /api/auth/login meaning creds
+          matched but the rep account is suspended. */}
+      {suspendedMessage && !appealResult && (
+        <div
+          role="region"
+          aria-label="Suspension appeal"
+          style={{
+            marginBottom: 12,
+            padding: '14px',
+            background: 'var(--cl-danger-soft)',
+            border: '1px solid var(--cl-danger-border)',
+            borderRadius: 'var(--cl-radius-md)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          <div style={{ fontSize: 'var(--cl-text-sm)', color: 'var(--cl-danger-text)', lineHeight: 1.5 }}>
+            {suspendedMessage}
+          </div>
+          <div style={{ fontSize: 'var(--cl-text-xs)', color: 'var(--cl-text)', lineHeight: 1.5 }}>
+            Think this was wrong? Write a brief rationale (50–1000 chars) and we&rsquo;ll review.
+            You only get one appeal per suspension; an admin will email you the outcome.
+          </div>
+          <textarea
+            value={appealRationale}
+            onChange={(e) => setAppealRationale(e.target.value.slice(0, 1000))}
+            placeholder="Why should this suspension be reconsidered?"
+            rows={5}
+            disabled={appealBusy}
+            style={{
+              padding: '8px 10px',
+              border: '1px solid var(--cl-border)',
+              borderRadius: 'var(--cl-radius-md)',
+              fontSize: 'var(--cl-text-sm)',
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: 'var(--cl-text-2xs)',
+                color: appealRationale.length < 50 ? 'var(--cl-text-light)' : 'var(--cl-accent)',
+              }}
+            >
+              {appealRationale.length}/1000
+              {appealRationale.length < 50 && ` — at least ${50 - appealRationale.length} more characters`}
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                onClick={cancelAppealFlow}
+                style={{
+                  padding: '6px 12px',
+                  background: 'white',
+                  border: '1px solid var(--cl-border)',
+                  borderRadius: 'var(--cl-radius-md)',
+                  fontSize: 'var(--cl-text-xs)',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Back
+              </button>
+              <Button
+                variant="primary"
+                onClick={submitAppeal}
+                loading={appealBusy}
+                disabled={appealRationale.trim().length < 50 || appealBusy}
+              >
+                Submit appeal
+              </Button>
+            </div>
+          </div>
+          <div style={{ fontSize: 'var(--cl-text-2xs)', color: 'var(--cl-text-light)', borderTop: '1px solid var(--cl-border)', paddingTop: 8 }}>
+            Prefer email?{' '}
+            <a
+              href={`mailto:civicview@civicview.app?subject=${encodeURIComponent(`Suspension appeal: ${email.trim()}`)}&body=${encodeURIComponent('I am appealing my rep account suspension for the following reasons:\n\n')}`}
+              style={{ color: 'var(--cl-accent)', textDecoration: 'underline' }}
+            >
+              Email civicview@civicview.app
+            </a>{' '}
+            instead.
+          </div>
+        </div>
+      )}
+
+      {appealResult && (
+        <div
+          role="status"
+          style={{
+            marginBottom: 12,
+            padding: '12px',
+            background: appealResult.ok ? 'var(--cl-up-soft)' : 'var(--cl-danger-soft)',
+            color: appealResult.ok ? 'var(--cl-text)' : 'var(--cl-danger-text)',
+            border: `1px solid ${appealResult.ok ? 'var(--cl-up)' : 'var(--cl-danger-border)'}`,
+            borderRadius: 'var(--cl-radius-md)',
+            fontSize: 'var(--cl-text-sm)',
+            lineHeight: 1.5,
+          }}
+        >
+          {appealResult.message}
+        </div>
+      )}
+
+      {/* Actions — Sign in CTA hidden during appeal flow so the user
+          isn't presented with competing actions. */}
+      {!suspendedMessage && !appealResult && (
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={submit}
+          loading={busy}
+          disabled={!canSubmit}
+          style={{ width: '100%', marginBottom: 8 }}
+        >
+          Sign in
+        </Button>
+      )}
 
       {/* Demo accounts — collapsed by default */}
       <div
