@@ -1194,6 +1194,11 @@ table.ad-table {
   color: var(--cl-primary);
   border-color: rgba(27, 38, 59, 0.18);
 }
+.ad-kindpill--candidate {
+  background: var(--cl-independent-soft);
+  color: var(--cl-independent);
+  border-color: rgba(108, 62, 193, 0.22);
+}
 .ad-typechip {
   display: inline-flex;
   align-items: center;
@@ -1345,6 +1350,11 @@ table.ad-table {
   background: var(--cl-primary);
   color: white;
   border-color: var(--cl-primary);
+}
+.ad-appeal__avatar--candidate {
+  background: var(--cl-independent-soft);
+  color: var(--cl-independent);
+  border-color: rgba(108, 62, 193, 0.22);
 }
 .ad-appeal__appellant-meta {
   display: flex;
@@ -1540,6 +1550,11 @@ table.ad-table {
   background: var(--cl-primary);
   color: white;
   border-color: var(--cl-primary);
+}
+.ad-account-avatar--candidate {
+  background: var(--cl-independent-soft);
+  color: var(--cl-independent);
+  border-color: rgba(108, 62, 193, 0.22);
 }
 .ad-cell-email {
   font-family: var(--cl-font-mono);

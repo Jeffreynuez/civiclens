@@ -130,6 +130,20 @@ function initialsFromName(name) {
   return name.split(/\s+/).map((s) => s[0] || '').slice(0, 2).join('').toUpperCase() || '?';
 }
 
+// Helpers for the three account kinds the admin surface handles —
+// rep, citizen, and candidate. Centralized so adding kinds in the
+// future doesn't require sweeping every conditional in the page.
+function kindToken(kind) {
+  if (kind === 'rep') return 'rep';
+  if (kind === 'candidate') return 'candidate';
+  return 'citizen';
+}
+function kindLabel(kind) {
+  if (kind === 'rep') return 'Rep';
+  if (kind === 'candidate') return 'Candidate';
+  return 'Citizen';
+}
+
 // Next.js requires useSearchParams() to live under a <Suspense> boundary
 // because it forces client-side rendering. The wrapper keeps the
 // page-level prerender happy while the inner component runs its
@@ -1170,14 +1184,14 @@ function AppealCard({ appeal, onGrant, onDeny }) {
       </header>
 
       <div className="ad-appeal__appellant">
-        <div className={`ad-appeal__avatar ad-appeal__avatar--${appeal.appellant_kind === 'rep' ? 'rep' : 'citizen'}`}>
+        <div className={`ad-appeal__avatar ad-appeal__avatar--${kindToken(appeal.appellant_kind)}`}>
           {initialsFromName(appeal.appellant_name)}
         </div>
         <div className="ad-appeal__appellant-meta">
           <div className="ad-appeal__appellant-name">
             {appeal.appellant_name || 'Anonymous appellant'}
-            <span className={`ad-kindpill ad-kindpill--${appeal.appellant_kind === 'rep' ? 'rep' : 'citizen'}`}>
-              {appeal.appellant_kind === 'rep' ? 'Rep' : 'Citizen'}
+            <span className={`ad-kindpill ad-kindpill--${kindToken(appeal.appellant_kind)}`}>
+              {kindLabel(appeal.appellant_kind)}
             </span>
           </div>
           {appeal.appellant_email && (
@@ -1387,13 +1401,13 @@ function SuspendedTable({ rows, onUnsuspend, onViewAppeal }) {
             {rows.map((u) => (
               <tr key={`${u.kind}-${u.id}`} className={u.hasAppeal ? 'is-appeal' : ''}>
                 <td>
-                  <span className={`ad-kindpill ad-kindpill--${u.kind === 'rep' ? 'rep' : 'citizen'}`}>
-                    {u.kind === 'rep' ? 'Rep' : 'Citizen'}
+                  <span className={`ad-kindpill ad-kindpill--${kindToken(u.kind)}`}>
+                    {kindLabel(u.kind)}
                   </span>
                 </td>
                 <td>
                   <div className="ad-cell-account">
-                    <div className={`ad-account-avatar ad-account-avatar--${u.kind === 'rep' ? 'rep' : 'citizen'}`} style={{ width: 32, height: 32, fontSize: '0.78rem' }}>
+                    <div className={`ad-account-avatar ad-account-avatar--${kindToken(u.kind)}`} style={{ width: 32, height: 32, fontSize: '0.78rem' }}>
                       {initialsFromName(u.display_name)}
                     </div>
                     <div>
@@ -1457,7 +1471,7 @@ function SuspendedCardList({ rows, onUnsuspend, onViewAppeal }) {
         <div key={`${u.kind}-${u.id}`} className={`ad-card ${u.hasAppeal ? 'is-appeal' : ''}`}>
           <div className="ad-card__hdr">
             <div className="ad-card__type" style={{ gap: 10 }}>
-              <div className={`ad-account-avatar ad-account-avatar--${u.kind === 'rep' ? 'rep' : 'citizen'}`} style={{ width: 36, height: 36, fontSize: '0.86rem' }}>
+              <div className={`ad-account-avatar ad-account-avatar--${kindToken(u.kind)}`} style={{ width: 36, height: 36, fontSize: '0.86rem' }}>
                 {initialsFromName(u.display_name)}
               </div>
               <div className="ad-card__type-text">
@@ -1748,8 +1762,8 @@ function UnsuspendModal({ user, hasAppeal, onCancel, onConfirm }) {
           </div>
           <div className="ad-modal__contentblock" style={{ borderLeftColor: 'var(--cl-success)' }}>
             <div className="ad-modal__contentmeta">
-              <span className={`ad-kindpill ad-kindpill--${user.kind === 'rep' ? 'rep' : 'citizen'}`}>
-                {user.kind === 'rep' ? 'Rep' : 'Citizen'}
+              <span className={`ad-kindpill ad-kindpill--${kindToken(user.kind)}`}>
+                {kindLabel(user.kind)}
               </span>
               <span>·</span>
               <span style={{ fontFamily: 'var(--cl-font-mono)', textTransform: 'none', letterSpacing: 0 }}>{user.email}</span>

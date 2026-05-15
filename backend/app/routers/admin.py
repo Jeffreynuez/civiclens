@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models.pages import (
+    CandidateAccount,
     CitizenAccount,
     CommentReport,
     Poll,
@@ -523,7 +524,7 @@ def unhide_target(
 # themselves (defensive — would lock the operator out of /admin if
 # they fat-finger the wrong user id).
 
-UserKind = Literal["rep", "citizen"]
+UserKind = Literal["rep", "citizen", "candidate"]
 
 
 class UserSuspendPayload(BaseModel):
@@ -554,6 +555,8 @@ def _load_user_account_or_404(db: Session, kind: str, user_id: int):
         acc = db.get(RepAccount, user_id)
     elif kind == "citizen":
         acc = db.get(CitizenAccount, user_id)
+    elif kind == "candidate":
+        acc = db.get(CandidateAccount, user_id)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown user kind: {kind!r}")
     if acc is None:
@@ -609,6 +612,12 @@ def _resolve_reports_against_user(
         ):
             r.acted_at = now
             counts["poll"] += 1
+        return counts
+
+    if user_kind == "candidate":
+        # Candidate accounts can't author content yet (Phase 4 ships
+        # author_candidate_id on Posts). Until then there's nothing
+        # for the suspend-cascade to resolve. Return zero counts.
         return counts
 
     # Citizen — comments, polls, poll-comments.
@@ -750,6 +759,12 @@ def suspend_user(
                 # appealable surface today (no event-detail UI for the
                 # author). If we ever ship that, mirror the column here.
             hidden_counts["events"] = len(events)
+        elif kind == "candidate":
+            # Candidate accounts can't author content yet (Phase 4
+            # ships Posts.author_candidate_id). Until then cascade-hide
+            # is a no-op for candidates. Recording empty counts keeps
+            # the response shape uniform across kinds.
+            hidden_counts = {"posts": 0, "events": 0}
         else:  # citizen
             # Citizen content: post comments, citizen-authored polls
             # (archived_at + reason='reported_user_suspended'), and
@@ -920,6 +935,21 @@ def list_suspended_users(
             suspended_reason=c.suspended_reason,
         ))
 
-    # Newest-first across both kinds, then cap.
+    cand_rows = (
+        db.query(CandidateAccount)
+        .filter(CandidateAccount.suspended_at.isnot(None))
+        .order_by(CandidateAccount.suspended_at.desc())
+        .limit(200)
+        .all()
+    )
+    for cand in cand_rows:
+        out.append(SuspendedUserRow(
+            kind="candidate", id=cand.id, email=cand.email,
+            display_name=cand.display_name,
+            suspended_at=cand.suspended_at,
+            suspended_reason=cand.suspended_reason,
+        ))
+
+    # Newest-first across all three kinds, then cap.
     out.sort(key=lambda u: u.suspended_at, reverse=True)
     return SuspendedUserListResponse(items=out[:200])

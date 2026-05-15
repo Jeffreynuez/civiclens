@@ -75,6 +75,70 @@ class RepAccount(Base):
     )
 
 
+# ── Candidate accounts (Phase 3+) ─────────────────────────────────────
+class CandidateAccount(Base):
+    """
+    Mirror of RepAccount for declared candidates. A CandidateAccount is
+    1:1 with a candidate row in ElectionsService (matched on
+    `candidate_id`). The account owner can post, attach polls, and add
+    events on the candidate's page — same engagement surface a sitting
+    rep gets after claiming.
+
+    Differences from RepAccount worth calling out:
+      • `candidate_id` mirrors RepAccount.official_id but uses the
+        ElectionsService id space (e.g. "fl-cand-byron-donalds")
+        rather than the rep id space (bioguide_id, state seed id).
+      • There is no `role` field — the candidate's seeking_office
+        comes from the curated registry and updates as the race
+        evolves; storing it here would let it drift.
+      • `claim_status` distinguishes pending claims (waitlist signup
+        approved → account provisioned but candidate hasn't completed
+        identity verification yet) from active claims. Phase 3 ships
+        with manual approval; Phase 4+ may auto-approve via FEC ID
+        match or similar.
+
+    Phase 1 + 2 only use this table for admin listing + suspension /
+    appeal plumbing. Phase 3 adds auth endpoints; Phase 4 wires
+    Posts.author_candidate_id and the engagement filter.
+    """
+    __tablename__ = "candidate_accounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Matches the candidate id used in ElectionsService (e.g.
+    # "fl-cand-byron-donalds"). Indexed + unique because it's the
+    # primary lookup key when resolving page ownership.
+    candidate_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    # Cached display name — refreshed from the registry at login.
+    display_name: Mapped[str] = mapped_column(String(255))
+
+    # Geographic ownership for engagement filtering. owner_state is
+    # the 2-char code the candidate is running in. owner_district is
+    # the CD string when the candidate is running for House (e.g.
+    # "FL-19"); null for statewide / executive races.
+    owner_state: Mapped[Optional[str]] = mapped_column(String(2), default=None)
+    owner_district: Mapped[Optional[str]] = mapped_column(String(8), default=None)
+    owner_city: Mapped[Optional[str]] = mapped_column(String(128), default=None)
+
+    # Claim lifecycle: 'pending' (waitlist approved, account exists,
+    # candidate hasn't logged in yet) → 'active' (candidate verified
+    # and posting). 'pending' accounts can't sign in.
+    claim_status: Mapped[str] = mapped_column(String(16), default="pending")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Same suspension columns as RepAccount + CitizenAccount so the
+    # admin moderation surface is uniform across the three account
+    # kinds. When set, the candidate-auth dependency treats the
+    # account as not-signed-in and the admin endpoints can list +
+    # restore the suspended set via the existing tabs.
+    suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    suspended_reason: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+
+
 # ── Posts + Polls ─────────────────────────────────────────────────────
 class Post(Base):
     __tablename__ = "posts"
@@ -790,11 +854,14 @@ class Appeal(Base):
     # write and on read.
     target_id: Mapped[int] = mapped_column(Integer, index=True)
 
-    appellant_kind: Mapped[str] = mapped_column(String(8))   # 'rep' | 'citizen'
+    appellant_kind: Mapped[str] = mapped_column(String(16))  # 'rep' | 'citizen' | 'candidate'
     # Same loose-FK rationale — appellant_id refers to either
-    # rep_accounts.id or citizen_accounts.id depending on
-    # appellant_kind. We don't ON DELETE CASCADE because we WANT the
-    # appeal row to survive an account deletion (audit trail).
+    # rep_accounts.id, citizen_accounts.id, or candidate_accounts.id
+    # depending on appellant_kind. We don't ON DELETE CASCADE because
+    # we WANT the appeal row to survive an account deletion (audit
+    # trail). String length bumped from 8 → 16 in Phase 2 to fit
+    # 'candidate'; the auto-migrate handles the column resize on next
+    # boot.
     appellant_id: Mapped[int] = mapped_column(Integer, index=True)
 
     rationale: Mapped[str] = mapped_column(String(1000))
