@@ -315,7 +315,11 @@ export default function ProfileView({
     // ── Congress-member tabs ────────────────────────────────────────
     if (activeTab === 'bills' && isCongressRole && !billsState.loaded && !billsState.loading) {
       setBillsState((s) => ({ ...s, loading: true }));
-      fetchMemberBills(member.bioguide_id, 10).then(({ data, isLive }) => {
+      // Fetch the maximum the backend allows (50 per category — sponsored
+      // + cosponsored) so the BillsTab can offer a "Show all" expansion
+      // without a second round-trip. The default render still caps at
+      // the first 10 visually; the rest are revealed on demand.
+      fetchMemberBills(member.bioguide_id, 50).then(({ data, isLive }) => {
         setBillsState({ loading: false, loaded: true, data, isLive });
       });
     }
@@ -1323,9 +1327,18 @@ function formatTenure(from, to) {
 }
 
 // ─── Bills ────────────────────────────────────────────────────────────
+// Renders sponsored + cosponsored bill lists for a Congress member.
+//
+// Each list collapses to INITIAL_VISIBLE rows by default with a "Show
+// all N" button — the backend fetch pulls up to 50 per category, but
+// dropping all 100 inline at once made the tab unscannable. The
+// expansion is per-list so a rep with 50 cosponsored bills doesn't
+// blow up the page until the user explicitly asks for them.
 function BillsTab({ state, member, onNotify }) {
   // Subscribe so Track buttons re-render when state mutates anywhere.
   useTrackedBills();
+  const [sponsoredShowAll, setSponsoredShowAll] = useState(false);
+  const [cosponsoredShowAll, setCosponsoredShowAll] = useState(false);
 
   if (state.loading || !state.loaded) {
     return <LoadingState label="Loading bills…" />;
@@ -1337,15 +1350,30 @@ function BillsTab({ state, member, onNotify }) {
     return <EmptyState message="No bills found for this member in the current Congress." />;
   }
 
+  const INITIAL_VISIBLE = 10;
+  const sponsoredVisible = sponsoredShowAll ? sponsored : sponsored.slice(0, INITIAL_VISIBLE);
+  const cosponsoredVisible = cosponsoredShowAll ? cosponsored : cosponsored.slice(0, INITIAL_VISIBLE);
+
   return (
     <div>
       <SectionHeader>Sponsored ({sponsored.length})</SectionHeader>
       {sponsored.length === 0 ? (
         <EmptyNote>No sponsored bills.</EmptyNote>
       ) : (
-        sponsored.map((b, i) => (
-          <BillCard key={`s-${i}`} bill={b} member={member} onNotify={onNotify} />
-        ))
+        <>
+          {sponsoredVisible.map((b, i) => (
+            <BillCard key={`s-${i}`} bill={b} member={member} onNotify={onNotify} />
+          ))}
+          {sponsored.length > INITIAL_VISIBLE && (
+            <ShowMoreButton
+              showingAll={sponsoredShowAll}
+              total={sponsored.length}
+              visible={INITIAL_VISIBLE}
+              label="sponsored bill"
+              onClick={() => setSponsoredShowAll((v) => !v)}
+            />
+          )}
+        </>
       )}
 
       <div style={{ height: '16px' }} />
@@ -1354,11 +1382,60 @@ function BillsTab({ state, member, onNotify }) {
       {cosponsored.length === 0 ? (
         <EmptyNote>No cosponsored bills.</EmptyNote>
       ) : (
-        cosponsored.map((b, i) => (
-          <BillCard key={`c-${i}`} bill={b} member={member} onNotify={onNotify} />
-        ))
+        <>
+          {cosponsoredVisible.map((b, i) => (
+            <BillCard key={`c-${i}`} bill={b} member={member} onNotify={onNotify} />
+          ))}
+          {cosponsored.length > INITIAL_VISIBLE && (
+            <ShowMoreButton
+              showingAll={cosponsoredShowAll}
+              total={cosponsored.length}
+              visible={INITIAL_VISIBLE}
+              label="cosponsored bill"
+              onClick={() => setCosponsoredShowAll((v) => !v)}
+            />
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+function ShowMoreButton({ showingAll, total, visible, label, onClick }) {
+  const remaining = total - visible;
+  const noun = total === 1 ? label : `${label}s`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        marginTop: 4,
+        padding: '8px 12px',
+        background: 'white',
+        border: '1px dashed var(--cl-border-strong)',
+        borderRadius: 8,
+        fontSize: '0.8rem',
+        fontWeight: 600,
+        color: 'var(--cl-accent)',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        transition: 'background 0.15s, border-color 0.15s',
+      }}
+      onMouseOver={(e) => {
+        e.currentTarget.style.background = 'var(--cl-accent-soft)';
+        e.currentTarget.style.borderColor = 'var(--cl-accent)';
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.background = 'white';
+        e.currentTarget.style.borderColor = 'var(--cl-border-strong)';
+      }}
+    >
+      {showingAll
+        ? `Show fewer (collapse to first ${visible})`
+        : `Show all ${total} ${noun} (+${remaining} more)`}
+    </button>
   );
 }
 
@@ -1529,10 +1606,32 @@ function BillCard({ bill, member, onNotify }) {
             )}
 
             {!summaryLoading && !summaryError && summary && !summary.has_crs && !summary.has_plain_english && (
-              <div style={{ color: 'var(--cl-text-light)', fontStyle: 'italic', fontSize: '0.8rem' }}>
-                No summary is on file at Congress.gov yet for this bill — usually within
-                a few days of introduction. Check back soon.
-              </div>
+              <>
+                <div style={{ color: 'var(--cl-text-light)', fontStyle: 'italic', fontSize: '0.8rem', marginBottom: 10 }}>
+                  Congress.gov hasn&rsquo;t published a CRS summary for this bill yet —
+                  the Congressional Research Service usually writes one within a few
+                  days of introduction. You can still generate an AI summary from
+                  the bill title and committee assignment below.
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTranslate}
+                  disabled={translating}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    background: translating ? 'var(--cl-bg-soft)' : 'var(--cl-warning)',
+                    color: 'var(--cl-text)',
+                    border: '1px solid var(--cl-warning-border)',
+                    borderRadius: 999,
+                    cursor: translating ? 'wait' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {translating ? 'Generating…' : '✨ Generate AI summary'}
+                </button>
+              </>
             )}
 
             {!summaryLoading && showCrs && (
