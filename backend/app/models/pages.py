@@ -230,20 +230,34 @@ class PostImage(Base):
 # ── Reactions + comments (citizen-gated engagement) ──────────────────
 class PostReaction(Base):
     """
-    Up/down reaction from a verified citizen on a single post. One
-    reaction per (post, citizen) — flipping up↔down updates the row;
-    re-sending the same kind deletes it.
+    Up/down reaction on a single post. Exactly ONE of citizen_id /
+    author_rep_id is set per row (XOR enforced at the route layer —
+    SQLite can't enforce a cross-nullable CHECK cleanly).
+
+    citizen_id is the original engagement path (citizens reacting to a
+    rep's post). author_rep_id was added for Phase 2 of self-
+    engagement: a rep can react to their own post on a page they
+    own. The two unique indexes below let both paths coexist
+    without false collisions (SQLite treats NULLs in unique indexes
+    individually).
 
     Geography columns are denormalized from CitizenAccount at write
     time so the owner-side engagement filter can roll up reactions by
-    scope without a join.
+    scope without a join. For rep-authored engagement the scope
+    columns are all NULL — the rep doesn't have a constituency-of-one
+    geography and rollups treat rep engagement as scope='country'.
     """
     __tablename__ = "post_reactions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     post_id: Mapped[int] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), index=True)
-    citizen_id: Mapped[int] = mapped_column(
-        ForeignKey("citizen_accounts.id", ondelete="CASCADE"), index=True,
+    citizen_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    author_rep_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
     )
     # 'up' or 'down'. Kept as a short string rather than a DB enum so we
     # can add neutral reactions (heart, eyes, etc.) later without a
@@ -258,25 +272,41 @@ class PostReaction(Base):
     post: Mapped["Post"] = relationship(back_populates="reactions")
 
 
+# One reaction per (post, citizen) AND one per (post, rep). NULLs in
+# the author column don't collide thanks to SQLite/Postgres unique-
+# index NULL-distinct semantics, so a rep-row and a citizen-row on
+# the same post coexist cleanly.
 Index("uq_post_reaction_citizen", PostReaction.post_id, PostReaction.citizen_id, unique=True)
+Index("uq_post_reaction_rep",     PostReaction.post_id, PostReaction.author_rep_id, unique=True)
 
 
 class PostComment(Base):
     """
-    Flat comment on a post. Citizen-gated writes. Soft-delete so the
-    author or the page owner can remove abusive content without losing
-    the ID for moderation review.
+    Flat comment on a post. Soft-delete so the author or moderation
+    can remove abusive content without losing the ID for review.
+
+    Exactly ONE of citizen_id / author_rep_id is set per row (XOR
+    enforced at the route layer). citizen_id is the original path
+    (citizens commenting on a rep's post); author_rep_id was added
+    for Phase 2 self-engagement so a rep can comment on their own
+    post.
     """
     __tablename__ = "post_comments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     post_id: Mapped[int] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), index=True)
-    citizen_id: Mapped[int] = mapped_column(
-        ForeignKey("citizen_accounts.id", ondelete="CASCADE"), index=True,
+    citizen_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
     )
-    # Cached for read-side so we don't JOIN citizen_accounts just to
-    # render a name. Kept in sync from CitizenAccount.display_name at
-    # write time; UI will show (Unverified) next to it.
+    author_rep_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    # Cached display name so render-side doesn't JOIN. For citizen
+    # commenters this is CitizenAccount.display_name; for rep
+    # commenters it's RepAccount.display_name. Kept in sync at
+    # write time. UI shows (Unverified) next to citizen names.
     citizen_display_name: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(String(1000))
     scope_state: Mapped[Optional[str]] = mapped_column(String(2), default=None, index=True)
@@ -331,11 +361,13 @@ class PostComment(Base):
 
 class CommentReaction(Base):
     """
-    Up/down reaction from a verified citizen on a single comment.
-    Shape mirrors PostReaction exactly — one row per (comment, citizen)
-    enforced by a unique index; geography columns are denormalized from
-    CitizenAccount at write time so a later "most-engaged districts"
-    rollup doesn't have to join citizen_accounts.
+    Up/down reaction on a single comment. Mirrors PostReaction's
+    dual-author shape — exactly one of citizen_id / author_rep_id is
+    set per row, two unique indexes prevent dupes per identity per
+    comment without colliding across identity kinds. Geography
+    columns are denormalized from CitizenAccount at write time so a
+    later "most-engaged districts" rollup doesn't have to join
+    citizen_accounts.
     """
     __tablename__ = "comment_reactions"
 
@@ -343,8 +375,13 @@ class CommentReaction(Base):
     comment_id: Mapped[int] = mapped_column(
         ForeignKey("post_comments.id", ondelete="CASCADE"), index=True,
     )
-    citizen_id: Mapped[int] = mapped_column(
-        ForeignKey("citizen_accounts.id", ondelete="CASCADE"), index=True,
+    citizen_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    author_rep_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
     )
     kind: Mapped[str] = mapped_column(String(8))   # 'up' | 'down'
     scope_state: Mapped[Optional[str]] = mapped_column(String(2), default=None, index=True)
@@ -357,6 +394,7 @@ class CommentReaction(Base):
 
 
 Index("uq_comment_reaction_citizen", CommentReaction.comment_id, CommentReaction.citizen_id, unique=True)
+Index("uq_comment_reaction_rep",     CommentReaction.comment_id, CommentReaction.author_rep_id, unique=True)
 
 
 class Poll(Base):
@@ -478,13 +516,25 @@ class PollComment(Base):
     Mirrors PostComment but keyed on poll_id since citizen polls have
     no Post row to hang comments off of. Used both by citizens and —
     once a rep arrives and the page archives — read-only by everyone.
+
+    Dual-author shape mirrors PostComment: exactly ONE of citizen_id
+    / author_rep_id is set per row. The rep path is used when a rep
+    that owns the target page comments on a citizen-authored poll
+    sitting on their page (Phase 2 self-engagement adjacent — a rep
+    on a freshly-claimed page can chime in on the pre-claim
+    citizen polls).
     """
     __tablename__ = "poll_comments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     poll_id: Mapped[int] = mapped_column(ForeignKey("polls.id", ondelete="CASCADE"), index=True)
-    citizen_id: Mapped[int] = mapped_column(
-        ForeignKey("citizen_accounts.id", ondelete="CASCADE"), index=True,
+    citizen_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    author_rep_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
     )
     citizen_display_name: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(String(1000))
@@ -697,6 +747,13 @@ class PollVote(Base):
     citizen_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("citizen_accounts.id", ondelete="SET NULL"), default=None, index=True,
     )
+    # Rep self-vote on their own poll (Phase 2 self-engagement). At
+    # most one of citizen_id / author_rep_id / (voter_token-only) is
+    # set per row. The unique index below dedupes per rep.
+    author_rep_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
     # Denormalized geography. Copied from CitizenAccount at vote time.
     scope_state: Mapped[Optional[str]] = mapped_column(String(2), default=None, index=True)
     scope_district: Mapped[Optional[str]] = mapped_column(String(8), default=None, index=True)
@@ -713,9 +770,11 @@ class PollVote(Base):
 # unique indexes individually, so the partial-ish behavior works out of
 # the box: `(poll_id, citizen_id)` with NULL citizen_id never conflicts
 # with another NULL citizen_id row, which is handled by the second
-# unique index keyed on voter_token.
+# unique index keyed on voter_token. The rep index follows the same
+# pattern for the self-vote case.
 Index("uq_poll_vote_poll_citizen", PollVote.poll_id, PollVote.citizen_id, unique=True)
 Index("uq_poll_vote_poll_token",   PollVote.poll_id, PollVote.voter_token, unique=True)
+Index("uq_poll_vote_poll_rep",     PollVote.poll_id, PollVote.author_rep_id, unique=True)
 
 
 # ── Rep-created events ────────────────────────────────────────────────

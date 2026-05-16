@@ -101,7 +101,12 @@ export default function PostCard({
 
   // ── Reactions ──────────────────────────────────────────────────────
   const handleReact = async (kind) => {
-    if (!citizen) {
+    // Phase 2 self-engagement: the rep that owns this page can react
+    // to their own post — they're authenticated via the rep session
+    // cookie, no citizen login needed. The backend's _resolve_engager
+    // picks the right identity and writes a row keyed on
+    // author_rep_id.
+    if (!citizen && !isOwner) {
       onCitizenLoginRequired?.();
       return;
     }
@@ -255,7 +260,10 @@ export default function PostCard({
   // semantics from post reactions — the backend knows what to do
   // based on the caller's existing reaction.
   const handleCommentReact = async (commentId, kind) => {
-    if (!citizen) {
+    // Phase 2 self-engagement: rep can react to comments on their
+    // own page (including comments on their own posts) — backend
+    // _resolve_engager routes to the rep identity via session cookie.
+    if (!citizen && !isOwner) {
       onCitizenLoginRequired?.();
       return;
     }
@@ -282,7 +290,10 @@ export default function PostCard({
   };
 
   const handleSubmitComment = async () => {
-    if (!citizen) {
+    // Phase 2 self-engagement: the rep owner may comment on their
+    // own post. Citizens still need a session. Anonymous viewers
+    // get the login modal.
+    if (!citizen && !isOwner) {
       onCitizenLoginRequired?.();
       return;
     }
@@ -607,7 +618,11 @@ export default function PostCard({
           active={myReaction === 'up'}
           disabled={busy}
           onClick={() => handleReact('up')}
-          title={citizen ? 'Like' : 'Sign in as a citizen to like'}
+          title={
+            isOwner ? 'Like (as the post author)'
+              : citizen ? 'Like'
+              : 'Sign in as a citizen to like'
+          }
         />
         <ReactionButton
           kind="down"
@@ -615,7 +630,11 @@ export default function PostCard({
           active={myReaction === 'down'}
           disabled={busy}
           onClick={() => handleReact('down')}
-          title={citizen ? 'Dislike' : 'Sign in as a citizen to dislike'}
+          title={
+            isOwner ? 'Dislike (as the post author)'
+              : citizen ? 'Dislike'
+              : 'Sign in as a citizen to dislike'
+          }
         />
         <button
           type="button"
@@ -639,7 +658,7 @@ export default function PostCard({
           {commentsOpen ? 'Hide' : 'Comments'}{' '}
           (<span className="cl-num">{post.comment_count || 0}</span>)
         </button>
-        {!citizen && (
+        {!citizen && !isOwner && (
           <span
             style={{
               fontSize: '0.72rem', color: 'var(--cl-text-light)',
@@ -666,8 +685,15 @@ export default function PostCard({
             <textarea
               value={commentDraft}
               onChange={(e) => setCommentDraft(e.target.value.slice(0, 1000))}
-              placeholder={citizen ? 'Add a comment…' : 'Sign in as a citizen to comment'}
-              disabled={!citizen || commentBusy}
+              placeholder={
+                isOwner ? 'Add a comment (as the post author)…'
+                  : citizen ? 'Add a comment…'
+                  : 'Sign in as a citizen to comment'
+              }
+              // Phase 2 self-engagement: enable composer for the rep
+              // that owns this page. Citizens still need a session;
+              // anonymous viewers see the placeholder + click-to-sign-in.
+              disabled={(!citizen && !isOwner) || commentBusy}
               rows={2}
               style={{
                 flex: 1, resize: 'vertical', minHeight: '40px',
@@ -677,20 +703,20 @@ export default function PostCard({
                 color: 'var(--cl-text)', background: 'white',
                 boxSizing: 'border-box',
               }}
-              onFocus={() => { if (!citizen) onCitizenLoginRequired?.(); }}
+              onFocus={() => { if (!citizen && !isOwner) onCitizenLoginRequired?.(); }}
             />
             <button
               type="button"
               onClick={handleSubmitComment}
-              disabled={!citizen || commentBusy || !commentDraft.trim()}
+              disabled={(!citizen && !isOwner) || commentBusy || !commentDraft.trim()}
               style={{
                 border: '1px solid var(--cl-accent)',
-                background: citizen && commentDraft.trim() && !commentBusy ? 'var(--cl-accent)' : 'var(--cl-bg)',
-                color: citizen && commentDraft.trim() && !commentBusy ? 'white' : 'var(--cl-text-light)',
+                background: (citizen || isOwner) && commentDraft.trim() && !commentBusy ? 'var(--cl-accent)' : 'var(--cl-bg)',
+                color: (citizen || isOwner) && commentDraft.trim() && !commentBusy ? 'white' : 'var(--cl-text-light)',
                 padding: '7px 14px',
                 borderRadius: '8px',
                 fontSize: '0.8rem', fontWeight: 700,
-                cursor: (!citizen || commentBusy || !commentDraft.trim()) ? 'not-allowed' : 'pointer',
+                cursor: ((!citizen && !isOwner) || commentBusy || !commentDraft.trim()) ? 'not-allowed' : 'pointer',
                 flexShrink: 0,
               }}
             >
@@ -889,14 +915,17 @@ export default function PostCard({
               </div>
             )}
             {comments?.filter((c) => aiFilterIds === null || aiFilterIds.has(c.id)).map((c) => {
-              // Delete: ONLY the comment's author. Reps used to be able
-              // to delete comments on their own page, but that's been
-              // retired — moderation goes through Report instead so
-              // reps can't unilaterally silence constituents.
-              // Author-match is a soft display heuristic (the list
-              // endpoint doesn't return citizen_id to non-owners for
-              // privacy); the backend 403 is the real gate.
-              const isMyComment = !!citizen && c.citizen_display_name === citizen.display_name;
+              // Rep-authored comments (Phase 2 self-engagement) are
+              // always by the page author. Citizen-authored comments
+              // are checked by canonical ID — comparing display_name
+              // collides when two citizens share a name. Authors
+              // also includes any rep_id match for the rep's own
+              // comments on their own page.
+              const isAuthorComment = c.author_kind === 'rep';
+              const isMyComment = (
+                (citizen && c.citizen_id != null && c.citizen_id === citizen.id) ||
+                (isOwner && isAuthorComment)
+              );
               const canDelete = isMyComment;
               // Report: any signed-in user (rep or citizen) who's
               // NOT the comment author. Anonymous viewers see nothing
@@ -921,23 +950,47 @@ export default function PostCard({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
                     <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--cl-text)' }}>
                       {c.citizen_display_name}
-                      <span
-                        title="This identity is self-attested; verification ships in a later phase."
-                        style={{
-                          marginLeft: '6px',
-                          fontSize: '0.64rem',
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: '8px',
-                          background: '#fff7e6',
-                          color: '#8a6100',
-                          border: '1px solid #ffe1a3',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.03em',
-                        }}
-                      >
-                        Unverified
-                      </span>
+                      {/* Author badge — rep replied to / weighed in
+                          on their own post. Takes precedence over
+                          the Unverified pill (rep accounts are
+                          verified at signup, citizens aren't yet). */}
+                      {isAuthorComment ? (
+                        <span
+                          title="Posted by the page owner."
+                          style={{
+                            marginLeft: '6px',
+                            fontSize: '0.64rem',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '8px',
+                            background: 'var(--cl-accent-soft, #e6f4ea)',
+                            color: 'var(--cl-accent)',
+                            border: '1px solid var(--cl-accent)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.03em',
+                          }}
+                        >
+                          Author
+                        </span>
+                      ) : (
+                        <span
+                          title="This identity is self-attested; verification ships in a later phase."
+                          style={{
+                            marginLeft: '6px',
+                            fontSize: '0.64rem',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '8px',
+                            background: '#fff7e6',
+                            color: '#8a6100',
+                            border: '1px solid #ffe1a3',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.03em',
+                          }}
+                        >
+                          Unverified
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--cl-text-light)' }}>
                       {timeAgo(c.created_at)}
@@ -957,14 +1010,20 @@ export default function PostCard({
                       count={c.up_count || 0}
                       active={c.my_reaction === 'up'}
                       onClick={() => handleCommentReact(c.id, 'up')}
-                      title={citizen ? 'Like' : 'Sign in as a citizen to like'}
+                      title={
+                        (citizen || isOwner) ? 'Like'
+                          : 'Sign in as a citizen to like'
+                      }
                     />
                     <CommentReactionButton
                       kind="down"
                       count={c.down_count || 0}
                       active={c.my_reaction === 'down'}
                       onClick={() => handleCommentReact(c.id, 'down')}
-                      title={citizen ? 'Dislike' : 'Sign in as a citizen to dislike'}
+                      title={
+                        (citizen || isOwner) ? 'Dislike'
+                          : 'Sign in as a citizen to dislike'
+                      }
                     />
                     <div style={{ fontSize: '0.68rem', color: 'var(--cl-text-light)', marginLeft: '4px' }}>
                       {locLabel || c.scope_state || ''}
