@@ -33,6 +33,38 @@ CACHE_TTL_LONG  = 3600   # 60 min — slow-moving data (laws already enacted)
 _cache: dict[str, tuple[float, object]] = {}
 
 
+def _public_bill_url(congress, bill_type, number) -> Optional[str]:
+    """Build the human-facing congress.gov bill URL.
+
+    Mirrors CongressService._public_bill_url. The Congress.gov API
+    returns a `url` field on every bill, but it points at the API
+    endpoint (api.congress.gov/v3/bill/...) which requires a key
+    and serves JSON. Visitors need the public URL — congress.gov/
+    bill/<congress>th-congress/<chamber>-<type>/<number> — which
+    renders the human-readable page with text, summary, vote
+    history, and committee actions.
+
+    Returns None when inputs are insufficient (missing congress
+    number, unknown bill type) so the caller can drop the field.
+    """
+    if not (congress and bill_type and number):
+        return None
+    slug_map = {
+        "HR":      "house-bill",
+        "S":       "senate-bill",
+        "HJRES":   "house-joint-resolution",
+        "SJRES":   "senate-joint-resolution",
+        "HCONRES": "house-concurrent-resolution",
+        "SCONRES": "senate-concurrent-resolution",
+        "HRES":    "house-resolution",
+        "SRES":    "senate-resolution",
+    }
+    slug = slug_map.get(str(bill_type).upper())
+    if not slug:
+        return None
+    return f"https://www.congress.gov/bill/{congress}th-congress/{slug}/{number}"
+
+
 def _get_cached(key: str, ttl: int):
     if key in _cache:
         ts, data = _cache[key]
@@ -165,7 +197,7 @@ async def fetch_presidential_actions(
                         "latest_action": (b.get("latestAction") or {}).get("text"),
                         "latest_action_date": (b.get("latestAction") or {}).get("actionDate"),
                         "law_number": law_number,
-                        "url": b.get("url"),
+                        "url": _public_bill_url(b.get("congress"), b.get("type"), b.get("number")),
                     })
                 _set_cached(key, out)
                 return out
@@ -190,7 +222,7 @@ async def fetch_presidential_actions(
                             "title": b.get("title"),
                             "latest_action": (b.get("latestAction") or {}).get("text"),
                             "latest_action_date": (b.get("latestAction") or {}).get("actionDate"),
-                            "url": b.get("url"),
+                            "url": _public_bill_url(b.get("congress"), b.get("type"), b.get("number")),
                         })
                 _set_cached(key, out)
                 return out

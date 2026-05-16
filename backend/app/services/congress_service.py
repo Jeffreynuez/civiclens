@@ -338,6 +338,41 @@ class CongressService:
             self._set_cached(cache_key, result)
         return result
 
+    @staticmethod
+    def _public_bill_url(congress, bill_type: str, number) -> Optional[str]:
+        """Build the human-facing congress.gov bill URL.
+
+        The Congress.gov API returns a `url` field on every bill, but
+        it points at the API endpoint (api.congress.gov/v3/bill/...)
+        which requires an API key and serves JSON. Visitors need the
+        public site URL — congress.gov/bill/<congress>th-congress/
+        <chamber>-<type>/<number> — which renders the human-readable
+        page with text, summary, vote history, and committee actions.
+
+        Returns None when the inputs are insufficient to build a URL
+        (e.g. missing congress number) so the caller can render the
+        bill row without a broken link.
+        """
+        if not (congress and bill_type and number):
+            return None
+        # House (H), Senate (S), various resolution types — translate
+        # the API's UPPER abbreviations to the lowercase slug the
+        # public URL expects.
+        slug_map = {
+            "HR":      "house-bill",
+            "S":       "senate-bill",
+            "HJRES":   "house-joint-resolution",
+            "SJRES":   "senate-joint-resolution",
+            "HCONRES": "house-concurrent-resolution",
+            "SCONRES": "senate-concurrent-resolution",
+            "HRES":    "house-resolution",
+            "SRES":    "senate-resolution",
+        }
+        slug = slug_map.get(bill_type.upper())
+        if not slug:
+            return None
+        return f"https://www.congress.gov/bill/{congress}th-congress/{slug}/{number}"
+
     async def get_bill_snapshot(
         self, congress: int, bill_type: str, number: str
     ) -> Optional[dict]:
@@ -383,7 +418,11 @@ class CongressService:
             "latest_action": action.get("text", ""),
             "latest_action_date": action.get("actionDate", ""),
             "policy_area": policy_area,
-            "url": b.get("url"),
+            # Public-facing congress.gov URL, NOT the api.congress.gov
+            # JSON endpoint that the API returns in its `url` field.
+            "url": self._public_bill_url(
+                b.get("congress", congress), bill_type_upper, bill_number,
+            ),
         }
         self._set_cached(cache_key, snapshot)
         return snapshot
@@ -844,7 +883,13 @@ class CongressService:
                     "latest_action": action.get("text", "Introduced"),
                     "latest_action_date": action.get("actionDate", ""),
                     "policy_area": policy_area,
-                    "url": b.get("url"),
+                    # Public-facing congress.gov URL, NOT the
+                    # api.congress.gov endpoint the API returns. See
+                    # _public_bill_url() for the slug mapping.
+                    "url": self._public_bill_url(
+                        congress_num, bill_type,
+                        str(bill_number) if bill_number else None,
+                    ),
                 })
             except Exception as e:
                 logger.warning(f"Error parsing bill: {e}")
