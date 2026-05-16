@@ -2104,8 +2104,12 @@ function VotesTab({ role, member }) {
   const [loading, setLoading] = useState(false);
   const [votes, setVotes] = useState(null); // null = initial, [] = loaded+empty
 
-  // Fetch whenever year changes. Month filter is client-side so changing
-  // month doesn't refetch.
+  // Fetch whenever year changes OR the user triggers a manual reload
+  // (via the empty-state retry button). The reloadNonce is a counter
+  // we bump to force the useEffect to re-run with the same year, which
+  // also bypasses both client + server vote caches since neither
+  // persists empty results.
+  const [reloadNonce, setReloadNonce] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -2115,7 +2119,7 @@ function VotesTab({ role, member }) {
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [member.bioguide_id, year]);
+  }, [member.bioguide_id, year, reloadNonce]);
 
   // Build year dropdown: from member's first year served up through current.
   const yearOptions = [];
@@ -2229,7 +2233,31 @@ function VotesTab({ role, member }) {
       {loading && <LoadingState label={`Loading ${year} voting record…`} />}
 
       {!loading && votes !== null && votes.length === 0 && (
-        <EmptyState message={`No votes recorded for ${member.name} in ${year}.`} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <EmptyState
+            message={
+              `No votes returned for ${member.name} in ${year}. ` +
+              `This is sometimes a temporary GovTrack outage — try reloading.`
+            }
+          />
+          <button
+            type="button"
+            onClick={() => setReloadNonce((n) => n + 1)}
+            style={{
+              padding: '6px 14px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              background: 'white',
+              color: 'var(--cl-accent)',
+              border: '1px solid var(--cl-accent)',
+              borderRadius: 999,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Reload {year} votes
+          </button>
+        </div>
       )}
 
       {!loading && filtered.length === 0 && votes && votes.length > 0 && (

@@ -352,10 +352,18 @@ export async function fetchMemberVotes(bioguideId, opts = {}) {
   const { year = null, month = null, limit = 10 } = opts;
 
   // Year mode → use (or populate) the per-year cache and filter locally.
+  //
+  // Cache discipline: we ONLY cache non-empty responses. An empty
+  // array here is indistinguishable from "fetch succeeded but
+  // GovTrack returned nothing" — could be a transient upstream
+  // failure, a rate-limit hiccup, or a real empty year. Caching
+  // empty means the next call serves the same empty result even if
+  // GovTrack is now answering normally. We'd rather pay the network
+  // round-trip on every retry than persist a bad cache state.
   if (year != null) {
     const cacheKey = `${bioguideId}:${year}`;
     let yearVotes = _memberVoteCache.get(cacheKey);
-    if (!yearVotes) {
+    if (!yearVotes || yearVotes.length === 0) {
       try {
         const qs = new URLSearchParams({ year: String(year) }).toString();
         const response = await fetch(
@@ -364,7 +372,11 @@ export async function fetchMemberVotes(bioguideId, opts = {}) {
         if (!response.ok) throw new Error(`API Error ${response.status}`);
         const data = await response.json();
         yearVotes = data.votes || [];
-        _memberVoteCache.set(cacheKey, yearVotes);
+        // Only cache when we got real data; empty results retry on
+        // next call rather than getting stuck.
+        if (yearVotes.length > 0) {
+          _memberVoteCache.set(cacheKey, yearVotes);
+        }
       } catch (error) {
         console.warn('Member votes API unavailable:', error.message);
         return { data: [], isLive: false };
