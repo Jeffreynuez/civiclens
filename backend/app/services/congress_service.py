@@ -571,9 +571,17 @@ class CongressService:
             return votes
 
         # Year mode — pull the whole year once, then filter by month.
+        #
+        # Cache discipline: only cache non-empty responses. An empty
+        # list here could mean "GovTrack genuinely has no votes for
+        # this rep+year" OR "GovTrack hiccupped and returned nothing."
+        # The two are indistinguishable from inside this function, so
+        # we never cache the empty result — better to retry on the
+        # next request than persist a bad cache state for 30 minutes
+        # when GovTrack is briefly down.
         cache_key = f"votes:{bioguide_id}:{year}"
         cached = self._get_cached(cache_key)
-        if cached is None:
+        if cached is None or len(cached) == 0:
             created_gte = f"{year}-01-01T00:00:00"
             created_lt = f"{year + 1}-01-01T00:00:00"
             cached = await self._fetch_govtrack_votes(
@@ -586,10 +594,10 @@ class CongressService:
                 self._set_cached(cache_key, cached)
 
         if month is None:
-            return cached
+            return cached or []
         # Month filter is cheap and deterministic, do it in-process.
         mm = f"{int(month):02d}"
-        return [v for v in cached if (v.get("date") or "")[5:7] == mm]
+        return [v for v in (cached or []) if (v.get("date") or "")[5:7] == mm]
 
     async def get_all_members(self) -> list:
         """Return a lightweight list of every current Congress member.
