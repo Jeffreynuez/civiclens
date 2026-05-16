@@ -1832,7 +1832,8 @@ def get_page_dashboard(
     official_id: str,
     scope: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    rep: RepAccount = Depends(get_current_rep),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     """Owner-only engagement rollup across every post on this page.
 
@@ -1841,15 +1842,30 @@ def get_page_dashboard(
     counts respect the active scope; the unscoped 'country' path
     returns everything.
 
-    Gated to the page owner (not just any authenticated rep) — so
-    Byron Donalds' rep account can pull D000032's dashboard but not
-    Ron DeSantis's, even though both are logged-in reps. This prevents
-    cross-page scraping of per-district engagement data.
+    Gated to the page owner — accepts either a rep session matching
+    the page's official_id or a candidate session matching the
+    page's candidate_id (Phase 4b). Same cross-page-scraping
+    protection as before: Byron Donalds' rep account can pull
+    D000032's dashboard but not Ron DeSantis's, and a candidate
+    can only see their own page's dashboard.
     """
-    owner = _load_owner(db, official_id)
+    rep_owner = _load_owner(db, official_id)
+    candidate_owner = _load_candidate_owner(db, official_id) if rep_owner is None else None
+    # Rebind `owner` to whichever side resolved so the rest of this
+    # function (scope filters, label rendering, geo-filter helpers)
+    # keeps working unchanged — both account types expose the same
+    # owner_state / owner_district / owner_city columns.
+    owner = rep_owner if rep_owner is not None else candidate_owner
     if owner is None:
         raise HTTPException(status_code=404, detail="Page is not claimed")
-    _assert_owns_page(rep, official_id)
+
+    # Authorization: the signed-in caller must match the page's owner.
+    # _resolve_page_owner raises 403 if neither rep nor candidate
+    # matches the official_id / candidate_id.
+    _resolve_page_owner(
+        me_rep=me_rep, me_candidate=me_candidate,
+        page_official_id=official_id,
+    )
 
     active_scope = (scope or "country").lower()
     if active_scope not in SCOPE_VALUES:

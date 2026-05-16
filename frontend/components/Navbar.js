@@ -32,6 +32,14 @@ export default function Navbar({
   onCitizenLogin,
   onCitizenLogout,
   onCitizenDashboard,
+  // Phase 4b candidate identity. When set, the navbar renders a
+  // candidate-styled identity pill (in addition to / instead of
+  // citizen). Sign-out fires logoutCandidate via the parent
+  // handler. We don't expose a "sign in as candidate" button in
+  // the navbar today — that's discovered via the rep modal's
+  // "I'm a candidate instead" link.
+  candidate,
+  onCandidateLogout,
   // Click on the logo / wordmark — typically wired to a "go home"
   // handler in page.js that clears selectedState, selectedMember,
   // selectedCandidate, activeDistrict, etc. so the map zooms back
@@ -583,12 +591,86 @@ export default function Navbar({
           </button>
         )}
 
+        {/* Phase 4b candidate identity pill. Renders inline before the
+            citizen pill when a candidate session is active. Same
+            visual treatment as the citizen pill but accent-coloured
+            so it reads as a different role at a glance. Discovery
+            of "sign in as candidate" stays in the rep modal's
+            footer link — no nav-bar entry today. */}
+        {candidate && (
+          <>
+            <span
+              title={`Signed in as candidate · ${candidate.display_name}${
+                candidate.owner_state ? ` · ${candidate.owner_state}` : ''}${
+                candidate.owner_district ? ` · ${candidate.owner_district}` : ''}`}
+              style={
+                isCompact
+                  ? {
+                      width: 36, height: 36, padding: 0,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'var(--cl-accent, #2a7a2a)',
+                      color: 'white', border: '1px solid var(--cl-accent, #2a7a2a)',
+                      borderRadius: 999,
+                      fontSize: '0.78rem', fontWeight: 800,
+                      flexShrink: 0,
+                    }
+                  : {
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      padding: '6px 10px',
+                      background: 'var(--cl-accent, #2a7a2a)',
+                      color: 'white', border: '1px solid var(--cl-accent, #2a7a2a)',
+                      borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700,
+                      fontFamily: 'var(--cl-font-sans)',
+                    }
+              }
+            >
+              {isCompact ? (
+                <span aria-hidden="true">
+                  {(candidate.display_name || '?').trim().charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <>
+                  <span style={{
+                    fontSize: '0.62rem', fontWeight: 800,
+                    padding: '1px 5px', borderRadius: '9px',
+                    background: 'rgba(255,255,255,0.22)',
+                    color: 'white', letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                  }}>
+                    Candidate
+                  </span>
+                  {candidate.display_name}
+                </>
+              )}
+            </span>
+            {!isCompact && (
+              <button
+                onClick={() => onCandidateLogout?.()}
+                title="Sign out (candidate)"
+                style={{
+                  padding: '6px 10px', background: 'rgba(255,255,255,0.05)',
+                  color: 'white', border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '8px', cursor: 'pointer',
+                  fontSize: '0.78rem', fontWeight: 600,
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
+                onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+              >
+                Sign out
+              </button>
+            )}
+          </>
+        )}
+
         {/* Citizen-login pill. On desktop / tablet shows the full label
             (or the citizen's display name + district when signed in).
             On mobile compresses to an icon button: a circle with the
             citizen's first initial when signed in, or a generic person
-            icon when signed out. */}
-        {citizen ? (
+            icon when signed out. The pill is hidden when a candidate
+            is signed in instead — mutual exclusivity is enforced at
+            the API layer, but we suppress the citizen sign-in CTA
+            here so the navbar shows one identity at a time. */}
+        {!candidate && citizen ? (
           <>
             <button
               type="button"
@@ -676,7 +758,7 @@ export default function Navbar({
               </button>
             )}
           </>
-        ) : (
+        ) : !candidate ? (
           <button
             onClick={() => onCitizenLogin?.()}
             title="Sign in as a citizen to like, comment, and vote in polls"
@@ -713,7 +795,7 @@ export default function Navbar({
             </svg>
             {!isCompact && 'Citizen login'}
           </button>
-        )}
+        ) : null}
 
         {/* Subscribe / Committees / My Tracked / Help-build /
             Feedback — desktop ONLY (>1024px). Tablet and mobile both

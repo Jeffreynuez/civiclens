@@ -29,6 +29,7 @@ import { STATE_NAME_TO_CODE } from '@/lib/constants';
 import { getAllTrackedBills, updateTrackedBill } from '@/lib/trackedBills';
 import { useAuth, logoutRep } from '@/lib/auth';
 import { useCitizenAuth, logoutCitizen } from '@/lib/citizenAuth';
+import { useCandidateAuth, logoutCandidate } from '@/lib/candidateAuth';
 import { useViewport, useIsLandscape } from '@/lib/useViewport';
 import { loadNavState, saveNavState } from '@/lib/navState';
 
@@ -210,6 +211,18 @@ export default function Home() {
   // Phase 4 adds first-class entry points in the navbar + page
   // claim flow).
   const [candidateLoginOpen, setCandidateLoginOpen] = useState(false);
+  // Phase 4b: candidate auth state surfaces in the Navbar pill + the
+  // PageView is_owner gating. Logout fires the candidate-auth /logout
+  // endpoint (clears cookie + rep+citizen sessions per the
+  // _tearDownTwoOtherRoles contract).
+  const { candidate } = useCandidateAuth();
+  const handleCandidateLoginSuccess = useCallback(() => {
+    setCandidateLoginOpen(false);
+    showNotification('Signed in as candidate. You can now manage your page.');
+  }, []);
+  const handleCandidateLogoutClick = useCallback(async () => {
+    await logoutCandidate();
+  }, []);
   // ConstituentDashboard overlay — opens when a signed-in citizen clicks
   // their identity pill in the Navbar. Auto-closes if the citizen signs out.
   const [dashboardOpen, setDashboardOpen] = useState(false);
@@ -870,6 +883,8 @@ export default function Home() {
         onCitizenLogin={handleCitizenLoginOpen}
         onCitizenLogout={handleCitizenLogoutClick}
         onCitizenDashboard={() => setDashboardOpen(true)}
+        candidate={candidate}
+        onCandidateLogout={handleCandidateLogoutClick}
         onHome={handleStateDeselect}
         onOpenHelpBuild={() => setHelpBuildOpen(true)}
         onOpenFeedback={() => setFeedbackOpen(true)}
@@ -1244,10 +1259,7 @@ export default function Home() {
       <CandidateLoginModal
         open={candidateLoginOpen}
         onClose={() => setCandidateLoginOpen(false)}
-        onSuccess={() => {
-          setCandidateLoginOpen(false);
-          showNotification('Signed in as candidate. You can now manage your page.');
-        }}
+        onSuccess={handleCandidateLoginSuccess}
       />
       {/* Citizen waitlist modal — fires from comment CTAs or Subscribe. */}
       <CitizenWaitlistModal
