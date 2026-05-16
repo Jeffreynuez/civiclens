@@ -2680,7 +2680,7 @@ function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify,
             both supported. Avatar falls back to initials cleanly if
             the URL 404s. */}
         <Avatar
-          src={person.photo_url || person.photoUrl}
+          src={person.photo_url || person.photoUrl || person.image}
           name={person.name}
           party={person.party}
           size="lg"
@@ -2752,7 +2752,7 @@ function BigPersonCard({ person, eyebrow, meta, onClick, followTarget, onNotify,
               onOpen={(id) => onOpenPage(id, {
                 displayName: person.name,
                 role: person.role || person.title || eyebrow || '',
-                photoUrl: person.photo_url || person.photoUrl,
+                photoUrl: person.photo_url || person.photoUrl || person.image,
               })}
             />
           )}
@@ -2808,7 +2808,7 @@ function CompactPersonCard({ person, eyebrow, meta, onClick, followTarget, onNot
     >
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
         <Avatar
-          src={person.photo_url || person.photoUrl}
+          src={person.photo_url || person.photoUrl || person.image}
           name={person.name}
           party={person.party}
           size="md"
@@ -2915,7 +2915,7 @@ function CompactPersonCard({ person, eyebrow, meta, onClick, followTarget, onNot
               onOpen={(id) => onOpenPage(id, {
                 displayName: person.name,
                 role: person.role || person.title || eyebrow || '',
-                photoUrl: person.photo_url || person.photoUrl,
+                photoUrl: person.photo_url || person.photoUrl || person.image,
               })}
             />
           )}

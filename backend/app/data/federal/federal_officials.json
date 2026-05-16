@@ -967,7 +967,8 @@
               "from": "1986",
               "to": "2003"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Official_roberts_CJ.jpg/250px-Official_roberts_CJ.jpg"
         },
         {
           "id": "us-scotus-thomas",
@@ -1018,7 +1019,8 @@
               "from": "1977",
               "to": "1979"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Clarence_Thomas_official_SCOTUS_portrait_%283x4_cropped%29.jpg/250px-Clarence_Thomas_official_SCOTUS_portrait_%283x4_cropped%29.jpg"
         },
         {
           "id": "us-scotus-alito",
@@ -1069,7 +1071,8 @@
               "from": "1981",
               "to": "1985"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/Samuel_Alito_official_photo.jpg/250px-Samuel_Alito_official_photo.jpg"
         },
         {
           "id": "us-scotus-sotomayor",
@@ -1120,7 +1123,8 @@
               "from": "1979",
               "to": "1984"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Sonia_Sotomayor_in_SCOTUS_robe.jpg/250px-Sonia_Sotomayor_in_SCOTUS_robe.jpg"
         },
         {
           "id": "us-scotus-kagan",
@@ -1171,7 +1175,8 @@
               "from": "1999",
               "to": "2003"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Elena_Kagan_Official_SCOTUS_Portrait_%282013%29.jpg/250px-Elena_Kagan_Official_SCOTUS_Portrait_%282013%29.jpg"
         },
         {
           "id": "us-scotus-gorsuch",
@@ -1222,7 +1227,8 @@
               "from": "1995",
               "to": "2005"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Associate_Justice_Neil_Gorsuch_Official_Portrait.jpg/250px-Associate_Justice_Neil_Gorsuch_Official_Portrait.jpg"
         },
         {
           "id": "us-scotus-kavanaugh",
@@ -1273,7 +1279,8 @@
               "from": "2003",
               "to": "2004"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/Associate_Justice_Brett_Kavanaugh_Official_Portrait_%28full_length%29.jpg/250px-Associate_Justice_Brett_Kavanaugh_Official_Portrait_%28full_length%29.jpg"
         },
         {
           "id": "us-scotus-barrett",
@@ -1324,7 +1331,8 @@
               "from": "2006",
               "to": "2010"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Official_Amy_Barrett_photo.jpg/250px-Official_Amy_Barrett_photo.jpg"
         },
         {
           "id": "us-scotus-jackson",
@@ -1375,7 +1383,8 @@
               "from": "2010",
               "to": "2014"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/Ketanji_Brown_Jackson_official_SCOTUS_portrait.jpg/250px-Ketanji_Brown_Jackson_official_SCOTUS_portrait.jpg"
         }
       ]
     }
@@ -1442,7 +1451,8 @@
               "from": "2003",
               "to": "2007"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/March_2026_Official_Vice_Presidential_Portrait_of_JD_Vance_%28head-and-shoulders_cropped%29.jpg/250px-March_2026_Official_Vice_Presidential_Portrait_of_JD_Vance_%28head-and-shoulders_cropped%29.jpg"
         },
         {
           "id": "us-sen-pres-pro-tem",
@@ -1487,7 +1497,8 @@
               "from": "1960",
               "to": "Present"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/Chuck_Grassley_official_photo_2017.jpg/250px-Chuck_Grassley_official_photo_2017.jpg"
         },
         {
           "id": "us-sen-maj-leader",
@@ -1532,7 +1543,8 @@
               "from": "1991",
               "to": "1997"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/John_Thune_117th_Congress_portrait.jpg/250px-John_Thune_117th_Congress_portrait.jpg"
         },
         {
           "id": "us-sen-maj-whip",
@@ -1577,7 +1589,8 @@
               "from": "1981",
               "to": "2007"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fb/John_Barrasso_official_portrait_112th_Congress.jpg/250px-John_Barrasso_official_portrait_112th_Congress.jpg"
         },
         {
           "id": "us-sen-min-leader",
@@ -1622,7 +1635,8 @@
               "from": "1974",
               "to": "1983"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Chuck_Schumer_official_photo.jpg/250px-Chuck_Schumer_official_photo.jpg"
         },
         {
           "id": "us-sen-min-whip",
@@ -1667,7 +1681,8 @@
               "from": "1981",
               "to": "1983"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Dick_Durbin_117th_Congress_portrait_%281%29_%28crop%29.jpeg/250px-Dick_Durbin_117th_Congress_portrait_%281%29_%28crop%29.jpeg"
         }
       ]
     },
@@ -1724,7 +1739,8 @@
               "from": "2015",
               "to": "2017"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Speaker_Mike_Johnson_Official_Portrait_%28cropped%29%28b%29.jpg/250px-Speaker_Mike_Johnson_Official_Portrait_%28cropped%29%28b%29.jpg"
         },
         {
           "id": "us-hse-maj-leader",
@@ -1770,7 +1786,8 @@
               "from": "1996",
               "to": "2008"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Steve_Scalise_116th_Congress_official_photo.jpg/250px-Steve_Scalise_116th_Congress_official_photo.jpg"
         },
         {
           "id": "us-hse-maj-whip",
@@ -1816,7 +1833,8 @@
               "from": "2009",
               "to": "2014"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Tom_Emmer_Congressional_Photo_2.jpg/250px-Tom_Emmer_Congressional_Photo_2.jpg"
         },
         {
           "id": "us-hse-rep-conf-chair",
@@ -1862,7 +1880,8 @@
               "from": "1992",
               "to": "2020"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/Rep._Lisa_McClain.jpg/250px-Rep._Lisa_McClain.jpg"
         },
         {
           "id": "us-hse-min-leader",
@@ -1908,7 +1927,8 @@
               "from": "2007",
               "to": "2013"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Rep-Hakeem-Jeffries-Official-Portrait_%28cropped%29.jpg/250px-Rep-Hakeem-Jeffries-Official-Portrait_%28cropped%29.jpg"
         },
         {
           "id": "us-hse-min-whip",
@@ -1954,7 +1974,8 @@
               "from": "2009",
               "to": "2013"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Katherine_Clark%2C_official_portrait%2C_118th_Congress_cropped%29.jpg/250px-Katherine_Clark%2C_official_portrait%2C_118th_Congress_cropped%29.jpg"
         },
         {
           "id": "us-hse-dem-caucus-chair",
@@ -2000,7 +2021,8 @@
               "from": "2010",
               "to": "2015"
             }
-          ]
+          ],
+          "photo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Pete_Aguilar_117th_congress.jpeg/250px-Pete_Aguilar_117th_congress.jpeg"
         }
       ]
     }
