@@ -179,9 +179,26 @@ def serialize_citizen_poll(
     author = db.get(CitizenAccount, poll.author_citizen_id) if poll.author_citizen_id else None
 
     # Caller's own vote on the poll, if any. Used to highlight the
-    # option they picked in the wire shape.
+    # option they picked in the wire shape. Two identity paths:
+    #   • citizen — keyed on citizen_id (the original path)
+    #   • rep — keyed on author_rep_id (Phase 2 self-engagement, used
+    #     when the page-owning rep votes on a citizen poll sitting
+    #     on their page). Rep path checked first so a rep who's also
+    #     signed in as a citizen on the same browser sees their rep
+    #     vote, not a stale citizen one.
     voter_choice_id = None
-    if me_citizen is not None:
+    if me_rep is not None:
+        existing_vote = (
+            db.query(PollVote)
+            .filter(
+                PollVote.poll_id == poll.id,
+                PollVote.author_rep_id == me_rep.id,
+            )
+            .first()
+        )
+        if existing_vote:
+            voter_choice_id = existing_vote.option_id
+    if voter_choice_id is None and me_citizen is not None:
         existing_vote = (
             db.query(PollVote)
             .filter(

@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 # ── Auth ──────────────────────────────────────────────────────────────
@@ -193,12 +193,27 @@ class CommentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     post_id: int
-    # Canonical author id. Needed by the frontend so it can distinguish
-    # the post creator's own comment from a citizen's with the same
-    # display_name (display_name collisions are rare but not impossible,
-    # and comparing IDs is the only correct way to render the "Author"
-    # badge or the "you wrote this" delete affordance).
-    citizen_id: int
+    # Canonical author id for citizen-authored comments. Needed by the
+    # frontend to distinguish the comment author from other citizens
+    # with the same display_name (rare but possible) — comparing IDs
+    # is the only correct way to gate the "delete my own" affordance.
+    # Nullable: rep-authored comments (Phase 2 self-engagement) set
+    # author_rep_id instead and leave citizen_id NULL.
+    citizen_id: Optional[int] = None
+    # Phase 2 self-engagement: when set, this comment was authored by
+    # the page-owning rep replying to or weighing in on their own
+    # post. Frontend uses author_kind below to decide which side to
+    # compare against; the legacy citizen_display_name field holds
+    # the rep's display_name in this case so renderers don't need a
+    # second lookup.
+    author_rep_id: Optional[int] = None
+    # Discriminator: 'citizen' or 'rep'. Lets the UI render an
+    # 'Author' badge when author_kind=='rep' (since rep comments on
+    # their own pages are always the page author), or compare the
+    # rep_id when threading replies in Phase 3. Defaulted here +
+    # derived in the validator below so model_validate(orm_obj)
+    # picks the right value without hand-construction.
+    author_kind: str = "citizen"
     citizen_display_name: str
     body: str
     created_at: datetime
@@ -207,6 +222,17 @@ class CommentRead(BaseModel):
     scope_state: Optional[str] = None
     scope_district: Optional[str] = None
     scope_city: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _derive_author_kind(self) -> "CommentRead":
+        # If the caller explicitly set author_kind we honor it (e.g.
+        # the router hand-builds responses for freshly-created rows
+        # before the ORM has refreshed). Otherwise derive from
+        # whichever identity column is populated. The default "citizen"
+        # is only correct when author_rep_id is None.
+        if self.author_rep_id is not None and self.author_kind == "citizen":
+            self.author_kind = "rep"
+        return self
     # Per-comment reactions. `my_reaction` is the caller's own — only
     # populated when the caller is an authenticated citizen.
     up_count: int = 0
@@ -534,11 +560,15 @@ class PollCommentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     poll_id: int
-    # Canonical author id. Same purpose as CommentRead.citizen_id —
-    # lets the frontend reliably detect the poll author's own
-    # comments for the 'Author' badge without relying on display_name
-    # equality.
-    citizen_id: int
+    # Canonical author id for citizen-authored comments. Nullable for
+    # the rep-authored path — see CommentRead for the full rationale.
+    citizen_id: Optional[int] = None
+    # Phase 2 self-engagement: when a rep visits a citizen poll on
+    # their own (newly-claimed) page and chimes in, the comment is
+    # authored by the rep. author_kind below disambiguates.
+    author_rep_id: Optional[int] = None
+    # 'citizen' | 'rep'. See CommentRead.author_kind.
+    author_kind: str = "citizen"
     citizen_display_name: str
     body: str
     created_at: datetime
@@ -552,6 +582,14 @@ class PollCommentRead(BaseModel):
     ai_intensity: Optional[int] = None
     ai_topic: Optional[str] = None
     ai_classified_at: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def _derive_author_kind(self) -> "PollCommentRead":
+        # Same logic as CommentRead._derive_author_kind — see there
+        # for the rationale.
+        if self.author_rep_id is not None and self.author_kind == "citizen":
+            self.author_kind = "rep"
+        return self
 
 
 class PollReportCreate(BaseModel):

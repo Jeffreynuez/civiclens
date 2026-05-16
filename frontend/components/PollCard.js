@@ -66,13 +66,21 @@ export default function PollCard({
     [poll.options],
   );
 
-  // Clickability: same rule as before — only citizens can vote, only
-  // while the poll is open, and not on the owner's preview.
-  const canClick = !isOwner && !isClosed;
+  // Clickability: anyone signed in can click while the poll is open.
+  // Phase 2 self-engagement: reps voting on their OWN page now use
+  // the rep session and write a row keyed on author_rep_id. The
+  // backend's _resolve_engager helper resolves the identity — we
+  // just enable the click and let the cookie-bearing fetch carry
+  // whichever session the browser holds.
+  const canClick = !isClosed;
 
   const cast = async (optionId) => {
     if (busy || !canClick) return;
-    if (!citizen) {
+    // Citizens need to be signed in (or prompted to sign in) before
+    // hitting the API. Reps who own this page (isOwner=true) are
+    // already signed in via the rep session cookie — skip the
+    // citizen-login modal for them.
+    if (!citizen && !isOwner) {
       onCitizenLoginRequired?.();
       return;
     }
@@ -113,7 +121,7 @@ export default function PollCard({
     const isLeader = showCount && total > 0 && (opt.vote_count || 0) === maxVotes;
     const tooltip = !clickable
       ? ''
-      : !citizen
+      : (!citizen && !isOwner)
         ? 'Sign in as a citizen to vote'
         : hasVoted && !isChoice
           ? 'Click to change your vote'
@@ -177,6 +185,27 @@ export default function PollCard({
                 ✓ your vote
               </span>
             )}
+            {/* Phase 2 self-engagement: when the rep is the page
+                owner and this is their voted option, show an "Author"
+                pill in addition to "your vote" so it's explicit who
+                cast the vote. Visible only to the owner themselves
+                today — exposing the owner's choice to every viewer
+                needs a backend field that doesn't exist yet. */}
+            {isChoice && isOwner && (
+              <span
+                style={{
+                  marginLeft: '6px', padding: '1px 6px',
+                  borderRadius: 999,
+                  background: 'var(--cl-accent-soft, #e6f4ea)',
+                  color: 'var(--cl-accent)',
+                  fontSize: '0.62rem', fontWeight: 800,
+                  textTransform: 'uppercase', letterSpacing: '0.4px',
+                }}
+                title="You authored this poll"
+              >
+                Author
+              </span>
+            )}
           </span>
           {showCount ? (
             <span style={{ color: 'var(--cl-text-light)', fontVariantNumeric: 'tabular-nums' }}>
@@ -213,7 +242,7 @@ export default function PollCard({
         {closesAt && (
           <>{' · '}{renderTimeLine()}</>
         )}
-        {!citizen && canClick && !hasVoted && ' · sign in as a citizen to vote'}
+        {!citizen && !isOwner && canClick && !hasVoted && ' · sign in as a citizen to vote'}
       </span>
       {includeBreakdown && !countsSuppressed && (poll.allowed_scopes?.length ?? 0) > 1 && (
         <ScopeBreakdown

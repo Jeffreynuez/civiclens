@@ -453,11 +453,20 @@ def vote_on_citizen_poll(
     poll_id: int,
     payload: PollVoteRequest,
     db: Session = Depends(get_db),
-    citizen: CitizenAccount = Depends(get_current_citizen),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
 ):
-    """Cast (or switch) a vote on a citizen poll. Mirrors the rep-poll
-    voting endpoint's logic: lookup by citizen_id, switch the option
-    on existing rows, never spawn duplicates."""
+    """Cast (or switch) a vote on a citizen poll. Phase 2 self-
+    engagement: accepts either a citizen session OR the rep that
+    owns the target page (so a newly-claimed page's rep can engage
+    with the pre-claim citizen polls on their page).
+
+    Mirrors the rep-poll voting endpoint: lookup by author identity,
+    switch the option on existing rows, never spawn duplicates.
+    Citizen self-vote on their own citizen poll is permitted — the
+    backend has no author guard. The frontend renders an 'Author'
+    badge so the engagement stays transparent.
+    """
     poll = _get_poll_or_404(db, poll_id)
     if poll.archived_at is not None:
         raise HTTPException(status_code=400, detail="This poll has been archived.")
@@ -468,27 +477,45 @@ def vote_on_citizen_poll(
     if not option or option.poll_id != poll.id:
         raise HTTPException(status_code=400, detail="Invalid option for this poll")
 
-    existing = (
-        db.query(PollVote)
-        .filter(PollVote.poll_id == poll.id, PollVote.citizen_id == citizen.id)
-        .first()
-    )
+    # Identity resolution: rep wins if they own the target page;
+    # otherwise the citizen path applies. Citizen polls live on a
+    # specific rep page (poll.target_official_id) so we know which
+    # page-ownership to check.
+    if me_rep is not None and me_rep.official_id == poll.target_official_id:
+        rep, citizen = me_rep, None
+    elif me_citizen is not None:
+        rep, citizen = None, me_citizen
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sign in to vote on this poll.",
+        )
+
+    q = db.query(PollVote).filter(PollVote.poll_id == poll.id)
+    if rep is not None:
+        q = q.filter(PollVote.author_rep_id == rep.id)
+    else:
+        q = q.filter(PollVote.citizen_id == citizen.id)
+    existing = q.first()
+
     if existing:
         existing.option_id = option.id
-        existing.scope_state = citizen.state
-        existing.scope_district = citizen.congressional_district
-        existing.scope_city = citizen.city
-        existing.scope_county = citizen.county
+        if citizen is not None:
+            existing.scope_state = citizen.state
+            existing.scope_district = citizen.congressional_district
+            existing.scope_city = citizen.city
+            existing.scope_county = citizen.county
     else:
         db.add(PollVote(
             poll_id=poll.id,
             option_id=option.id,
             voter_token=None,
-            citizen_id=citizen.id,
-            scope_state=citizen.state,
-            scope_district=citizen.congressional_district,
-            scope_city=citizen.city,
-            scope_county=citizen.county,
+            citizen_id=citizen.id if citizen is not None else None,
+            author_rep_id=rep.id if rep is not None else None,
+            scope_state=citizen.state if citizen is not None else None,
+            scope_district=citizen.congressional_district if citizen is not None else None,
+            scope_city=citizen.city if citizen is not None else None,
+            scope_county=citizen.county if citizen is not None else None,
         ))
 
     db.commit()
@@ -496,7 +523,7 @@ def vote_on_citizen_poll(
     for opt in poll.options:
         db.refresh(opt)
 
-    return serialize_citizen_poll(db, poll, citizen, None)
+    return serialize_citizen_poll(db, poll, citizen, rep)
 
 
 @router.post("/citizen-polls/{poll_id}/close", response_model=CitizenPollRead)
@@ -631,12 +658,17 @@ def create_citizen_poll_comment(
     payload: PollCommentCreate,
     bg_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    citizen: CitizenAccount = Depends(get_current_citizen),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
 ):
-    """Citizen-gated. Comments allowed on both active and archived
-    polls — the archived 'Pre-claim discussion' surface stays read+
-    write for citizens, with a banner clarifying the rep hasn't
-    claimed-into-and-then-deleted the conversation."""
+    """Phase 2 self-engagement: accepts either a citizen session or
+    the rep that owns the target page (so a newly-claimed page's
+    rep can chime in on the pre-claim citizen-poll thread).
+
+    Comments allowed on both active and archived polls — the
+    archived 'Pre-claim discussion' surface stays read+write so
+    the conversation can continue once the rep arrives.
+    """
     poll = (
         db.query(Poll)
         .filter(Poll.id == poll_id, Poll.author_kind == "citizen")
@@ -645,15 +677,30 @@ def create_citizen_poll_comment(
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
 
+    # Identity resolution — same rule as the citizen-poll vote
+    # endpoint above. Citizen poll knows its target_official_id;
+    # rep wins only if they own that page.
+    if me_rep is not None and me_rep.official_id == poll.target_official_id:
+        rep, citizen = me_rep, None
+    elif me_citizen is not None:
+        rep, citizen = None, me_citizen
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sign in to comment on this poll.",
+        )
+
+    display_name = rep.display_name if rep is not None else citizen.display_name
     comment = PollComment(
         poll_id=poll.id,
-        citizen_id=citizen.id,
-        citizen_display_name=citizen.display_name,
+        citizen_id=citizen.id if citizen is not None else None,
+        author_rep_id=rep.id if rep is not None else None,
+        citizen_display_name=display_name,
         body=payload.body,
-        scope_state=citizen.state,
-        scope_district=citizen.congressional_district,
-        scope_city=citizen.city,
-        scope_county=citizen.county,
+        scope_state=citizen.state if citizen is not None else None,
+        scope_district=citizen.congressional_district if citizen is not None else None,
+        scope_city=citizen.city if citizen is not None else None,
+        scope_county=citizen.county if citizen is not None else None,
     )
     db.add(comment)
     db.commit()
@@ -662,7 +709,22 @@ def create_citizen_poll_comment(
     # create_comment on a rep post. No-op if AI isn't configured.
     from app.services.comment_classifier import classify_poll_comment
     bg_tasks.add_task(classify_poll_comment, comment.id)
-    return PollCommentRead.model_validate(comment)
+    # Hand-build the response so author_kind reflects the dual-
+    # identity shape; model_validate alone wouldn't set the
+    # discriminator on a fresh row.
+    return PollCommentRead(
+        id=comment.id,
+        poll_id=comment.poll_id,
+        citizen_id=comment.citizen_id,
+        author_rep_id=comment.author_rep_id,
+        author_kind=("rep" if comment.author_rep_id is not None else "citizen"),
+        citizen_display_name=comment.citizen_display_name,
+        body=comment.body,
+        created_at=comment.created_at,
+        scope_state=comment.scope_state,
+        scope_district=comment.scope_district,
+        scope_city=comment.scope_city,
+    )
 
 
 # ── Poll-comment delete + report (parity with rep-post comments) ─────
@@ -673,15 +735,32 @@ def create_citizen_poll_comment(
 def delete_poll_comment(
     comment_id: int,
     db: Session = Depends(get_db),
-    citizen: CitizenAccount = Depends(get_current_citizen),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
 ):
     """Soft-delete a poll comment. Author-only — matches the
     PostComment rule. Page owners (once a rep claims the page)
-    use Report instead; admins act on aggregated reports."""
+    use Report instead; admins act on aggregated reports.
+
+    Phase 2 self-engagement: 'author' now covers either a citizen
+    who originally posted the comment OR a rep who weighed in on
+    their own page's pre-claim discussion. Either may delete their
+    own comment.
+    """
     comment = db.get(PollComment, comment_id)
     if not comment or comment.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Comment not found")
-    if comment.citizen_id != citizen.id:
+    is_author_citizen = (
+        me_citizen is not None
+        and comment.citizen_id is not None
+        and comment.citizen_id == me_citizen.id
+    )
+    is_author_rep = (
+        me_rep is not None
+        and getattr(comment, "author_rep_id", None) is not None
+        and comment.author_rep_id == me_rep.id
+    )
+    if not (is_author_citizen or is_author_rep):
         raise HTTPException(
             status_code=403,
             detail="Only the comment author may delete it. Use Report instead.",

@@ -166,7 +166,57 @@ def init_db() -> None:
     _auto_migrate_new_columns()
     _auto_migrate_nullability_changes()
     _auto_migrate_string_widening()
+    _auto_migrate_missing_indexes()
     _repair_bad_now_defaults()
+
+
+def _auto_migrate_missing_indexes() -> None:
+    """Create any model-declared indexes that don't yet exist on disk.
+
+    `Base.metadata.create_all` only creates indexes for tables it
+    just created — it does NOT add indexes that were declared after
+    a table already existed. When a model gains a new standalone
+    `Index(...)` (e.g. the Phase 2 self-engagement work adds
+    uq_post_reaction_rep alongside the existing uq_post_reaction_
+    citizen), the index would silently be missing on existing
+    deployments and the dedupe semantics it's enforcing would
+    quietly stop working.
+
+    This pass walks every declared index on every table that exists
+    on disk and CREATE INDEXes the missing ones. Idempotent — uses
+    `CREATE INDEX IF NOT EXISTS` (or its Postgres equivalent).
+    """
+    inspector = inspect(engine)
+    for table in Base.metadata.tables.values():
+        if table.name not in inspector.get_table_names():
+            continue
+        existing_index_names = {
+            ix.get("name") for ix in inspector.get_indexes(table.name)
+        }
+        # Unique constraints sometimes show up as indexes too — fold
+        # those in so we don't accidentally try to create a duplicate.
+        try:
+            existing_index_names.update(
+                uc.get("name") for uc in inspector.get_unique_constraints(table.name)
+            )
+        except NotImplementedError:
+            pass
+        for ix in table.indexes:
+            if ix.name in existing_index_names:
+                continue
+            try:
+                ix.create(bind=engine)
+                logger.info(
+                    "Auto-migrate: created index %s on %s", ix.name, table.name,
+                )
+            except Exception as e:
+                # Most likely a race with another worker — both saw
+                # the index missing, one won. Log + continue rather
+                # than crash startup over an already-existing index.
+                logger.warning(
+                    "Auto-migrate: failed to create index %s on %s: %s",
+                    ix.name, table.name, e,
+                )
 
 
 def _auto_migrate_string_widening() -> None:

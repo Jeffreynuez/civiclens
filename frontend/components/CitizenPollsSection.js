@@ -552,11 +552,15 @@ function CitizenPollCard({
   const total = inner.total_votes || 0;
   const myChoice = inner.voter_choice_id || null;
   const isClosed = !!inner.closes_at && new Date(inner.closes_at).getTime() <= Date.now();
-  const canVote = !!citizen && !archived && !isClosed;
+  // Phase 2 self-engagement: rep owner of the page this poll lives
+  // on can also vote, in addition to any signed-in citizen.
+  const canVote = (!!citizen || isOwner) && !archived && !isClosed;
   const isMine = !!citizen && author.id === citizen.id;
 
   const cast = async (optionId) => {
-    if (!citizen) return onCitizenLoginRequired?.();
+    // Citizens need an active session before hitting the API; rep
+    // owners are already signed in via the rep cookie.
+    if (!citizen && !isOwner) return onCitizenLoginRequired?.();
     if (!canVote || busy) return;
     setBusy(true);
     setError(null);
@@ -894,7 +898,11 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!citizen) return onCitizenLoginRequired?.();
+    // Phase 2 self-engagement: the rep that owns this page can chime
+    // in on citizen-authored polls on their page. Backend's
+    // create_citizen_poll_comment resolves identity from the rep
+    // session cookie; the cookie is already attached.
+    if (!citizen && !isOwner) return onCitizenLoginRequired?.();
     if (!draft.trim() || submitting) return;
     setSubmitting(true);
     setError(null);
@@ -980,9 +988,16 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value.slice(0, 1000))}
-          placeholder={citizen ? 'Add a comment…' : 'Sign in as a citizen to comment.'}
+          // Phase 2 self-engagement: rep owners can post on their
+          // own page's citizen-poll threads. Anonymous viewers see
+          // the citizen-sign-in nudge.
+          placeholder={
+            isOwner ? 'Reply as the page owner…'
+              : citizen ? 'Add a comment…'
+              : 'Sign in as a citizen to comment.'
+          }
           rows={2}
-          disabled={!citizen}
+          disabled={!citizen && !isOwner}
           style={{
             width: '100%',
             padding: '8px 10px',
@@ -995,7 +1010,7 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
             background: 'white',
             color: 'var(--cl-text)',
           }}
-          onClick={() => { if (!citizen) onCitizenLoginRequired?.(); }}
+          onClick={() => { if (!citizen && !isOwner) onCitizenLoginRequired?.(); }}
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
           <span style={{ fontSize: '0.7rem', color: 'var(--cl-text-light)' }}>
@@ -1003,16 +1018,16 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
           </span>
           <button
             type="submit"
-            disabled={!citizen || !draft.trim() || submitting}
+            disabled={(!citizen && !isOwner) || !draft.trim() || submitting}
             style={{
               padding: '6px 14px',
               border: 'none',
               borderRadius: 6,
-              background: (!citizen || !draft.trim() || submitting) ? 'var(--cl-border)' : 'var(--cl-accent)',
+              background: ((!citizen && !isOwner) || !draft.trim() || submitting) ? 'var(--cl-border)' : 'var(--cl-accent)',
               color: 'white',
               fontWeight: 700,
               fontSize: '0.78rem',
-              cursor: (!citizen || !draft.trim() || submitting) ? 'not-allowed' : 'pointer',
+              cursor: ((!citizen && !isOwner) || !draft.trim() || submitting) ? 'not-allowed' : 'pointer',
               fontFamily: 'inherit',
             }}
           >
@@ -1161,20 +1176,28 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
         // have it. Fall back to display_name for any stale payload
         // that pre-dates the citizen_id-in-CommentRead change so the
         // delete affordance keeps working during the rollout window.
-        const isMyComment = !!citizen && (
+        const isMyCitizenComment = !!citizen && (
           c.citizen_id != null
             ? c.citizen_id === citizen.id
             : c.citizen_display_name === citizen.display_name
         );
-        // Did the poll's author write this comment? Drives the small
-        // "Author" badge so other citizens know which voice in the
-        // thread belongs to the poll's creator. pollAuthorId is the
-        // citizen id of the poll's author; comparing IDs avoids the
-        // display-name collision risk.
+        // Phase 2 self-engagement: rep-authored comments are 'mine'
+        // when the viewer is the rep owner of this page.
+        const isMyRepComment = isOwner && c.author_kind === 'rep';
+        const isMyComment = isMyCitizenComment || isMyRepComment;
+        // Two paths for the "Author" badge:
+        //   1. Rep-authored comments are ALWAYS by the page author
+        //      (only the page owner can post a rep comment here).
+        //   2. Citizen-authored comments only count as "Author" when
+        //      the commenter is the poll's original author. Compare
+        //      canonical citizen_id to avoid display_name collisions.
         const isAuthorComment = (
-          pollAuthorId != null &&
-          c.citizen_id != null &&
-          c.citizen_id === pollAuthorId
+          c.author_kind === 'rep'
+          || (
+            pollAuthorId != null
+            && c.citizen_id != null
+            && c.citizen_id === pollAuthorId
+          )
         );
         const canDelete = isMyComment;
         const canReport = reporterSignedIn && !isMyComment && !reportedCommentIds.has(c.id);
