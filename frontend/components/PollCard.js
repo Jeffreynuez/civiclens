@@ -6,6 +6,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { votePoll } from '../lib/pagesApi';
 import { getVoterToken } from '../lib/voterToken';
+import IdentityPicker from './IdentityPicker';
+import { useActiveIdentities, pickEngagementIdentity } from '../lib/activeIdentities';
 
 /**
  * Poll attached to a post.
@@ -67,28 +69,28 @@ export default function PollCard({
   );
 
   // Clickability: anyone signed in can click while the poll is open.
-  // Phase 2 self-engagement: reps voting on their OWN page now use
-  // the rep session and write a row keyed on author_rep_id. The
-  // backend's _resolve_engager helper resolves the identity — we
-  // just enable the click and let the cookie-bearing fetch carry
-  // whichever session the browser holds.
+  // Phase 2/4c self-engagement: reps + candidates voting on their
+  // OWN page use their session and write a row keyed on
+  // author_rep_id / author_candidate_id.
   const canClick = !isClosed;
 
-  const cast = async (optionId) => {
-    if (busy || !canClick) return;
-    // Citizens need to be signed in (or prompted to sign in) before
-    // hitting the API. Reps who own this page (isOwner=true) are
-    // already signed in via the rep session cookie — skip the
-    // citizen-login modal for them.
-    if (!citizen && !isOwner) {
-      onCitizenLoginRequired?.();
-      return;
-    }
+  // Phase 6 multi-identity: identities the viewer is signed in to,
+  // plus the per-identity voter_choices from the server so we can
+  // tell who's already voted on each option.
+  const activeIdentities = useActiveIdentities({ isOwner });
+  const voterChoicesByIdentity = poll.voter_choices || {};
+  // Picker state — when set, holds the pending optionId + the
+  // narrowed identity list. Renders the IdentityPicker absolutely
+  // positioned under the option that was clicked.
+  const [votePicker, setVotePicker] = useState(null);
+
+  const fireVote = async (optionId, asIdentity) => {
     setBusy(true);
     setError(null);
     const { data, error: err } = await votePoll(officialId, poll.id, {
       optionId,
       voterToken: getVoterToken(),
+      asIdentity,
     });
     setBusy(false);
     if (err) {
@@ -96,6 +98,53 @@ export default function PollCard({
       return;
     }
     if (data && onUpdated) onUpdated(data);
+  };
+
+  const cast = async (optionId) => {
+    if (busy || !canClick) return;
+    if (!citizen && !isOwner && activeIdentities.length === 0) {
+      onCitizenLoginRequired?.();
+      return;
+    }
+    // Build "alreadyActed" map keyed on whether each identity has
+    // already voted for THIS option. A citizen who's already voted
+    // for option A can still vote for option B (it switches their
+    // vote, not creates a second one) — but they shouldn't get an
+    // auto-pick that re-fires the same option.
+    const alreadyActed = {};
+    for (const id of activeIdentities) {
+      const choice = voterChoicesByIdentity[id.kind];
+      if (choice === optionId) alreadyActed[id.kind] = true;
+    }
+    const decision = pickEngagementIdentity({
+      identities: activeIdentities, alreadyActed,
+    });
+    if (decision.none) {
+      onCitizenLoginRequired?.();
+      return;
+    }
+    if (decision.single) {
+      await fireVote(optionId, null);
+      return;
+    }
+    if (decision.autoPick) {
+      await fireVote(optionId, decision.autoPick);
+      return;
+    }
+    // 2+ identities haven't voted for this option yet, OR all have
+    // (toggle/retract mode). Pop the picker anchored under this
+    // option button.
+    setVotePicker({
+      optionId,
+      mode: decision.mode,
+      identities: decision.showPicker,
+    });
+  };
+
+  const onVotePick = (asIdentity) => {
+    const optionId = votePicker?.optionId;
+    setVotePicker(null);
+    if (optionId != null) fireVote(optionId, asIdentity);
   };
 
   // ── Shared bits ────────────────────────────────────────────────────
@@ -130,8 +179,8 @@ export default function PollCard({
             : 'Click to vote';
 
     return (
+      <div key={opt.id} style={{ position: 'relative' }}>
       <button
-        key={opt.id}
         type="button"
         onClick={clickable ? () => cast(opt.id) : undefined}
         disabled={!clickable || busy}
@@ -214,6 +263,21 @@ export default function PollCard({
           ) : null}
         </div>
       </button>
+      {/* Phase 6 — IdentityPicker anchors to this option's wrapper
+          when the user clicked here AND we need disambiguation. */}
+      {votePicker && votePicker.optionId === opt.id && (
+        <IdentityPicker
+          open
+          identities={(votePicker.identities || []).map((id) => ({
+            ...id,
+            currentState: voterChoicesByIdentity[id.kind] != null ? 'up' : null,
+          }))}
+          mode={votePicker.mode}
+          onPick={onVotePick}
+          onClose={() => setVotePicker(null)}
+        />
+      )}
+      </div>
     );
   };
 
