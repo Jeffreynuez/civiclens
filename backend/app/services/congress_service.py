@@ -560,8 +560,14 @@ class CongressService:
             logger.info(f"Could not resolve govtrack id for {bioguide_id}")
             return []
 
+        # Cache-key version suffix — bump whenever the per-row payload
+        # shape changes so post-deploy boots don't serve stale entries
+        # written by older code. v2 added synthesized vote_id +
+        # congress fields needed by the vote-explainer AI path.
+        cache_version = "v2"
+
         if year is None:
-            cache_key = f"votes:{bioguide_id}:recent:{limit}"
+            cache_key = f"votes:{bioguide_id}:recent:{limit}:{cache_version}"
             cached = self._get_cached(cache_key)
             if cached is not None:
                 return cached
@@ -579,7 +585,7 @@ class CongressService:
         # we never cache the empty result — better to retry on the
         # next request than persist a bad cache state for 30 minutes
         # when GovTrack is briefly down.
-        cache_key = f"votes:{bioguide_id}:{year}"
+        cache_key = f"votes:{bioguide_id}:{year}:{cache_version}"
         cached = self._get_cached(cache_key)
         if cached is None or len(cached) == 0:
             created_gte = f"{year}-01-01T00:00:00"
@@ -1262,10 +1268,37 @@ class CongressService:
                             related_bill_id=vote.get("related_bill"),
                             congress=vote.get("congress"),
                         )
+                        # Build a stable vote_id from the canonical
+                        # (chamber, congress, number) tuple. GovTrack
+                        # doesn't expose its internal id on the
+                        # vote_voter endpoint — only chamber +
+                        # congress + number + a link URL — so we
+                        # synthesize the conventional "h114-310" /
+                        # "s119-42" identifier. This format is also
+                        # what GovTrack itself uses in its vote URLs,
+                        # so it's stable and round-trippable.
+                        gt_chamber = (vote.get("chamber") or "").lower()
+                        chamber_prefix = (
+                            "h" if gt_chamber.startswith("h")
+                            else "s" if gt_chamber.startswith("s")
+                            else ""
+                        )
+                        gt_congress = vote.get("congress")
+                        gt_number = vote.get("number")
+                        synthesized_id = None
+                        if chamber_prefix and gt_congress and gt_number is not None:
+                            synthesized_id = f"{chamber_prefix}{gt_congress}-{gt_number}"
                         results.append({
-                            "vote_id": vote.get("id"),
+                            # Prefer GovTrack's id when present (some
+                            # endpoints / fixtures do include it);
+                            # fall back to the synthesized canonical
+                            # ID otherwise. Always coerce to string so
+                            # the Pydantic vote_id: Optional[str]
+                            # validation downstream is happy.
+                            "vote_id": str(vote.get("id")) if vote.get("id") is not None else synthesized_id,
                             "question": vote.get("question"),
                             "chamber": vote.get("chamber"),
+                            "congress": gt_congress,
                             "result": vote.get("result"),
                             "category": vote.get("category"),
                             "date": (vote.get("created") or "")[:10],
