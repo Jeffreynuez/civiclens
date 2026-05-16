@@ -2309,6 +2309,10 @@ function VoteRow({ vote }) {
   const [explainerLoading, setExplainerLoading] = useState(false);
   const [explainerError, setExplainerError] = useState(null);
   const [generatingAi, setGeneratingAi] = useState(false);
+  // Separate from explainerError so a failed AI-generate call doesn't
+  // wipe the template body off the card — the user can still read
+  // the standard explainer and see an inline error about the upgrade.
+  const [generateError, setGenerateError] = useState(null);
   const [showAi, setShowAi] = useState(false);
 
   // Build the request payload once so the explain / generate calls
@@ -2351,16 +2355,33 @@ function VoteRow({ vote }) {
   const handleGenerateAi = async () => {
     if (generatingAi) return;
     setGeneratingAi(true);
-    setExplainerError(null);
+    setGenerateError(null);
     const { data, error } = await generateVoteExplanation(votePayload);
     setGeneratingAi(false);
     if (error || !data) {
-      setExplainerError(error || 'AI generation failed.');
+      // Map known error codes to human copy. Anything else falls
+      // through verbatim — better to surface raw text than swallow
+      // it silently while debugging.
+      const friendly =
+        error === 'missing_vote_id'
+          ? 'No vote_id on file for this row — AI generation needs a stable identifier to cache against.'
+        : error === 'budget_exceeded'
+          ? "Daily AI budget reached on this deployment. Try again tomorrow."
+        : error === 'not_configured'
+          ? 'AI is not configured on this deployment.'
+        : (error || 'AI generation failed. Please try again.');
+      setGenerateError(friendly);
       return;
     }
     setExplainer(data);
     setShowAi(true);
   };
+
+  // Gate the Generate AI button on having a vote_id. Without one we
+  // can't cache the response (the cache key is vote_id), so we'd
+  // burn an LLM call on every click. Hide the button + show a small
+  // note instead.
+  const canGenerateAi = Boolean(vote.vote_id);
 
   // Pick the position-specific sentence the rep actually cast.
   // Falls back to showing both YEA + NAY meanings when the position
@@ -2534,8 +2555,9 @@ function VoteRow({ vote }) {
               />
 
               {/* Toggle + Generate buttons. Mirrors the Bills CRS/AI
-                  pattern: Generate AI exists when no AI body yet;
-                  toggle exists when both layers are present. */}
+                  pattern: Generate AI exists when no AI body yet AND
+                  we have a vote_id to cache against; toggle exists
+                  when both layers are present. */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10, alignItems: 'center' }}>
                 {explainer.has_ai ? (
                   <button
@@ -2555,7 +2577,7 @@ function VoteRow({ vote }) {
                   >
                     {showAi ? 'Show standard explainer' : 'Show AI explanation'}
                   </button>
-                ) : (
+                ) : canGenerateAi ? (
                   <button
                     type="button"
                     onClick={handleGenerateAi}
@@ -2574,8 +2596,34 @@ function VoteRow({ vote }) {
                   >
                     {generatingAi ? 'Generating…' : '✨ Generate AI explanation'}
                   </button>
+                ) : (
+                  <span style={{ fontSize: '0.68rem', color: 'var(--cl-text-muted)', fontStyle: 'italic' }}>
+                    AI generation unavailable — no stable vote identifier on file.
+                  </span>
                 )}
               </div>
+
+              {/* Generate-AI errors render inline so the template body
+                  stays visible — losing the standard explainer because
+                  the AI upgrade flopped would be a worse UX than just
+                  showing the error inline. */}
+              {generateError && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: '6px 10px',
+                    background: 'var(--cl-danger-soft)',
+                    border: '1px solid var(--cl-danger-border)',
+                    borderRadius: 6,
+                    fontSize: '0.72rem',
+                    color: 'var(--cl-danger-deep)',
+                    lineHeight: 1.4,
+                  }}
+                  role="alert"
+                >
+                  {generateError}
+                </div>
+              )}
 
               <div style={{ fontSize: '0.68rem', color: 'var(--cl-text-muted)', fontStyle: 'italic', marginTop: 8 }}>
                 {showAiBody
