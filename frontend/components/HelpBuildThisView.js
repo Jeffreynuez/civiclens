@@ -51,12 +51,15 @@ const FUND_GOAL = 15300;
 // the whole point of going transparent.
 // ────────────────────────────────────────────────────────────────────
 
-// What's shipped — 22 items. AI integration, moderation, appeals,
-// /polls feed, etc. all moved out of "future" and into the live
-// shipped list. Volume itself is a trust signal — don't truncate.
+// What's shipped — 30 items. AI integration, moderation, appeals,
+// /polls feed, self-engagement, reply threading, candidate slice
+// (auth + composer + dashboard + engagement parity), bill / vote /
+// EO AI summaries, official photos, identity-model spec — all in
+// the live shipped list. Volume itself is a trust signal — don't
+// truncate.
 const SHIPPED = [
   ['Interactive U.S. map', 'All 50 states + 435 congressional districts, click to drill in.'],
-  ['Federal officials directory', 'President, VP, Cabinet, SCOTUS, House + Senate leadership.'],
+  ['Federal officials directory', 'President, VP, Cabinet, SCOTUS, House + Senate leadership, all 535 Congress members with profile photos.'],
   ['Florida full coverage', 'State senate + house, statewide execs, 2026 candidates, election dates.'],
   ['Address → rep lookup', 'Street / ZIP / city resolves to a specific representative.'],
   ['Rep pages', 'Posts, polls (4 visibility modes), comments, reactions, owner dashboard, scope filter.'],
@@ -64,10 +67,15 @@ const SHIPPED = [
   ['Standalone citizen polls', 'Not tied to any rep page, global rate-limited.'],
   ['Global /polls feed', 'Kind chips, comments, AI-powered semantic filter.'],
   ['AI integration', 'Claude Haiku 4.5 — comment sentiment + tone, semantic filter chips, post summarization, poll classification.'],
+  ['Bill / vote / executive-order AI summaries', 'CRS summary + Haiku plain-English translation on every bill, "What was this vote?" explainer, EO abstract + Haiku translation on every EO. Cached per-bill, per-vote, per-EO.'],
   ['Moderation system', 'Report flow on every surface, auto-hide threshold, admin queue: Dismiss / Hide / Unhide / Suspend, cascade-hide on suspension.'],
   ['Appeals system', 'Citizens and reps can appeal hidden content + suspensions; admin queue with Grant / Deny + reason logging.'],
   ['Email notifications', 'Resend-powered — moderation events, appeal submissions, decisions, suspension notices.'],
-  ['Mutually-exclusive sessions', 'Rep / citizen, proper cross-origin cookie handling.'],
+  ['Three-identity auth', 'Rep / citizen / candidate sessions with distinct cookies + bearer tokens. Mutually-exclusive on the client, cross-origin-safe cookies.'],
+  ['Candidate accounts', 'Self-serve login modal, admin-approved claim flow, dedicated dashboard. Shipped alongside the identity-model spec doc.'],
+  ['Candidate page composer', 'Verified candidates can post + manage polls + run events on their own candidate page.'],
+  ['Self-engagement', 'Reps + candidates can like, vote, and comment on their own posts and polls. Author badge surfaces page-owner voice in comment threads.'],
+  ['Reply threading (two-party)', 'Top-level comments are open to all citizens; replies are gated to the post creator + the original commenter only. Prevents citizen-vs-citizen pile-ons while keeping the rep ↔ constituent conversation flowing.'],
   ['"On the ballot" home surface', 'Key election dates + a featured race.'],
   ['"Popular polls" home surface', 'Rep-authored and citizen-authored polls, mixed.'],
   ['"National activity" home surface', 'Alternating R/D posts.'],
@@ -77,10 +85,13 @@ const SHIPPED = [
   ['Installable PWA', 'Pin to home screen on Android + iOS for a near-app-store feel.'],
   ['Light-only theme', 'Respects each component’s design; OS dark mode handled at the chrome level.'],
   ['Two waitlists', 'Address verification + "Claim this page" for real reps.'],
+  ['Identity model spec', 'Source-of-truth PDF in docs/identity-model.pdf covering the three-tier engagement ladder, verification gates, lifecycle transitions, and the election-win promotion path.'],
 ];
 
 const IN_PROGRESS = [
   ['Filling out the remaining 49 states', 'Profile photos, issues, experience, state legislators, local-rep data — content work, ongoing.'],
+  ['In-app notifications', 'Web-push + in-app feed for replies, page-owner posts, poll-close alerts. Phase 6+ once the candidate slice fully bakes in.'],
+  ['Election-win promotion flow', 'Winning candidate → rep account transition (promote-in-place per the identity-model spec), defeated-rep archive to read-only public.'],
   ['Feedback inbox', 'Next item on the build list.'],
   ['Crowdfunding launch + legal structure', 'Forming an LLC, evaluating 501(c)(3).'],
 ];
