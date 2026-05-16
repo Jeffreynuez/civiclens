@@ -243,16 +243,26 @@ async def annotate_officials(payload: dict) -> tuple[int, int]:
         if isinstance(c, dict):
             targets.append(c)
 
-    # Judiciary: SCOTUS justices live under judiciary.scotus.[].justices
+    # Judiciary: SCOTUS justices. The actual JSON path is
+    # judiciary.supreme_court.members[] (not .scotus.justices as an
+    # earlier guess assumed). The Chief Justice + 8 associate
+    # justices each get their own portrait.
     jud = payload.get("judiciary") or {}
-    scotus = jud.get("scotus") or {}
-    for j in scotus.get("justices") or []:
+    sc = jud.get("supreme_court") or {}
+    for j in sc.get("members") or []:
         if isinstance(j, dict):
             targets.append(j)
 
-    # Congressional leadership (Speaker, etc.) — also useful avatars
+    # Congressional leadership: Senate (President pro tem, leaders,
+    # whips) and House (Speaker, leaders, whips, caucus chairs) live
+    # in two separate arrays under congress.senate.leadership and
+    # congress.house.leadership. Both want photos for the home-page
+    # leadership cards.
     cong = payload.get("congress") or {}
-    for leader in cong.get("leadership") or []:
+    for leader in (cong.get("senate") or {}).get("leadership") or []:
+        if isinstance(leader, dict):
+            targets.append(leader)
+    for leader in (cong.get("house") or {}).get("leadership") or []:
         if isinstance(leader, dict):
             targets.append(leader)
 

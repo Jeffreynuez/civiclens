@@ -278,12 +278,15 @@ export default function ProfileView({
 
   const party = member.party || 'I';
   const partyFull = PARTY_NAMES[party] || 'Independent';
-  // Photo URL — accept both naming conventions in use across the
-  // codebase. Congress members (congress_profiles.json + GovTrack) use
-  // photoUrl (camelCase). Executive branch officials + judiciary from
-  // federal_officials.json use photo_url (snake_case). Normalize once
-  // here so the rest of the component only needs to check one name.
-  const photoUrl = member.photoUrl || member.photo_url || null;
+  // Photo URL — accept the three naming conventions in use across
+  // the codebase. Congress members loaded via GovTrack carry
+  // `image` (the unitedstates.github.io/images/congress/225x275
+  // URL). Congress profile data may also carry `photoUrl`
+  // (camelCase). Executive branch + judiciary + leadership from
+  // federal_officials.json use `photo_url` (snake_case). Normalize
+  // once here so the rest of the component only needs to check one
+  // name.
+  const photoUrl = member.photoUrl || member.photo_url || member.image || null;
 
   // Reset tabs, hero collapse, and caches whenever the active person
   // changes. Without resetting heroCollapsed, navigating from one
