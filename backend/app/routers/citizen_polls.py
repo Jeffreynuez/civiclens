@@ -480,6 +480,16 @@ def vote_on_citizen_poll(
     if not option or option.poll_id != poll.id:
         raise HTTPException(status_code=400, detail="Invalid option for this poll")
 
+    # Phase 6 multi-identity: honor the IdentityPicker's explicit
+    # choice when sent. The filter zeroes out the un-picked
+    # identities so the resolution below picks the right one.
+    if payload.as_identity == "citizen":
+        me_rep = me_candidate = None
+    elif payload.as_identity == "rep":
+        me_citizen = me_candidate = None
+    elif payload.as_identity == "candidate":
+        me_citizen = me_rep = None
+
     # Identity resolution: rep / candidate wins if they own the
     # target page; otherwise the citizen path applies. Citizen polls
     # live on a specific page (poll.target_official_id) so we know
@@ -694,6 +704,16 @@ def create_citizen_poll_comment(
     )
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
+
+    # Phase 6 multi-identity: honor the explicit as_identity choice
+    # from the "Posting as: ▾" picker. Other identities get
+    # zeroed out before resolution.
+    if payload.as_identity == "citizen":
+        me_rep = me_candidate = None
+    elif payload.as_identity == "rep":
+        me_citizen = me_candidate = None
+    elif payload.as_identity == "candidate":
+        me_citizen = me_rep = None
 
     # Identity resolution — same triple-priority as the citizen-poll
     # vote endpoint above. Citizen poll knows its

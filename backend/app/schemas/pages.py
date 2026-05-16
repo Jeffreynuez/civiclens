@@ -93,7 +93,12 @@ class PollRead(BaseModel):
     closes_at: Optional[datetime] = None
     options: List[PollOptionRead]
     total_votes: int = 0
-    voter_choice_id: Optional[int] = None  # filled per-request
+    voter_choice_id: Optional[int] = None  # legacy single-value; highest-priority identity
+    # Phase 6 multi-identity: per-identity vote choice. Slots populated
+    # only for identities the caller is signed in to; absent slots
+    # stay None so the IdentityPicker can decide whether to auto-fire
+    # or pop the picker. Keys: 'citizen', 'rep', 'candidate'.
+    voter_choices: dict = Field(default_factory=dict)
     # Scope controls (Phase 1.5).
     default_visibility_scope: str = "country"
     active_scope: str = "country"       # scope actually used for the option counts in this response
@@ -146,11 +151,28 @@ class AuthorSummary(BaseModel):
 
 
 class ReactionSummary(BaseModel):
-    """Aggregated reaction state for one post, from the caller's POV."""
+    """Aggregated reaction state for one post, from the caller's POV.
+
+    Phase 6 multi-identity: `my_reactions` exposes per-identity state
+    when the caller is signed in to multiple identities at once
+    (e.g. citizen + rep + candidate). The IdentityPicker UI uses
+    this to decide whether to show its dropdown — if 2+ identities
+    haven't reacted yet, pop the picker; if only 1 has any
+    remaining choice, auto-fire; if all have acted, the picker
+    opens in toggle-off mode.
+
+    `my_reaction` is the legacy single-value field — kept for
+    backward-compat. It mirrors the highest-priority signed-in
+    identity's reaction (rep > candidate > citizen ordering).
+    """
     up_count: int = 0
     down_count: int = 0
-    # 'up' | 'down' | None. Requires the caller to be a signed-in citizen.
     my_reaction: Optional[str] = None
+    # Per-identity reactions. Slots are populated only for identities
+    # the caller is signed in to; absent slots stay None so the
+    # frontend can treat "not signed in as X" and "signed in as X
+    # but haven't reacted" identically.
+    my_reactions: dict = Field(default_factory=dict)
 
 
 class PostRead(BaseModel):
@@ -176,12 +198,20 @@ class PollVoteRequest(BaseModel):
     # option; their vote lands under scope='country' only. Citizen auth
     # is preferred — when present on the request, the vote gets geography.
     voter_token: Optional[str] = Field(default=None, min_length=8, max_length=64)
+    # Phase 6 multi-identity. When set, forces the backend to engage as
+    # the named identity instead of the default cookie-priority pick
+    # (rep > candidate > citizen). The IdentityPicker UI sends this
+    # whenever the user is signed in to multiple identities so the
+    # vote lands on the correct identity row.
+    as_identity: Optional[str] = Field(default=None, pattern=r"^(citizen|rep|candidate)$")
 
 
 # ── Reactions ─────────────────────────────────────────────────────────
 class ReactionRequest(BaseModel):
     # 'up' or 'down'. Toggling the same kind removes the reaction.
     kind: str = Field(..., pattern=r"^(up|down)$")
+    # Phase 6 multi-identity — see PollVoteRequest.as_identity.
+    as_identity: Optional[str] = Field(default=None, pattern=r"^(citizen|rep|candidate)$")
 
 
 # ── Comments ──────────────────────────────────────────────────────────
@@ -194,6 +224,11 @@ class CommentCreate(BaseModel):
     # — the data model stays one level deep so the render is a
     # simple flat pool under each top-level comment.
     parent_comment_id: Optional[int] = None
+    # Phase 6 multi-identity — see PollVoteRequest.as_identity. The
+    # comment composer's "Posting as" picker forwards this so a
+    # multi-identity user knows + controls which identity authors
+    # the comment.
+    as_identity: Optional[str] = Field(default=None, pattern=r"^(citizen|rep|candidate)$")
 
 
 class CommentRead(BaseModel):
@@ -608,6 +643,8 @@ class PollCommentCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=1000)
     # Phase 3 reply threading — see CommentCreate.parent_comment_id.
     parent_comment_id: Optional[int] = None
+    # Phase 6 multi-identity — see CommentCreate.as_identity.
+    as_identity: Optional[str] = Field(default=None, pattern=r"^(citizen|rep|candidate)$")
 
 
 class PollCommentRead(BaseModel):

@@ -416,10 +416,15 @@ export function resolveImageUrl(url) {
   return `${API_BASE_URL}${url}`;
 }
 
-// ── Reactions (citizen-gated) ────────────────────────────────────────
-export async function reactToPost(postId, kind) {
+// ── Reactions (multi-identity, Phase 6) ──────────────────────────────
+// asIdentity is 'citizen' | 'rep' | 'candidate' | null. When null
+// the backend picks via cookie priority (rep > candidate > citizen).
+// The IdentityPicker sends this whenever the user is signed in to
+// more than one identity so the reaction lands on the right row.
+export async function reactToPost(postId, kind, asIdentity = null) {
   return request(`/api/pages/posts/${postId}/reactions`, {
-    method: 'POST', body: { kind },
+    method: 'POST',
+    body: { kind, as_identity: asIdentity || undefined },
   });
 }
 
@@ -439,12 +444,16 @@ export async function listComments(postId, { scope, sort, filterBy, limit } = {}
 // Phase 3 reply threading: pass parentCommentId to post a reply
 // under an existing top-level comment. Backend enforces the
 // two-party rule (post creator OR parent author only).
-export async function createComment(postId, body, parentCommentId = null) {
+// Phase 6: pass asIdentity to author the comment as a specific
+// identity (citizen / rep / candidate) when the user is signed
+// in to multiple.
+export async function createComment(postId, body, parentCommentId = null, asIdentity = null) {
   return request(`/api/pages/posts/${postId}/comments`, {
     method: 'POST',
     body: {
       body,
       parent_comment_id: parentCommentId || undefined,
+      as_identity: asIdentity || undefined,
     },
   });
 }
@@ -453,10 +462,11 @@ export async function deleteComment(commentId) {
   return request(`/api/pages/comments/${commentId}`, { method: 'DELETE' });
 }
 
-// ── Comment reactions (citizen-gated) ───────────────────────────────
-export async function reactToComment(commentId, kind) {
+// ── Comment reactions (multi-identity, Phase 6) ─────────────────────
+export async function reactToComment(commentId, kind, asIdentity = null) {
   return request(`/api/pages/comments/${commentId}/reactions`, {
-    method: 'POST', body: { kind },
+    method: 'POST',
+    body: { kind, as_identity: asIdentity || undefined },
   });
 }
 
@@ -482,11 +492,18 @@ export async function deletePost(postId) {
   return request(`/api/pages/posts/${postId}`, { method: 'DELETE' });
 }
 
-// ── Poll vote ─────────────────────────────────────────────────────────
-export async function votePoll(officialId, pollId, { optionId, voterToken }) {
+// ── Poll vote (multi-identity, Phase 6) ──────────────────────────────
+export async function votePoll(officialId, pollId, { optionId, voterToken, asIdentity }) {
   return request(
     `/api/pages/${encodeURIComponent(officialId)}/polls/${pollId}/vote`,
-    { method: 'POST', body: { option_id: optionId, voter_token: voterToken } },
+    {
+      method: 'POST',
+      body: {
+        option_id: optionId,
+        voter_token: voterToken,
+        as_identity: asIdentity || undefined,
+      },
+    },
   );
 }
 
@@ -502,50 +519,30 @@ export async function deleteRepEvent(eventId) {
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────
-// Session model: ONE active role per browser. The backend uses
-// distinct cookies (`cl_session` for reps, `cl_citizen` for citizens,
-// `cl_candidate` for candidates) and we keep distinct Bearer tokens
-// in localStorage, but on the client we treat them as mutually
-// exclusive — logging in as one role explicitly tears down the
-// other two. Without this an orphaned rep token from a previous
-// session would leak through every request the citizen makes,
-// making the backend report `is_owner=true` and surfacing rep-only
-// affordances (the post composer, comment Delete buttons) to
-// non-rep viewers.
+// Session model (Phase 6 update): MULTI-IDENTITY by default. The
+// backend supports three independent cookies (cl_session for reps,
+// cl_citizen for citizens, cl_candidate for candidates) and they
+// can all coexist in the same browser. The IdentityPicker UI
+// disambiguates which identity performs each action — see the
+// _apply_as_identity_filter helper on the backend and the
+// useActiveIdentities hook + IdentityPicker component on the
+// frontend.
 //
-// To switch roles deliberately: sign out, then sign in as the
-// other role. Or use a second browser / incognito tab.
-async function _tearDownOtherRole(otherEndpoint, clearFn) {
-  // Fire-and-forget — we don't block the new login on whether the
-  // cleanup call succeeds. The localStorage clear happens
-  // regardless so a network failure doesn't leave a stale token
-  // in place client-side.
-  try {
-    await request(otherEndpoint, { method: 'POST' });
-  } catch { /* ignore */ }
-  clearFn(null);
-}
-
-// Convenience — tear down BOTH non-current roles in parallel.
-// Used by every login + logout path so a previous session in any
-// other role can't ghost into the new identity.
-async function _tearDownTwoOtherRoles(a, b) {
-  await Promise.all([_tearDownOtherRole(...a), _tearDownOtherRole(...b)]);
-}
+// Earlier versions enforced one-active-role-per-browser via a
+// _tearDownTwoOtherRoles helper that fired the other two logout
+// endpoints on each login. That helper has been removed — the
+// per-action picker now handles the disambiguation that the
+// tear-down was originally trying to enforce. A user signed in
+// as both their citizen and rep accounts will see the picker on
+// every like / vote / comment, ensuring intent is explicit.
 
 export async function login(email, password) {
-  // Tear down any active citizen + candidate sessions before
-  // minting a rep one.
-  await _tearDownTwoOtherRoles(
-    ['/api/citizen-auth/logout', setStoredCitizenToken],
-    ['/api/candidate-auth/logout', setStoredCandidateToken],
-  );
+  // Phase 6: multi-identity is supported — no tear-down of other
+  // sessions on login. The user can sign in as rep + citizen +
+  // candidate simultaneously; the IdentityPicker disambiguates.
   const result = await request('/api/auth/login', {
     method: 'POST', body: { email, password },
   });
-  // Persist the mirror token so subsequent requests can authenticate
-  // via Authorization: Bearer when the httpOnly cookie path is
-  // blocked (cross-site cookie restrictions on mobile).
   if (result?.data?.session_token) {
     setStoredRepToken(result.data.session_token);
   }
@@ -553,15 +550,11 @@ export async function login(email, password) {
 }
 
 export async function logout() {
-  // Belt-and-suspenders: clear ALL role tokens on either logout
-  // path. Defensive against the case where a previous session was
-  // left in a half-clean state.
+  // Phase 6: signing out clears ONLY the rep session. Citizen +
+  // candidate sessions (if present) are preserved — the user
+  // signs them out individually via their own sign-out buttons.
   const result = await request('/api/auth/logout', { method: 'POST' });
   setStoredRepToken(null);
-  await _tearDownTwoOtherRoles(
-    ['/api/citizen-auth/logout', setStoredCitizenToken],
-    ['/api/candidate-auth/logout', setStoredCandidateToken],
-  );
   return result;
 }
 
@@ -574,11 +567,7 @@ export async function fetchMe() {
 // for the mutually-exclusive session contract — we tear down any active
 // rep session before minting a citizen one, and vice versa.
 export async function loginCitizenApi(email, password) {
-  // Tear down rep AND candidate sessions before minting a citizen one.
-  await _tearDownTwoOtherRoles(
-    ['/api/auth/logout', setStoredRepToken],
-    ['/api/candidate-auth/logout', setStoredCandidateToken],
-  );
+  // Phase 6: multi-identity — no tear-down of other sessions.
   const result = await request('/api/citizen-auth/login', {
     method: 'POST', body: { email, password },
   });
@@ -596,11 +585,8 @@ export async function loginCitizenApi(email, password) {
 export async function signupDemoCitizen({
   displayName, state, congressionalDistrict, city,
 } = {}) {
-  // Same mutually-exclusive contract as loginCitizenApi.
-  await _tearDownTwoOtherRoles(
-    ['/api/auth/logout', setStoredRepToken],
-    ['/api/candidate-auth/logout', setStoredCandidateToken],
-  );
+  // Phase 6: multi-identity — no tear-down of other sessions on
+  // demo-signup either.
   const result = await request('/api/citizen-auth/demo-signup', {
     method: 'POST',
     body: {
@@ -617,14 +603,10 @@ export async function signupDemoCitizen({
 }
 
 export async function logoutCitizenApi() {
-  // Same belt-and-suspenders cleanup as the rep logout: clear ALL
-  // tokens so a previous half-clean state can't linger.
+  // Phase 6: signing out clears ONLY the citizen session. Rep +
+  // candidate sessions (if present) are preserved.
   const result = await request('/api/citizen-auth/logout', { method: 'POST' });
   setStoredCitizenToken(null);
-  await _tearDownTwoOtherRoles(
-    ['/api/auth/logout', setStoredRepToken],
-    ['/api/candidate-auth/logout', setStoredCandidateToken],
-  );
   return result;
 }
 
@@ -640,10 +622,7 @@ export async function fetchCitizenMe() {
 // with explicit 403s — the modal shows those messages verbatim
 // rather than collapsing into a generic 401.
 export async function loginCandidateApi(email, password) {
-  await _tearDownTwoOtherRoles(
-    ['/api/auth/logout', setStoredRepToken],
-    ['/api/citizen-auth/logout', setStoredCitizenToken],
-  );
+  // Phase 6: multi-identity — no tear-down of other sessions.
   const result = await request('/api/candidate-auth/login', {
     method: 'POST', body: { email, password },
   });
@@ -654,12 +633,10 @@ export async function loginCandidateApi(email, password) {
 }
 
 export async function logoutCandidateApi() {
+  // Phase 6: signing out clears ONLY the candidate session. Rep +
+  // citizen sessions (if present) are preserved.
   const result = await request('/api/candidate-auth/logout', { method: 'POST' });
   setStoredCandidateToken(null);
-  await _tearDownTwoOtherRoles(
-    ['/api/auth/logout', setStoredRepToken],
-    ['/api/citizen-auth/logout', setStoredCitizenToken],
-  );
   return result;
 }
 
@@ -690,10 +667,13 @@ export async function createCitizenPoll(officialId, pollPayload) {
   });
 }
 
-export async function voteOnCitizenPoll(pollId, optionId) {
+export async function voteOnCitizenPoll(pollId, optionId, asIdentity = null) {
   return request(`/api/citizen-polls/${pollId}/vote`, {
     method: 'POST',
-    body: { option_id: optionId },
+    body: {
+      option_id: optionId,
+      as_identity: asIdentity || undefined,
+    },
   });
 }
 
@@ -712,15 +692,20 @@ export async function listCitizenPollComments(pollId) {
   return request(`/api/citizen-polls/${pollId}/comments`);
 }
 
-export async function createCitizenPollComment(pollId, body, parentCommentId = null) {
+export async function createCitizenPollComment(
+  pollId, body, parentCommentId = null, asIdentity = null,
+) {
   // Phase 3 reply threading — pass parentCommentId to post a reply
   // inside an existing top-level thread. Backend two-party rule
   // applies.
+  // Phase 6 — asIdentity selects which identity authors the comment
+  // when the user is signed in to multiple.
   return request(`/api/citizen-polls/${pollId}/comments`, {
     method: 'POST',
     body: {
       body,
       parent_comment_id: parentCommentId || undefined,
+      as_identity: asIdentity || undefined,
     },
   });
 }

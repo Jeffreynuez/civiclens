@@ -21,6 +21,8 @@ import {
   reportComment,
 } from '../lib/pagesApi';
 import { ThumbsUp, ThumbsDown, ChatText } from './ui';
+import IdentityPicker, { PostingAsPicker } from './IdentityPicker';
+import { useActiveIdentities, pickEngagementIdentity } from '../lib/activeIdentities';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -98,24 +100,79 @@ export default function PostCard({
 
   const reactions = post.reactions || { up_count: 0, down_count: 0, my_reaction: null };
   const myReaction = reactions.my_reaction;
+  // Phase 6 multi-identity: per-identity reactions live on the
+  // server (my_reactions). Frontend uses this to decide whether
+  // the IdentityPicker pops on click or fires straight through.
+  const myReactionsByIdentity = reactions.my_reactions || {};
+
+  // Identities the viewer is signed in to. On the page-owner's own
+  // page this includes citizen + rep/candidate; on someone else's
+  // page just the citizen (rep/candidate self-engagement is
+  // scoped to their own page).
+  const activeIdentities = useActiveIdentities({ isOwner });
 
   // ── Reactions ──────────────────────────────────────────────────────
-  const handleReact = async (kind) => {
-    // Phase 2 self-engagement: the rep that owns this page can react
-    // to their own post — they're authenticated via the rep session
-    // cookie, no citizen login needed. The backend's _resolve_engager
-    // picks the right identity and writes a row keyed on
-    // author_rep_id.
-    if (!citizen && !isOwner) {
-      onCitizenLoginRequired?.();
-      return;
-    }
-    const { data, error } = await reactToPost(post.id, kind);
+  // Phase 6 picker state. `reactPicker` holds the pending kind and
+  // (when in 'pick' mode) the list of identities the user still
+  // needs to disambiguate between, plus the open-anchor flag.
+  const [reactPicker, setReactPicker] = useState(null);
+
+  // Internal helper — actually fire the reaction once we know which
+  // identity should perform it (or `null` for the default
+  // cookie-priority path when only one identity is signed in).
+  const fireReaction = async (kind, asIdentity) => {
+    const { data, error } = await reactToPost(post.id, kind, asIdentity);
     if (error) {
       setErr(error);
       return;
     }
     if (data && onReactionChanged) onReactionChanged(post.id, data);
+  };
+
+  const handleReact = async (kind) => {
+    // No identity at all — kick the citizen login flow.
+    if (activeIdentities.length === 0) {
+      onCitizenLoginRequired?.();
+      return;
+    }
+    // Build the "already acted" map: an identity counts as already-
+    // acted when they have a reaction of THIS kind (a different
+    // reaction kind is fine — clicking Up while you've Down-voted
+    // should let you flip, not require the picker).
+    const alreadyActed = {};
+    for (const id of activeIdentities) {
+      const r = myReactionsByIdentity[id.kind];
+      if (r === kind) alreadyActed[id.kind] = true;
+    }
+    const decision = pickEngagementIdentity({
+      identities: activeIdentities, alreadyActed,
+    });
+    if (decision.single) {
+      // One identity total — no picker needed ever.
+      await fireReaction(kind, null);
+      return;
+    }
+    if (decision.autoPick) {
+      // Only one identity hasn't acted with this kind yet → fire as them.
+      await fireReaction(kind, decision.autoPick);
+      return;
+    }
+    // Otherwise pop the picker. Stash the kind + mode so onPick knows
+    // what to fire.
+    setReactPicker({
+      kind,
+      mode: decision.mode,
+      identities: decision.showPicker.map((id) => ({
+        ...id,
+        currentState: myReactionsByIdentity[id.kind] || null,
+      })),
+    });
+  };
+
+  const onReactionPick = (asIdentity) => {
+    const kind = reactPicker?.kind;
+    setReactPicker(null);
+    if (kind) fireReaction(kind, asIdentity);
   };
 
   // ── Comments ───────────────────────────────────────────────────────
@@ -133,6 +190,33 @@ export default function PostCard({
   const [replyOpenFor, setReplyOpenFor] = useState(null);
   const [replyDraft, setReplyDraft] = useState('');
   const [replyBusy, setReplyBusy] = useState(false);
+  // Phase 6 — which identity authors the next comment / reply. The
+  // PostingAsPicker above the textarea drives this. Defaults to
+  // the first available identity; user can switch at any time.
+  // Each value is null when no identities are present (anonymous).
+  const [commentAsIdentity, setCommentAsIdentity] = useState(
+    activeIdentities[0]?.kind || null,
+  );
+  const [replyAsIdentity, setReplyAsIdentity] = useState(
+    activeIdentities[0]?.kind || null,
+  );
+  // Keep the defaults in sync with the live identity list — e.g. if
+  // the user signs out of citizen mid-session, drop that choice.
+  useEffect(() => {
+    if (commentAsIdentity && !activeIdentities.some((i) => i.kind === commentAsIdentity)) {
+      setCommentAsIdentity(activeIdentities[0]?.kind || null);
+    }
+    if (replyAsIdentity && !activeIdentities.some((i) => i.kind === replyAsIdentity)) {
+      setReplyAsIdentity(activeIdentities[0]?.kind || null);
+    }
+    if (!commentAsIdentity && activeIdentities[0]) {
+      setCommentAsIdentity(activeIdentities[0].kind);
+    }
+    if (!replyAsIdentity && activeIdentities[0]) {
+      setReplyAsIdentity(activeIdentities[0].kind);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIdentities.map((i) => i.kind).join('|')]);
   // Sort/filter control. `latest` is the default; my_district and
   // my_state are citizen-only filters that ride on the same dropdown
   // for a single point of UX. Anonymous viewers and owners see a
@@ -309,7 +393,12 @@ export default function PostCard({
     if (!body) return;
     setCommentBusy(true);
     setCommentErr(null);
-    const { data, error } = await createComment(post.id, body);
+    // Phase 6: pass the picker-selected identity. Backend respects
+    // this when multiple identities are signed in; falls back to
+    // cookie priority otherwise.
+    const { data, error } = await createComment(
+      post.id, body, null, commentAsIdentity,
+    );
     setCommentBusy(false);
     if (error) {
       setCommentErr(error);
@@ -335,7 +424,10 @@ export default function PostCard({
     if (!body || replyBusy) return;
     setReplyBusy(true);
     setCommentErr(null);
-    const { data, error } = await createComment(post.id, body, parentId);
+    // Phase 6: thread the picker-selected identity through.
+    const { data, error } = await createComment(
+      post.id, body, parentId, replyAsIdentity,
+    );
     setReplyBusy(false);
     if (error) {
       setCommentErr(error);
@@ -649,30 +741,57 @@ export default function PostCard({
           flexWrap: 'wrap',
         }}
       >
-        <ReactionButton
-          kind="up"
-          count={reactions.up_count}
-          active={myReaction === 'up'}
-          disabled={busy}
-          onClick={() => handleReact('up')}
-          title={
-            isOwner ? 'Like (as the post author)'
-              : citizen ? 'Like'
-              : 'Sign in as a citizen to like'
-          }
-        />
-        <ReactionButton
-          kind="down"
-          count={reactions.down_count}
-          active={myReaction === 'down'}
-          disabled={busy}
-          onClick={() => handleReact('down')}
-          title={
-            isOwner ? 'Dislike (as the post author)'
-              : citizen ? 'Dislike'
-              : 'Sign in as a citizen to dislike'
-          }
-        />
+        {/* Phase 6: the reaction buttons live inside a positioned
+            wrapper so the IdentityPicker (when 2+ identities need to
+            disambiguate) can anchor directly under whichever button
+            was clicked. The picker renders absolutely positioned and
+            self-dismisses on outside-click or Escape. */}
+        <div style={{ position: 'relative', display: 'inline-flex' }}>
+          <ReactionButton
+            kind="up"
+            count={reactions.up_count}
+            active={myReaction === 'up'}
+            disabled={busy}
+            onClick={() => handleReact('up')}
+            title={
+              isOwner ? 'Like (as the post author)'
+                : citizen ? 'Like'
+                : 'Sign in as a citizen to like'
+            }
+          />
+          {reactPicker && reactPicker.kind === 'up' && (
+            <IdentityPicker
+              open
+              identities={reactPicker.identities}
+              mode={reactPicker.mode}
+              onPick={onReactionPick}
+              onClose={() => setReactPicker(null)}
+            />
+          )}
+        </div>
+        <div style={{ position: 'relative', display: 'inline-flex' }}>
+          <ReactionButton
+            kind="down"
+            count={reactions.down_count}
+            active={myReaction === 'down'}
+            disabled={busy}
+            onClick={() => handleReact('down')}
+            title={
+              isOwner ? 'Dislike (as the post author)'
+                : citizen ? 'Dislike'
+                : 'Sign in as a citizen to dislike'
+            }
+          />
+          {reactPicker && reactPicker.kind === 'down' && (
+            <IdentityPicker
+              open
+              identities={reactPicker.identities}
+              mode={reactPicker.mode}
+              onPick={onReactionPick}
+              onClose={() => setReactPicker(null)}
+            />
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setCommentsOpen((o) => !o)}
@@ -714,11 +833,23 @@ export default function PostCard({
           {/* Composer */}
           <div
             style={{
-              display: 'flex', gap: '8px', alignItems: 'flex-start',
               padding: '8px', border: '1px solid var(--cl-border)',
               borderRadius: '10px', background: 'var(--cl-bg)',
             }}
           >
+            {/* Phase 6 "Posting as" picker — shows the active identity
+                above the textarea so the user knows who will author
+                the comment BEFORE they type. Multi-identity sees a
+                dropdown; single-identity sees a non-interactive pill;
+                anonymous (no identity) sees nothing. */}
+            {activeIdentities.length > 0 && (
+              <PostingAsPicker
+                identities={activeIdentities}
+                value={commentAsIdentity}
+                onChange={setCommentAsIdentity}
+              />
+            )}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
             <textarea
               value={commentDraft}
               onChange={(e) => setCommentDraft(e.target.value.slice(0, 1000))}
@@ -759,6 +890,7 @@ export default function PostCard({
             >
               {commentBusy ? 'Sending…' : 'Post'}
             </button>
+            </div>{/* /textarea + Post row */}
           </div>
           {commentErr && (
             <div style={{ color: '#d63031', fontSize: '0.72rem', marginTop: '6px' }}>
@@ -1200,6 +1332,16 @@ export default function PostCard({
               background: 'var(--cl-bg)',
             }}
           >
+            {/* Phase 6 "Posting as" picker — same shape as the
+                top-level comment composer. Multi-identity sees a
+                dropdown; single-identity sees a non-interactive pill. */}
+            {activeIdentities.length > 0 && (
+              <PostingAsPicker
+                identities={activeIdentities}
+                value={replyAsIdentity}
+                onChange={setReplyAsIdentity}
+              />
+            )}
             <textarea
               value={replyDraft}
               onChange={(e) => setReplyDraft(e.target.value.slice(0, 1000))}

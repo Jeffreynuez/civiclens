@@ -127,6 +127,35 @@ def _scope_label(scope: str, owner: Optional[RepAccount]) -> Optional[str]:
     return None
 
 
+# Phase 6 multi-identity: when the IdentityPicker UI sends an
+# explicit as_identity (e.g. user is signed in as both citizen and
+# rep, clicked Like, picked Pat Back), force _resolve_engager to
+# treat the other identities as not-signed-in. Returns the
+# narrowed (citizen, rep, candidate) tuple. If as_identity is
+# 'citizen' but no citizen session is present (etc.), we leave
+# the original sessions intact — _resolve_engager will 401 or
+# 403 with a clearer message than we'd produce here.
+def _apply_as_identity_filter(
+    *,
+    me_citizen,
+    me_rep,
+    me_candidate,
+    as_identity: Optional[str],
+):
+    if not as_identity:
+        return me_citizen, me_rep, me_candidate
+    if as_identity == "citizen" and me_citizen is not None:
+        return me_citizen, None, None
+    if as_identity == "rep" and me_rep is not None:
+        return None, me_rep, None
+    if as_identity == "candidate" and me_candidate is not None:
+        return None, None, me_candidate
+    # Asked to act as an identity the caller isn't signed in to —
+    # return all-None so _resolve_engager raises 401 with the
+    # standard "sign in to engage" message.
+    return None, None, None
+
+
 # Phase 2/4c self-engagement: each engagement endpoint accepts either
 # a citizen OR the rep / candidate who owns the target page. This
 # helper centralises the "which identity is acting?" decision so
@@ -239,6 +268,7 @@ def _poll_to_read(
     active_scope: str,
     voter_choice_id: Optional[int] = None,
     is_owner_viewing: bool = False,
+    voter_choices: Optional[dict] = None,
 ) -> PollRead:
     """Serialize a poll with its option counts filtered to `active_scope`
     plus a full-breakdown snapshot so the UI can show "4 in FL-19 / 31
@@ -302,6 +332,10 @@ def _poll_to_read(
         options=options_out,
         total_votes=active_total,
         voter_choice_id=voter_choice_id,
+        # Phase 6 multi-identity: per-identity vote choices. Empty
+        # dict when only one identity is signed in (the IdentityPicker
+        # falls back to the legacy voter_choice_id in that case).
+        voter_choices=(voter_choices or {}),
         default_visibility_scope=poll.default_visibility_scope or "country",
         active_scope=active_scope,
         allowed_scopes=allowed,
@@ -337,25 +371,42 @@ def _reaction_summary_for_post(
     """
     up = down = 0
     mine: Optional[str] = None
+    # Phase 6 multi-identity: track per-identity reaction state so the
+    # frontend IdentityPicker can know which identities have / haven't
+    # acted. Each slot is only present when the caller is signed in
+    # to that identity.
+    per_identity: dict = {}
+    if me_citizen is not None:
+        per_identity["citizen"] = None
+    if me_rep is not None:
+        per_identity["rep"] = None
+    if me_candidate is not None:
+        per_identity["candidate"] = None
     filtered = bool(engagement_scope) and engagement_scope != "country"
     for r in (post.reactions or []):
-        # Always track the caller's own reaction first — the filter
-        # should never mask "my reaction" even if I'm outside the
+        # Always track the caller's own reactions first — the filter
+        # should never mask "my reactions" even if I'm outside the
         # scope the owner is slicing by. Any of the three author
-        # kinds can be the caller.
+        # kinds can be the caller; each populates its own slot.
         if me_citizen is not None and r.citizen_id == me_citizen.id:
             mine = r.kind
+            per_identity["citizen"] = r.kind
         if me_rep is not None and getattr(r, "author_rep_id", None) == me_rep.id:
             mine = r.kind
+            per_identity["rep"] = r.kind
         if me_candidate is not None and getattr(r, "author_candidate_id", None) == me_candidate.id:
             mine = r.kind
+            per_identity["candidate"] = r.kind
         if filtered and not _engagement_matches_scope(r, engagement_scope, owner):
             continue
         if r.kind == "up":
             up += 1
         elif r.kind == "down":
             down += 1
-    return ReactionSummary(up_count=up, down_count=down, my_reaction=mine)
+    return ReactionSummary(
+        up_count=up, down_count=down, my_reaction=mine,
+        my_reactions=per_identity,
+    )
 
 
 def _post_to_read(
@@ -372,72 +423,68 @@ def _post_to_read(
 ) -> PostRead:
     poll_read: Optional[PollRead] = None
     if post.poll is not None:
+        # Phase 6 multi-identity: compute per-identity vote choices
+        # in a single sweep across the eager-loaded options.votes.
+        # Each identity the caller is signed in to gets a slot
+        # populated with that identity's chosen option_id (or None
+        # if they haven't voted). The legacy voter_choice_id stays
+        # populated with whichever identity has the highest priority
+        # (rep > candidate > citizen) for backward-compat.
         voter_choice_id: Optional[int] = None
-        # Phase 2/4c self-engagement: when the rep OR candidate is
-        # viewing their own page (is_owner_viewing) and has voted on
-        # this poll, surface their own vote as voter_choice_id so
-        # the UI highlights the option they picked. Checked first
-        # because the page-owner can also be signed in as a citizen
-        # on the same browser; on their own page their owner
-        # identity wins.
-        if (
-            me_rep is not None
-            and isinstance(owner, RepAccount)
-            and me_rep.id == owner.id
+        per_identity: dict = {}
+        if me_citizen is not None:
+            per_identity["citizen"] = None
+        if me_rep is not None and (
+            isinstance(owner, RepAccount) and me_rep.id == owner.id
         ):
-            vote = (
-                db.query(PollVote)
-                .filter(
-                    PollVote.poll_id == post.poll.id,
-                    PollVote.author_rep_id == me_rep.id,
-                )
-                .first()
-            )
-            if vote:
-                voter_choice_id = vote.option_id
+            per_identity["rep"] = None
+        if me_candidate is not None and (
+            isinstance(owner, CandidateAccount) and me_candidate.id == owner.id
+        ):
+            per_identity["candidate"] = None
+
+        # Iterate every vote on every option once and bin them into
+        # the per-identity slots + the legacy voter_choice_id.
+        for opt in (post.poll.options or []):
+            for v in (opt.votes or []):
+                if me_citizen is not None and v.citizen_id == me_citizen.id:
+                    per_identity["citizen"] = v.option_id
+                    if voter_choice_id is None:
+                        voter_choice_id = v.option_id
+                if (
+                    "rep" in per_identity
+                    and me_rep is not None
+                    and getattr(v, "author_rep_id", None) == me_rep.id
+                ):
+                    per_identity["rep"] = v.option_id
+                    voter_choice_id = v.option_id  # rep beats citizen
+                if (
+                    "candidate" in per_identity
+                    and me_candidate is not None
+                    and getattr(v, "author_candidate_id", None) == me_candidate.id
+                ):
+                    per_identity["candidate"] = v.option_id
+                    if not (me_rep is not None and "rep" in per_identity):
+                        voter_choice_id = v.option_id
+
+        # Anonymous voter_token fallback — only surfaces a vote that
+        # was itself anonymous. A prior citizen-attributed vote on
+        # this browser must not leak to an unauthenticated viewer.
         if (
             voter_choice_id is None
-            and me_candidate is not None
-            and isinstance(owner, CandidateAccount)
-            and me_candidate.id == owner.id
+            and me_citizen is None
+            and me_rep is None
+            and me_candidate is None
+            and voter_token
         ):
-            vote = (
-                db.query(PollVote)
-                .filter(
-                    PollVote.poll_id == post.poll.id,
-                    PollVote.author_candidate_id == me_candidate.id,
-                )
-                .first()
-            )
-            if vote:
-                voter_choice_id = vote.option_id
-        if voter_choice_id is None and me_citizen is not None:
-            # Authoritative — a citizen's "your vote" is keyed on their
-            # citizen_id, never on the browser's voter_token. Without
-            # this restriction, two citizens sharing a browser would
-            # both see the first one's vote as "your vote" and the
-            # second citizen's clickable ballot would never appear.
-            vote = (
-                db.query(PollVote)
-                .filter(
-                    PollVote.poll_id == post.poll.id,
-                    PollVote.citizen_id == me_citizen.id,
-                )
-                .first()
-            )
-            if vote:
-                voter_choice_id = vote.option_id
-        elif voter_choice_id is None and voter_token:
-            # Anonymous viewer — only surface votes that were themselves
-            # anonymous (citizen_id IS NULL). A prior citizen-attributed
-            # vote on this browser must not leak to an unauthenticated
-            # viewer as "your vote".
             vote = (
                 db.query(PollVote)
                 .filter(
                     PollVote.poll_id == post.poll.id,
                     PollVote.voter_token == voter_token,
                     PollVote.citizen_id.is_(None),
+                    PollVote.author_rep_id.is_(None),
+                    PollVote.author_candidate_id.is_(None),
                 )
                 .first()
             )
@@ -448,6 +495,7 @@ def _post_to_read(
         poll_read = _poll_to_read(
             post.poll, owner=owner, active_scope=active_scope,
             voter_choice_id=voter_choice_id,
+            voter_choices=per_identity,
             is_owner_viewing=is_owner_viewing,
         )
 
@@ -931,6 +979,13 @@ def vote_on_poll(
     if not option or option.poll_id != poll.id:
         raise HTTPException(status_code=400, detail="Invalid option for this poll")
 
+    # Phase 6 multi-identity: honor the IdentityPicker's explicit
+    # choice when sent. Narrows the candidate identities before
+    # _resolve_engager picks one.
+    me_citizen, me_rep, me_candidate = _apply_as_identity_filter(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+        as_identity=payload.as_identity,
+    )
     citizen, rep, candidate = _resolve_engager(
         me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=official_id,
@@ -1035,6 +1090,11 @@ def react_to_post(
       • Send kind=up while 'up' is active → remove (toggle off).
     """
     post = _load_post_or_404(db, post_id)
+    # Phase 6 multi-identity: narrow by as_identity when sent.
+    me_citizen, me_rep, me_candidate = _apply_as_identity_filter(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+        as_identity=payload.as_identity,
+    )
     citizen, rep, candidate = _resolve_engager(
         me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=post.official_id,
@@ -1312,6 +1372,15 @@ def _comment_reaction_summary(
     """
     up = down = 0
     mine: Optional[str] = None
+    # Phase 6 multi-identity: per-identity reaction tracking. Same
+    # pattern as _reaction_summary_for_post above.
+    per_identity: dict = {}
+    if me_citizen is not None:
+        per_identity["citizen"] = None
+    if me_rep is not None:
+        per_identity["rep"] = None
+    if me_candidate is not None:
+        per_identity["candidate"] = None
     for r in (comment.reactions or []):
         if r.kind == "up":
             up += 1
@@ -1319,11 +1388,17 @@ def _comment_reaction_summary(
             down += 1
         if me_citizen is not None and r.citizen_id == me_citizen.id:
             mine = r.kind
+            per_identity["citizen"] = r.kind
         if me_rep is not None and getattr(r, "author_rep_id", None) == me_rep.id:
             mine = r.kind
+            per_identity["rep"] = r.kind
         if me_candidate is not None and getattr(r, "author_candidate_id", None) == me_candidate.id:
             mine = r.kind
-    return {"up_count": up, "down_count": down, "my_reaction": mine}
+            per_identity["candidate"] = r.kind
+    return {
+        "up_count": up, "down_count": down,
+        "my_reaction": mine, "my_reactions": per_identity,
+    }
 
 
 @router.post("/comments/{comment_id}/reactions", response_model=ReactionSummary)
@@ -1344,6 +1419,11 @@ def react_to_comment(
     post = db.get(Post, comment.post_id)
     if post is None or post.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Comment not found")
+    # Phase 6 multi-identity: narrow by as_identity when sent.
+    me_citizen, me_rep, me_candidate = _apply_as_identity_filter(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+        as_identity=payload.as_identity,
+    )
     citizen, rep, candidate = _resolve_engager(
         me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=post.official_id,
@@ -1446,6 +1526,12 @@ def create_comment(
            the render is a simple flat pool.
     """
     post = _load_post_or_404(db, post_id)
+    # Phase 6 multi-identity: narrow by as_identity when sent (from
+    # the "Posting as: ▾" picker above the composer).
+    me_citizen, me_rep, me_candidate = _apply_as_identity_filter(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+        as_identity=payload.as_identity,
+    )
     citizen, rep, candidate = _resolve_engager(
         me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=post.official_id,
