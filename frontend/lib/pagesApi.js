@@ -423,9 +423,16 @@ export async function listComments(postId, { scope, sort, filterBy, limit } = {}
   });
 }
 
-export async function createComment(postId, body) {
+// Phase 3 reply threading: pass parentCommentId to post a reply
+// under an existing top-level comment. Backend enforces the
+// two-party rule (post creator OR parent author only).
+export async function createComment(postId, body, parentCommentId = null) {
   return request(`/api/pages/posts/${postId}/comments`, {
-    method: 'POST', body: { body },
+    method: 'POST',
+    body: {
+      body,
+      parent_comment_id: parentCommentId || undefined,
+    },
   });
 }
 
@@ -632,10 +639,16 @@ export async function listCitizenPollComments(pollId) {
   return request(`/api/citizen-polls/${pollId}/comments`);
 }
 
-export async function createCitizenPollComment(pollId, body) {
+export async function createCitizenPollComment(pollId, body, parentCommentId = null) {
+  // Phase 3 reply threading — pass parentCommentId to post a reply
+  // inside an existing top-level thread. Backend two-party rule
+  // applies.
   return request(`/api/citizen-polls/${pollId}/comments`, {
     method: 'POST',
-    body: { body },
+    body: {
+      body,
+      parent_comment_id: parentCommentId || undefined,
+    },
   });
 }
 

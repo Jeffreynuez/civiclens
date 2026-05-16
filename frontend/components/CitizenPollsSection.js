@@ -864,6 +864,12 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
   const [draft, setDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  // Phase 3 reply threading — see PostCard for the full rationale.
+  // One reply composer open at a time, addressed by the top-level
+  // comment's id.
+  const [replyOpenFor, setReplyOpenFor] = useState(null);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyBusy, setReplyBusy] = useState(false);
 
   // AI affordance + report state — same pattern as PostCard. The
   // backend's /api/ai/filter-comments endpoint already supports
@@ -914,6 +920,28 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
     }
     setComments((prev) => [data, ...(prev || [])]);
     setDraft('');
+  };
+
+  // Phase 3 reply submit. Backend enforces the two-party rule (poll
+  // creator OR parent comment's original author); the page-owning
+  // rep also qualifies (parity with rep posts).
+  const handleSubmitReply = async (parentId) => {
+    if (!citizen && !isOwner) return onCitizenLoginRequired?.();
+    const body = (replyDraft || '').trim();
+    if (!body || replyBusy) return;
+    setReplyBusy(true);
+    setError(null);
+    const { data, error: err } = await createCitizenPollComment(pollId, body, parentId);
+    setReplyBusy(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    if (data) {
+      setComments((prev) => [data, ...(prev || [])]);
+      setReplyDraft('');
+      setReplyOpenFor(null);
+    }
   };
 
   // Author-only delete; reps + other citizens use Report instead.
@@ -1171,119 +1199,249 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
           >Show all</button>
         </div>
       )}
-      {!loading && visibleComments && visibleComments.map((c) => {
-        // Prefer citizen_id comparison (canonical) when both sides
-        // have it. Fall back to display_name for any stale payload
-        // that pre-dates the citizen_id-in-CommentRead change so the
-        // delete affordance keeps working during the rollout window.
-        const isMyCitizenComment = !!citizen && (
-          c.citizen_id != null
-            ? c.citizen_id === citizen.id
-            : c.citizen_display_name === citizen.display_name
+      {/* Phase 3 reply threading. Bucket comments into top-level +
+          replies, then render each top-level with its reply pool
+          indented below + a Reply button visible only to the two
+          allowed parties (poll creator / page owner / parent
+          comment's author). AI filter applies to top-level rows
+          only — passing a top-level row reveals its entire
+          subthread regardless of per-reply matches. */}
+      {!loading && visibleComments && (() => {
+        const all = visibleComments;
+        const topLevel = all.filter((c) => c.parent_comment_id == null);
+        const repliesByParent = new Map();
+        for (const c of (comments || [])) {
+          if (c.parent_comment_id != null) {
+            if (!repliesByParent.has(c.parent_comment_id)) {
+              repliesByParent.set(c.parent_comment_id, []);
+            }
+            repliesByParent.get(c.parent_comment_id).push(c);
+          }
+        }
+        for (const replies of repliesByParent.values()) {
+          replies.sort((a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          );
+        }
+        return topLevel.map((c) =>
+          renderCommentRow(c, /* depth */ 0, repliesByParent.get(c.id) || [])
         );
-        // Phase 2 self-engagement: rep-authored comments are 'mine'
-        // when the viewer is the rep owner of this page.
-        const isMyRepComment = isOwner && c.author_kind === 'rep';
-        const isMyComment = isMyCitizenComment || isMyRepComment;
-        // Two paths for the "Author" badge:
-        //   1. Rep-authored comments are ALWAYS by the page author
-        //      (only the page owner can post a rep comment here).
-        //   2. Citizen-authored comments only count as "Author" when
-        //      the commenter is the poll's original author. Compare
-        //      canonical citizen_id to avoid display_name collisions.
-        const isAuthorComment = (
-          c.author_kind === 'rep'
-          || (
-            pollAuthorId != null
-            && c.citizen_id != null
-            && c.citizen_id === pollAuthorId
-          )
-        );
-        const canDelete = isMyComment;
-        const canReport = reporterSignedIn && !isMyComment && !reportedCommentIds.has(c.id);
-        const reportedThis = reportedCommentIds.has(c.id);
-        return (
-          <div
-            key={c.id}
-            style={{
-              padding: '8px 0',
-              borderBottom: '1px solid var(--cl-border)',
-              display: 'flex',
-              gap: 10,
-              alignItems: 'flex-start',
-            }}
-          >
-            <CitizenAvatar name={c.citizen_display_name} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--cl-text)' }}>
-                {c.citizen_display_name}
-                {isAuthorComment && (
-                  <span
-                    style={{
-                      marginLeft: 6, padding: '1px 6px',
-                      borderRadius: 999,
-                      background: 'var(--cl-accent-soft, #e6f4ea)',
-                      color: 'var(--cl-accent)',
-                      fontSize: '0.62rem', fontWeight: 800,
-                      textTransform: 'uppercase', letterSpacing: '0.4px',
-                      verticalAlign: 'middle',
-                    }}
-                    title="Posted by the poll's creator"
-                  >
-                    Author
-                  </span>
-                )}
-                <span style={{ fontWeight: 400, color: 'var(--cl-text-light)', fontSize: '0.74rem', marginLeft: 6 }}>
-                  {[c.scope_district || c.scope_state, c.scope_city, relTime(c.created_at)].filter(Boolean).join(' · ')}
-                </span>
-              </div>
-              <div style={{ fontSize: '0.86rem', color: 'var(--cl-text)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
-                {c.body}
-              </div>
-              {(canDelete || canReport || reportedThis) && (
-                <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-                  {canDelete && (
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(c.id)}
-                      style={{
-                        border: 'none', background: 'transparent',
-                        color: '#d63031', fontSize: '0.7rem',
-                        fontWeight: 600, cursor: 'pointer', padding: 0,
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                  {canReport && (
-                    <button
-                      type="button"
-                      onClick={() => handleReport(c.id)}
-                      title="Flag this comment for admin review"
-                      style={{
-                        border: 'none', background: 'transparent',
-                        color: 'var(--cl-text-light)', fontSize: '0.7rem',
-                        fontWeight: 600, cursor: 'pointer', padding: 0,
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      Report
-                    </button>
-                  )}
-                  {reportedThis && (
-                    <span style={{ color: 'var(--cl-text-muted)', fontSize: '0.68rem', fontStyle: 'italic' }}>
-                      Reported ✓
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      })()}
     </div>
   );
+
+  // Render one comment row (shared between top-level + replies).
+  // Replies have depth=1 and never carry their own replies; the data
+  // model is one level deep, enforced server-side.
+  function renderCommentRow(c, depth, replies) {
+    const isMyCitizenComment = !!citizen && (
+      c.citizen_id != null
+        ? c.citizen_id === citizen.id
+        : c.citizen_display_name === citizen.display_name
+    );
+    const isMyRepComment = isOwner && c.author_kind === 'rep';
+    const isMyComment = isMyCitizenComment || isMyRepComment;
+    const isAuthorComment = (
+      c.author_kind === 'rep'
+      || (
+        pollAuthorId != null
+        && c.citizen_id != null
+        && c.citizen_id === pollAuthorId
+      )
+    );
+    const canDelete = isMyComment;
+    const canReport = reporterSignedIn && !isMyComment && !reportedCommentIds.has(c.id);
+    const reportedThis = reportedCommentIds.has(c.id);
+
+    // Two-party reply gate: page owner or the parent commenter.
+    // Citizen poll creators also qualify — they're the "creator"
+    // for their poll. Only top-level comments get a Reply button.
+    const isTopLevel = depth === 0;
+    const viewerIsPollCreator = (
+      citizen != null && pollAuthorId != null && citizen.id === pollAuthorId
+    );
+    const viewerIsParentAuthor = (
+      (citizen && c.citizen_id != null && c.citizen_id === citizen.id) ||
+      (isOwner && c.author_kind === 'rep')
+    );
+    const canReplyHere = isTopLevel && !archived && (
+      isOwner || viewerIsPollCreator || viewerIsParentAuthor
+    );
+
+    return (
+      <div key={c.id}>
+        <div
+          style={{
+            padding: '8px 0',
+            borderBottom: depth === 0 ? '1px solid var(--cl-border)' : 'none',
+            display: 'flex',
+            gap: 10,
+            alignItems: 'flex-start',
+            marginLeft: depth > 0 ? 22 : 0,
+            paddingLeft: depth > 0 ? 10 : 0,
+            borderLeft: depth > 0 ? '3px solid var(--cl-accent-soft, #d8eccd)' : undefined,
+          }}
+        >
+          <CitizenAvatar name={c.citizen_display_name} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--cl-text)' }}>
+              {c.citizen_display_name}
+              {isAuthorComment && (
+                <span
+                  style={{
+                    marginLeft: 6, padding: '1px 6px',
+                    borderRadius: 999,
+                    background: 'var(--cl-accent-soft, #e6f4ea)',
+                    color: 'var(--cl-accent)',
+                    fontSize: '0.62rem', fontWeight: 800,
+                    textTransform: 'uppercase', letterSpacing: '0.4px',
+                    verticalAlign: 'middle',
+                  }}
+                  title={c.author_kind === 'rep' ? 'Posted by the page owner.' : "Posted by the poll's creator"}
+                >
+                  Author
+                </span>
+              )}
+              <span style={{ fontWeight: 400, color: 'var(--cl-text-light)', fontSize: '0.74rem', marginLeft: 6 }}>
+                {[c.scope_district || c.scope_state, c.scope_city, relTime(c.created_at)].filter(Boolean).join(' · ')}
+              </span>
+            </div>
+            <div style={{ fontSize: '0.86rem', color: 'var(--cl-text)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
+              {c.body}
+            </div>
+            {(canDelete || canReport || reportedThis || canReplyHere) && (
+              <div style={{ display: 'flex', gap: 12, marginTop: 4, alignItems: 'center' }}>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(c.id)}
+                    style={{
+                      border: 'none', background: 'transparent',
+                      color: '#d63031', fontSize: '0.7rem',
+                      fontWeight: 600, cursor: 'pointer', padding: 0,
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    Delete
+                  </button>
+                )}
+                {canReport && (
+                  <button
+                    type="button"
+                    onClick={() => handleReport(c.id)}
+                    title="Flag this comment for admin review"
+                    style={{
+                      border: 'none', background: 'transparent',
+                      color: 'var(--cl-text-light)', fontSize: '0.7rem',
+                      fontWeight: 600, cursor: 'pointer', padding: 0,
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    Report
+                  </button>
+                )}
+                {reportedThis && (
+                  <span style={{ color: 'var(--cl-text-muted)', fontSize: '0.68rem', fontStyle: 'italic' }}>
+                    Reported ✓
+                  </span>
+                )}
+                {canReplyHere && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReplyOpenFor((open) => (open === c.id ? null : c.id));
+                      setReplyDraft('');
+                    }}
+                    style={{
+                      border: 'none', background: 'transparent',
+                      color: 'var(--cl-accent)', fontSize: '0.7rem',
+                      fontWeight: 700, cursor: 'pointer', padding: 0,
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {replyOpenFor === c.id ? 'Cancel' : 'Reply'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Reply pool — top-level rows only. */}
+        {isTopLevel && replies && replies.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {replies.map((r) => renderCommentRow(r, 1, []))}
+          </div>
+        )}
+
+        {/* Inline reply composer */}
+        {isTopLevel && replyOpenFor === c.id && (
+          <div
+            style={{
+              marginTop: 6, marginLeft: 22,
+              padding: 8,
+              border: '1px solid var(--cl-border)',
+              borderRadius: 8,
+              background: 'var(--cl-bg)',
+            }}
+          >
+            <textarea
+              value={replyDraft}
+              onChange={(e) => setReplyDraft(e.target.value.slice(0, 1000))}
+              placeholder={
+                isOwner ? 'Reply as the page owner…'
+                  : viewerIsPollCreator ? 'Reply as the poll author…'
+                  : 'Reply to your comment…'
+              }
+              rows={2}
+              disabled={replyBusy}
+              style={{
+                width: '100%', padding: '6px 8px',
+                border: '1px solid var(--cl-border)', borderRadius: 6,
+                fontSize: '0.82rem', fontFamily: 'inherit',
+                color: 'var(--cl-text)', background: 'white',
+                resize: 'vertical', minHeight: 36, boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+              <span style={{ fontSize: '0.68rem', color: 'var(--cl-text-light)' }}>
+                {replyDraft.length}/1000
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => { setReplyOpenFor(null); setReplyDraft(''); }}
+                  style={{
+                    padding: '5px 10px', border: '1px solid var(--cl-border)',
+                    background: 'white', color: 'var(--cl-text-light)',
+                    borderRadius: 6, fontSize: '0.72rem', fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSubmitReply(c.id)}
+                  disabled={replyBusy || !replyDraft.trim()}
+                  style={{
+                    padding: '5px 12px', border: 'none',
+                    background: (replyBusy || !replyDraft.trim()) ? 'var(--cl-border)' : 'var(--cl-accent)',
+                    color: 'white', borderRadius: 6,
+                    fontSize: '0.72rem', fontWeight: 700,
+                    cursor: (replyBusy || !replyDraft.trim()) ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {replyBusy ? 'Posting…' : 'Post reply'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────

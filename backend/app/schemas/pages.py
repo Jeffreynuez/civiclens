@@ -187,12 +187,23 @@ class ReactionRequest(BaseModel):
 # ── Comments ──────────────────────────────────────────────────────────
 class CommentCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=1000)
+    # Phase 3 reply threading. When set, this is a reply to the named
+    # top-level comment; the route enforces the two-party rule
+    # (caller must be the post creator OR the parent comment's
+    # author). Replies-to-replies are rejected at the route layer
+    # — the data model stays one level deep so the render is a
+    # simple flat pool under each top-level comment.
+    parent_comment_id: Optional[int] = None
 
 
 class CommentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     post_id: int
+    # Phase 3 reply threading: NULL on top-level comments; set on
+    # replies to point at their parent top-level comment. Frontend
+    # buckets comments by this field to render the conversation pool.
+    parent_comment_id: Optional[int] = None
     # Canonical author id for citizen-authored comments. Needed by the
     # frontend to distinguish the comment author from other citizens
     # with the same display_name (rare but possible) — comparing IDs
@@ -551,6 +562,8 @@ class CitizenPollListResponse(BaseModel):
 
 class PollCommentCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=1000)
+    # Phase 3 reply threading — see CommentCreate.parent_comment_id.
+    parent_comment_id: Optional[int] = None
 
 
 class PollCommentRead(BaseModel):
@@ -560,6 +573,9 @@ class PollCommentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     poll_id: int
+    # Phase 3 reply threading — NULL on top-level comments, set on
+    # replies. Same purpose as CommentRead.parent_comment_id.
+    parent_comment_id: Optional[int] = None
     # Canonical author id for citizen-authored comments. Nullable for
     # the rep-authored path — see CommentRead for the full rationale.
     citizen_id: Optional[int] = None

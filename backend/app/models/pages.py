@@ -303,6 +303,20 @@ class PostComment(Base):
         ForeignKey("rep_accounts.id", ondelete="CASCADE"),
         default=None, index=True,
     )
+    # Phase 3 reply threading. NULL = top-level comment, anyone signed
+    # in may create. NON-NULL = reply to a top-level comment, gated
+    # to two parties at the route layer: the post creator OR the
+    # top-level comment's author. Replies-to-replies are not allowed
+    # (the route rejects when the target parent itself has a non-NULL
+    # parent), so the data stays one level deep and the render is a
+    # simple flat pool under each top-level. ondelete=CASCADE so that
+    # deleting a top-level comment vaporises its reply thread; a soft-
+    # delete on the parent still keeps replies addressable for
+    # moderation review.
+    parent_comment_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("post_comments.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
     # Cached display name so render-side doesn't JOIN. For citizen
     # commenters this is CitizenAccount.display_name; for rep
     # commenters it's RepAccount.display_name. Kept in sync at
@@ -534,6 +548,14 @@ class PollComment(Base):
     )
     author_rep_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    # Phase 3 reply threading — see PostComment.parent_comment_id for
+    # the full rationale. Same two-party rule applies here: only the
+    # poll creator (citizen author OR page-owning rep on an archived
+    # citizen poll) and the top-level commenter may reply.
+    parent_comment_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("poll_comments.id", ondelete="CASCADE"),
         default=None, index=True,
     )
     citizen_display_name: Mapped[str] = mapped_column(String(255))
