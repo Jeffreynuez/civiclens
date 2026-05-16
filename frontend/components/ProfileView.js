@@ -20,6 +20,7 @@ import {
   fetchStateLegislatorVotes,
   fetchBillSummary,
   translateBillSummary,
+  explainVote,
 } from '../lib/api';
 import { billKey, isTracked as isBillTracked, trackBill, untrackBill, useTrackedBills } from '../lib/trackedBills';
 import {
@@ -2266,6 +2267,53 @@ function VoteRow({ vote }) {
   const catLabel = CATEGORY_LABELS[cat] || null;
   const bill = vote.bill;
 
+  // Explainer state — collapsed by default. First expand fires the
+  // template generator on the backend; subsequent toggles are
+  // instant from component state.
+  const [explainOpen, setExplainOpen] = useState(false);
+  const [explainer, setExplainer] = useState(null);
+  const [explainerLoading, setExplainerLoading] = useState(false);
+  const [explainerError, setExplainerError] = useState(null);
+
+  const handleExplainToggle = async () => {
+    const next = !explainOpen;
+    setExplainOpen(next);
+    if (!next || explainer) return;
+    setExplainerLoading(true);
+    setExplainerError(null);
+    const { data, error } = await explainVote({
+      vote_id: vote.vote_id,
+      question: vote.question,
+      chamber: vote.chamber,
+      result: vote.result,
+      category: vote.category,
+      date: vote.date,
+      position: vote.position,
+      url: vote.url,
+      bill: vote.bill ? {
+        display_number: vote.bill.display_number,
+        title: vote.bill.title,
+      } : null,
+    });
+    setExplainerLoading(false);
+    if (error || !data) {
+      setExplainerError(error || 'Could not load explainer.');
+      return;
+    }
+    setExplainer(data);
+  };
+
+  // Pick the position-specific sentence the rep actually cast. Falls
+  // back to showing both YEA + NAY meanings when the position isn't
+  // known (rare — would happen on a present-not-voting record).
+  const positionMeaning = explainer
+    ? (posLower === 'yea' || posLower === 'aye' || posLower === 'yes'
+        ? explainer.what_yea_means
+        : posLower === 'nay' || posLower === 'no'
+          ? explainer.what_nay_means
+          : null)
+    : null;
+
   return (
     <div style={{ padding: '10px 12px', background: 'var(--cl-bg)', borderRadius: '8px', marginBottom: '6px', fontSize: '0.85rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '6px' }}>
@@ -2303,16 +2351,130 @@ function VoteRow({ vote }) {
         )}
         {result && <span style={{ flex: 1, textAlign: 'right' }}>{result}</span>}
       </div>
-      {vote.url && (
-        <a
-          href={vote.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ display: 'inline-block', marginTop: '6px', fontSize: '0.75rem', color: 'var(--cl-accent)', textDecoration: 'none', fontWeight: 600 }}
+
+      {/* Explainer pill — collapsed by default. Click expands inline.
+          Templates are deterministic and free; first expand fires a
+          backend round-trip for the structured body, subsequent
+          toggles are instant from local state. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={handleExplainToggle}
+          aria-expanded={explainOpen}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '3px 10px',
+            borderRadius: '12px',
+            fontSize: '0.72rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: explainOpen ? 'var(--cl-accent-soft)' : 'white',
+            color: 'var(--cl-accent)',
+            border: '1px solid var(--cl-accent)',
+            fontFamily: 'inherit',
+            transition: 'background 0.15s',
+          }}
         >
-          Vote details →
-        </a>
+          <span aria-hidden style={{ display: 'inline-block', transform: explainOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▸</span>
+          {explainOpen ? 'Hide explainer' : 'What was this vote?'}
+        </button>
+        {vote.url && (
+          <a
+            href={vote.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '0.75rem', color: 'var(--cl-accent)', textDecoration: 'none', fontWeight: 600 }}
+          >
+            Vote details →
+          </a>
+        )}
+      </div>
+
+      {explainOpen && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '10px 12px',
+            background: 'white',
+            border: '1px solid var(--cl-border)',
+            borderRadius: 8,
+            fontSize: '0.82rem',
+            lineHeight: 1.5,
+            color: 'var(--cl-text)',
+          }}
+        >
+          {explainerLoading && (
+            <div style={{ color: 'var(--cl-text-light)', fontStyle: 'italic' }}>
+              Loading explainer…
+            </div>
+          )}
+          {explainerError && (
+            <div style={{ color: 'var(--cl-danger-text)', fontSize: '0.78rem' }}>
+              {explainerError}
+            </div>
+          )}
+          {!explainerLoading && !explainerError && explainer && (
+            <>
+              <ExplainerSection label="What this vote was" body={explainer.what_was_voted} />
+              {positionMeaning ? (
+                <ExplainerSection
+                  label={`What voting ${position.toUpperCase()} meant`}
+                  body={positionMeaning}
+                  accent="position"
+                />
+              ) : (
+                <>
+                  <ExplainerSection label="What YEA meant" body={explainer.what_yea_means} />
+                  <ExplainerSection label="What NAY meant" body={explainer.what_nay_means} />
+                </>
+              )}
+              <ExplainerSection label="Outcome" body={explainer.outcome_meaning} />
+              <div style={{ fontSize: '0.68rem', color: 'var(--cl-text-muted)', fontStyle: 'italic', marginTop: 8 }}>
+                {explainer.source === 'template'
+                  ? 'Standard procedural explainer.'
+                  : 'AI-generated — verify with the official vote record.'}
+              </div>
+            </>
+          )}
+        </div>
       )}
+    </div>
+  );
+}
+
+// One labeled section inside the explainer card. The `accent` prop
+// highlights the position-meaning section (the most personal data
+// point for the user — "what your rep's choice meant in practice").
+function ExplainerSection({ label, body, accent }) {
+  const isAccent = accent === 'position';
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div
+        style={{
+          fontSize: '0.64rem',
+          fontWeight: 800,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: isAccent ? 'var(--cl-accent)' : 'var(--cl-text-muted)',
+          marginBottom: 3,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: isAccent ? 'var(--cl-accent)' : 'var(--cl-border-strong)',
+          }}
+        />
+        {label}
+      </div>
+      <div style={{ color: 'var(--cl-text)' }}>{body}</div>
     </div>
   );
 }

@@ -30,6 +30,7 @@ from app.routers import (
     admin as admin_router,
     appeals as appeals_router,
     bills as bills_router,
+    votes as votes_router,
 )
 from app.db import init_db
 from app.seed import (
@@ -131,6 +132,8 @@ app.include_router(admin_router.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(appeals_router.router, prefix="/api", tags=["Appeals"])
 # Bills router — per-bill summary cache (CRS + Haiku translation).
 app.include_router(bills_router.router, prefix="/api/bills", tags=["Bills"])
+# Votes router — per-vote "what was this vote?" explainer.
+app.include_router(votes_router.router, prefix="/api/votes", tags=["Votes"])
 
 
 @app.get("/")
