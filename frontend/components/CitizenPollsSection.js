@@ -1239,10 +1239,17 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
         ? c.citizen_id === citizen.id
         : c.citizen_display_name === citizen.display_name
     );
-    const isMyRepComment = isOwner && c.author_kind === 'rep';
-    const isMyComment = isMyCitizenComment || isMyRepComment;
+    // Page-owner authored (rep OR candidate, Phase 2 + 4c).
+    const isMyOwnerComment = isOwner && (
+      c.author_kind === 'rep' || c.author_kind === 'candidate'
+    );
+    const isMyComment = isMyCitizenComment || isMyOwnerComment;
+    // The "Author" badge fires when the comment was authored by
+    // either the page owner (rep/candidate, always counts as page
+    // author) OR the citizen who created this poll.
     const isAuthorComment = (
       c.author_kind === 'rep'
+      || c.author_kind === 'candidate'
       || (
         pollAuthorId != null
         && c.citizen_id != null
@@ -1262,7 +1269,7 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
     );
     const viewerIsParentAuthor = (
       (citizen && c.citizen_id != null && c.citizen_id === citizen.id) ||
-      (isOwner && c.author_kind === 'rep')
+      (isOwner && (c.author_kind === 'rep' || c.author_kind === 'candidate'))
     );
     const canReplyHere = isTopLevel && !archived && (
       isOwner || viewerIsPollCreator || viewerIsParentAuthor
@@ -1297,7 +1304,11 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
                     textTransform: 'uppercase', letterSpacing: '0.4px',
                     verticalAlign: 'middle',
                   }}
-                  title={c.author_kind === 'rep' ? 'Posted by the page owner.' : "Posted by the poll's creator"}
+                  title={
+                    (c.author_kind === 'rep' || c.author_kind === 'candidate')
+                      ? 'Posted by the page owner.'
+                      : "Posted by the poll's creator"
+                  }
                 >
                   Author
                 </span>

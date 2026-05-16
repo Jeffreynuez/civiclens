@@ -127,43 +127,43 @@ def _scope_label(scope: str, owner: Optional[RepAccount]) -> Optional[str]:
     return None
 
 
-# Phase 2 self-engagement: each engagement endpoint accepts either a
-# citizen OR the rep who owns the target page. This helper centralises
-# the "which identity is acting?" decision so every endpoint resolves
-# it the same way.
+# Phase 2/4c self-engagement: each engagement endpoint accepts either
+# a citizen OR the rep / candidate who owns the target page. This
+# helper centralises the "which identity is acting?" decision so
+# every endpoint resolves it the same way.
 def _resolve_engager(
     *,
     me_citizen: Optional["CitizenAccount"],
     me_rep: Optional["RepAccount"],
     page_official_id: str,
-) -> tuple[Optional["CitizenAccount"], Optional["RepAccount"]]:
-    """Return a (citizen, rep) tuple with exactly one side populated.
+    me_candidate: Optional["CandidateAccount"] = None,
+) -> tuple[Optional["CitizenAccount"], Optional["RepAccount"], Optional["CandidateAccount"]]:
+    """Return a (citizen, rep, candidate) tuple with exactly one side
+    populated.
 
     Decision order:
-      1. If the rep is signed in AND owns this page, treat them as
-         the engaging actor — they're acting in their capacity as the
-         page owner (the "I'm engaging with my own post/poll" path).
-      2. Otherwise fall through to the citizen session (existing
-         engagement path for everyone who isn't the owner).
-      3. If neither is present (or the rep is signed in but doesn't
-         own this page and no citizen session exists), raise 401.
+      1. REP signed in AND owns this page → engage as rep (Phase 2).
+      2. CANDIDATE signed in AND owns this page → engage as candidate
+         (Phase 4c — page-owner parity with reps).
+      3. CITIZEN session → engage as citizen (the original path).
+      4. None of the above → 401.
 
-    Edge case — both sessions present in the same browser: the rep
-    path wins if and only if they own the page. A rep visiting a
-    different rep's page falls through to the citizen check; this
-    keeps the engagement model "one identity per page", not "reps
-    can engage anywhere they have an account."
+    Edge case — multiple sessions present in the same browser: the
+    rep/candidate path wins only when they own the THIS page. A rep
+    or candidate visiting a different page falls through to the
+    citizen check. This keeps the engagement model "one identity
+    per page", not "page-owners can engage anywhere they have an
+    account."
 
-    Phase 4b note: candidate-as-page-owner engagement parity is
-    coming. For now engagement endpoints only recognize rep + citizen;
-    page-management endpoints (create_post / delete_post) use
-    _assert_page_ownership below which accepts either rep or
-    candidate. This split keeps the Phase 4a diff manageable.
+    Backward compat: callers that don't pass me_candidate get the
+    original two-identity behaviour (the candidate slot stays None).
     """
     if me_rep is not None and me_rep.official_id == page_official_id:
-        return (None, me_rep)
+        return (None, me_rep, None)
+    if me_candidate is not None and me_candidate.candidate_id == page_official_id:
+        return (None, None, me_candidate)
     if me_citizen is not None:
-        return (me_citizen, None)
+        return (me_citizen, None, None)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Sign in to engage with this content.",
@@ -316,8 +316,9 @@ def _reaction_summary_for_post(
     post: Post,
     me_citizen: Optional[CitizenAccount],
     engagement_scope: Optional[str] = None,
-    owner: Optional[RepAccount] = None,
+    owner=None,  # RepAccount | CandidateAccount | None — both expose owner_state etc.
     me_rep: Optional[RepAccount] = None,
+    me_candidate: Optional["CandidateAccount"] = None,
 ) -> ReactionSummary:
     """Aggregate a post's reactions.
 
@@ -327,12 +328,12 @@ def _reaction_summary_for_post(
     is unaffected by the filter — it's always the caller's own and
     doesn't leak anyone else's identity.
 
-    Rep self-reactions (author_rep_id set) count toward the totals
-    too — Phase 2 self-engagement made the rep a first-class
-    engaging identity. When engagement_scope filters to a sub-
-    country scope, rep self-reactions are excluded because they
-    have no geography (scope columns NULL) — same rule that
-    applies to legacy anonymous PollVotes.
+    Rep AND candidate self-reactions count toward the totals too —
+    Phase 2 + 4c self-engagement made both page-owner identities
+    first-class engagers. When engagement_scope filters to a sub-
+    country scope, rep + candidate self-reactions are excluded
+    because they have no geography (scope columns NULL) — same
+    rule that applies to legacy anonymous PollVotes.
     """
     up = down = 0
     mine: Optional[str] = None
@@ -340,11 +341,13 @@ def _reaction_summary_for_post(
     for r in (post.reactions or []):
         # Always track the caller's own reaction first — the filter
         # should never mask "my reaction" even if I'm outside the
-        # scope the owner is slicing by. Either side of the dual-
-        # author shape can be the caller.
+        # scope the owner is slicing by. Any of the three author
+        # kinds can be the caller.
         if me_citizen is not None and r.citizen_id == me_citizen.id:
             mine = r.kind
         if me_rep is not None and getattr(r, "author_rep_id", None) == me_rep.id:
+            mine = r.kind
+        if me_candidate is not None and getattr(r, "author_candidate_id", None) == me_candidate.id:
             mine = r.kind
         if filtered and not _engagement_matches_scope(r, engagement_scope, owner):
             continue
@@ -357,11 +360,12 @@ def _reaction_summary_for_post(
 
 def _post_to_read(
     post: Post,
-    owner: Optional[RepAccount],
+    owner,  # RepAccount | CandidateAccount | None
     db: Session,
     voter_token: Optional[str] = None,
     me_citizen: Optional[CitizenAccount] = None,
     me_rep: Optional[RepAccount] = None,
+    me_candidate: Optional["CandidateAccount"] = None,
     scope_override: Optional[str] = None,
     engagement_scope: Optional[str] = None,
     is_owner_viewing: bool = False,
@@ -369,15 +373,16 @@ def _post_to_read(
     poll_read: Optional[PollRead] = None
     if post.poll is not None:
         voter_choice_id: Optional[int] = None
-        # Phase 2 self-engagement: when the rep is viewing their own
-        # page (is_owner_viewing) and has voted on this poll, surface
-        # their author_rep_id-keyed vote as "your vote" so the UI
-        # highlights the option they picked. Checked first because
-        # the rep can also be signed in as a citizen on the same
-        # browser; on their own page their rep identity wins.
+        # Phase 2/4c self-engagement: when the rep OR candidate is
+        # viewing their own page (is_owner_viewing) and has voted on
+        # this poll, surface their own vote as voter_choice_id so
+        # the UI highlights the option they picked. Checked first
+        # because the page-owner can also be signed in as a citizen
+        # on the same browser; on their own page their owner
+        # identity wins.
         if (
             me_rep is not None
-            and owner is not None
+            and isinstance(owner, RepAccount)
             and me_rep.id == owner.id
         ):
             vote = (
@@ -385,6 +390,22 @@ def _post_to_read(
                 .filter(
                     PollVote.poll_id == post.poll.id,
                     PollVote.author_rep_id == me_rep.id,
+                )
+                .first()
+            )
+            if vote:
+                voter_choice_id = vote.option_id
+        if (
+            voter_choice_id is None
+            and me_candidate is not None
+            and isinstance(owner, CandidateAccount)
+            and me_candidate.id == owner.id
+        ):
+            vote = (
+                db.query(PollVote)
+                .filter(
+                    PollVote.poll_id == post.poll.id,
+                    PollVote.author_candidate_id == me_candidate.id,
                 )
                 .first()
             )
@@ -496,9 +517,11 @@ def _post_to_read(
             post, me_citizen, engagement_scope=engagement_scope, owner=owner,
             # Light up "my_reaction" for the page owner's own
             # reactions on their own page. Outside their own page
-            # this is None so a rep visiting a peer's page doesn't
-            # see ghost reactions.
+            # this is None so the page-owner visiting someone
+            # else's page doesn't see ghost reactions. Phase 4c
+            # extends this to candidates too.
             me_rep=(me_rep if is_owner_viewing else None),
+            me_candidate=(me_candidate if is_owner_viewing else None),
         ),
         comment_count=int(comment_count),
         images=images,
@@ -637,12 +660,13 @@ def get_page(
         _post_to_read(
             p, owner=effective_owner, db=db, voter_token=voter_token,
             me_citizen=me_citizen,
-            # Pass the rep session through so _post_to_read can:
-            #   • surface the rep's own poll vote as voter_choice_id
-            #   • light up "my_reaction" for any reactions the rep made
-            # Both gated internally on is_owner_viewing so a rep visiting
-            # a different rep's page doesn't see ghost reactions.
+            # Pass the rep + candidate sessions through so _post_to_read
+            # can surface their own poll vote as voter_choice_id +
+            # light up "my_reaction" for any reactions they made.
+            # Both gated internally on is_owner_viewing so visiting a
+            # peer's page doesn't leak ghost reactions.
             me_rep=me if is_owner else None,
+            me_candidate=me_candidate if is_owner else None,
             scope_override=poll_scope_override,
             engagement_scope=engagement_scope,
             is_owner_viewing=is_owner,
@@ -869,6 +893,7 @@ def vote_on_poll(
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     """
     Record (or switch) a vote on this poll.
@@ -906,8 +931,8 @@ def vote_on_poll(
     if not option or option.poll_id != poll.id:
         raise HTTPException(status_code=400, detail="Invalid option for this poll")
 
-    citizen, rep = _resolve_engager(
-        me_citizen=me_citizen, me_rep=me_rep,
+    citizen, rep, candidate = _resolve_engager(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=official_id,
     )
 
@@ -915,6 +940,8 @@ def vote_on_poll(
     q = db.query(PollVote).filter(PollVote.poll_id == poll.id)
     if rep is not None:
         q = q.filter(PollVote.author_rep_id == rep.id)
+    elif candidate is not None:
+        q = q.filter(PollVote.author_candidate_id == candidate.id)
     else:
         q = q.filter(PollVote.citizen_id == citizen.id)
     existing = q.first()
@@ -934,9 +961,9 @@ def vote_on_poll(
             existing.voter_token = None
     else:
         # Adopt a pre-existing anonymous vote from this browser, if any —
-        # citizen path only. Reps never have an anonymous-vote row to
-        # adopt since rep self-voting only exists once they're signed
-        # in as the page owner.
+        # citizen path only. Reps + candidates never have an anonymous-
+        # vote row to adopt since their self-voting only exists once
+        # they're signed in as the page owner.
         adopted = None
         if citizen is not None and payload.voter_token:
             adopted = (
@@ -946,6 +973,7 @@ def vote_on_poll(
                     PollVote.voter_token == payload.voter_token,
                     PollVote.citizen_id.is_(None),
                     PollVote.author_rep_id.is_(None),
+                    PollVote.author_candidate_id.is_(None),
                 )
                 .first()
             )
@@ -965,6 +993,7 @@ def vote_on_poll(
                 voter_token=None,  # signed-in votes aren't keyed by browser
                 citizen_id=citizen.id if citizen is not None else None,
                 author_rep_id=rep.id if rep is not None else None,
+                author_candidate_id=candidate.id if candidate is not None else None,
                 scope_state=citizen.state if citizen is not None else None,
                 scope_district=citizen.congressional_district if citizen is not None else None,
                 scope_city=citizen.city if citizen is not None else None,
@@ -992,13 +1021,13 @@ def react_to_post(
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     """Create, flip, or remove the caller's reaction on a post.
 
-    Accepts either a citizen session OR a rep session — when the rep
-    owns the page containing this post (Phase 2 self-engagement),
-    they react as themselves; otherwise the citizen path applies.
-    See _resolve_engager for the full decision tree.
+    Accepts citizen / rep-on-own-page / candidate-on-own-page sessions
+    (Phase 2 + 4c self-engagement). See _resolve_engager for the full
+    decision tree.
 
     Semantics:
       • First time with kind=up → add 'up' reaction.
@@ -1006,19 +1035,20 @@ def react_to_post(
       • Send kind=up while 'up' is active → remove (toggle off).
     """
     post = _load_post_or_404(db, post_id)
-    citizen, rep = _resolve_engager(
-        me_citizen=me_citizen, me_rep=me_rep,
+    citizen, rep, candidate = _resolve_engager(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=post.official_id,
     )
 
-    # Dedupe lookup keyed on whichever identity is acting. The
-    # parallel unique indexes (uq_post_reaction_citizen + _rep)
-    # enforce one-row-per-identity-per-post; this query mirrors
-    # that key so we update the existing row instead of inserting
-    # a duplicate.
+    # Dedupe lookup keyed on whichever identity is acting. The three
+    # parallel unique indexes (uq_post_reaction_citizen/_rep/_candidate)
+    # enforce one-row-per-identity-per-post; this query mirrors that
+    # key so we update the existing row instead of inserting a duplicate.
     q = db.query(PostReaction).filter(PostReaction.post_id == post.id)
     if rep is not None:
         q = q.filter(PostReaction.author_rep_id == rep.id)
+    elif candidate is not None:
+        q = q.filter(PostReaction.author_candidate_id == candidate.id)
     else:
         q = q.filter(PostReaction.citizen_id == citizen.id)
     existing = q.first()
@@ -1028,10 +1058,10 @@ def react_to_post(
             db.delete(existing)
         else:
             existing.kind = payload.kind
-            # Refresh geography in case the citizen's address changed
-            # since their last reaction (Phase 2 concern). Rep
-            # engagement has no geography — scope columns stay NULL
-            # and the row only counts under scope='country'.
+            # Refresh geography in case the citizen's address changed.
+            # Rep + candidate engagement has no geography — scope
+            # columns stay NULL and the row only counts under
+            # scope='country' in dashboard rollups.
             if citizen is not None:
                 existing.scope_state = citizen.state
                 existing.scope_district = citizen.congressional_district
@@ -1042,6 +1072,7 @@ def react_to_post(
             post_id=post.id,
             citizen_id=citizen.id if citizen is not None else None,
             author_rep_id=rep.id if rep is not None else None,
+            author_candidate_id=candidate.id if candidate is not None else None,
             kind=payload.kind,
             scope_state=citizen.state if citizen is not None else None,
             scope_district=citizen.congressional_district if citizen is not None else None,
@@ -1052,7 +1083,9 @@ def react_to_post(
     db.commit()
     # Reload + recompute summary for response.
     db.refresh(post)
-    return _reaction_summary_for_post(post, me_citizen=citizen, me_rep=rep)
+    return _reaction_summary_for_post(
+        post, me_citizen=citizen, me_rep=rep, me_candidate=candidate,
+    )
 
 
 @router.delete("/posts/{post_id}/reactions", response_model=ReactionSummary)
@@ -1061,15 +1094,18 @@ def clear_reaction(
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     post = _load_post_or_404(db, post_id)
-    citizen, rep = _resolve_engager(
-        me_citizen=me_citizen, me_rep=me_rep,
+    citizen, rep, candidate = _resolve_engager(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=post.official_id,
     )
     q = db.query(PostReaction).filter(PostReaction.post_id == post.id)
     if rep is not None:
         q = q.filter(PostReaction.author_rep_id == rep.id)
+    elif candidate is not None:
+        q = q.filter(PostReaction.author_candidate_id == candidate.id)
     else:
         q = q.filter(PostReaction.citizen_id == citizen.id)
     existing = q.first()
@@ -1077,7 +1113,9 @@ def clear_reaction(
         db.delete(existing)
         db.commit()
         db.refresh(post)
-    return _reaction_summary_for_post(post, me_citizen=citizen, me_rep=rep)
+    return _reaction_summary_for_post(
+        post, me_citizen=citizen, me_rep=rep, me_candidate=candidate,
+    )
 
 
 # ── Comments ──────────────────────────────────────────────────────────
@@ -1085,16 +1123,18 @@ def _comment_to_read(
     c: PostComment,
     me_citizen: Optional[CitizenAccount],
     me_rep: Optional[RepAccount] = None,
+    me_candidate: Optional[CandidateAccount] = None,
 ) -> CommentRead:
     """Serialize a comment with its reaction summary.
 
     `my_reaction` is the caller's own reaction (or None) — never leaks
-    anyone else's identity. Either side of the dual-author shape can
-    be the caller; whichever matches lights up my_reaction.
-    Reactions come from the eager-loaded relationship so there's no
-    extra query per row.
+    anyone else's identity. Any of the three author kinds can be the
+    caller; whichever matches lights up my_reaction. Reactions come
+    from the eager-loaded relationship so there's no extra query per
+    row.
 
-    author_kind discriminates citizen-authored vs rep-authored
+    author_kind discriminates citizen-authored vs rep-authored vs
+    candidate-authored
     comments (Phase 2 self-engagement). The frontend uses it to
     render an 'Author' badge on rep comments and to gate the
     Phase 3 reply-thread two-party rule.
@@ -1110,8 +1150,16 @@ def _comment_to_read(
             mine = r.kind
         if me_rep is not None and getattr(r, "author_rep_id", None) == me_rep.id:
             mine = r.kind
+        if me_candidate is not None and getattr(r, "author_candidate_id", None) == me_candidate.id:
+            mine = r.kind
     rep_id = getattr(c, "author_rep_id", None)
-    author_kind = "rep" if rep_id is not None else "citizen"
+    candidate_id = getattr(c, "author_candidate_id", None)
+    if rep_id is not None:
+        author_kind = "rep"
+    elif candidate_id is not None:
+        author_kind = "candidate"
+    else:
+        author_kind = "citizen"
     return CommentRead(
         id=c.id,
         post_id=c.post_id,
@@ -1121,6 +1169,7 @@ def _comment_to_read(
         parent_comment_id=getattr(c, "parent_comment_id", None),
         citizen_id=c.citizen_id,
         author_rep_id=rep_id,
+        author_candidate_id=candidate_id,
         author_kind=author_kind,
         citizen_display_name=c.citizen_display_name,
         body=c.body,
@@ -1153,6 +1202,7 @@ def list_comments(
     db: Session = Depends(get_db),
     me: Optional[RepAccount] = Depends(get_optional_rep),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     """Return comments on a post.
 
@@ -1239,7 +1289,10 @@ def list_comments(
             reverse=True,
         )
 
-    return [_comment_to_read(c, me_citizen, me_rep=me) for c in rows]
+    return [
+        _comment_to_read(c, me_citizen, me_rep=me, me_candidate=me_candidate)
+        for c in rows
+    ]
 
 
 # Reactions on a comment. Schema identical to the post reactions
@@ -1248,12 +1301,14 @@ def _comment_reaction_summary(
     comment: PostComment,
     me_citizen: Optional[CitizenAccount],
     me_rep: Optional[RepAccount] = None,
+    me_candidate: Optional["CandidateAccount"] = None,
 ) -> dict:
     """Roll a comment's reactions into the per-row summary.
 
-    Same dual-identity treatment as _reaction_summary_for_post: rep
-    self-reactions count toward up/down totals, and either identity
-    on the caller side can light up `my_reaction`.
+    Same triple-identity treatment as _reaction_summary_for_post: rep
+    AND candidate self-reactions count toward up/down totals, and any
+    of the three identities on the caller side can light up
+    `my_reaction`.
     """
     up = down = 0
     mine: Optional[str] = None
@@ -1266,6 +1321,8 @@ def _comment_reaction_summary(
             mine = r.kind
         if me_rep is not None and getattr(r, "author_rep_id", None) == me_rep.id:
             mine = r.kind
+        if me_candidate is not None and getattr(r, "author_candidate_id", None) == me_candidate.id:
+            mine = r.kind
     return {"up_count": up, "down_count": down, "my_reaction": mine}
 
 
@@ -1276,24 +1333,27 @@ def react_to_comment(
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     comment = db.get(PostComment, comment_id)
     if not comment or comment.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Comment not found")
 
-    # Page identity comes from the parent post. Reps engaging as
-    # themselves must own that page.
+    # Page identity comes from the parent post. Reps + candidates
+    # engaging as themselves must own that page.
     post = db.get(Post, comment.post_id)
     if post is None or post.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Comment not found")
-    citizen, rep = _resolve_engager(
-        me_citizen=me_citizen, me_rep=me_rep,
+    citizen, rep, candidate = _resolve_engager(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=post.official_id,
     )
 
     q = db.query(CommentReaction).filter(CommentReaction.comment_id == comment.id)
     if rep is not None:
         q = q.filter(CommentReaction.author_rep_id == rep.id)
+    elif candidate is not None:
+        q = q.filter(CommentReaction.author_candidate_id == candidate.id)
     else:
         q = q.filter(CommentReaction.citizen_id == citizen.id)
     existing = q.first()
@@ -1312,6 +1372,7 @@ def react_to_comment(
             comment_id=comment.id,
             citizen_id=citizen.id if citizen is not None else None,
             author_rep_id=rep.id if rep is not None else None,
+            author_candidate_id=candidate.id if candidate is not None else None,
             kind=payload.kind,
             scope_state=citizen.state if citizen is not None else None,
             scope_district=citizen.congressional_district if citizen is not None else None,
@@ -1321,7 +1382,9 @@ def react_to_comment(
 
     db.commit()
     db.refresh(comment)
-    return _comment_reaction_summary(comment, me_citizen=citizen, me_rep=rep)
+    return _comment_reaction_summary(
+        comment, me_citizen=citizen, me_rep=rep, me_candidate=candidate,
+    )
 
 
 @router.delete("/comments/{comment_id}/reactions", response_model=ReactionSummary)
@@ -1330,6 +1393,7 @@ def clear_comment_reaction(
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     comment = db.get(PostComment, comment_id)
     if not comment or comment.deleted_at is not None:
@@ -1337,13 +1401,15 @@ def clear_comment_reaction(
     post = db.get(Post, comment.post_id)
     if post is None or post.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Comment not found")
-    citizen, rep = _resolve_engager(
-        me_citizen=me_citizen, me_rep=me_rep,
+    citizen, rep, candidate = _resolve_engager(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=post.official_id,
     )
     q = db.query(CommentReaction).filter(CommentReaction.comment_id == comment.id)
     if rep is not None:
         q = q.filter(CommentReaction.author_rep_id == rep.id)
+    elif candidate is not None:
+        q = q.filter(CommentReaction.author_candidate_id == candidate.id)
     else:
         q = q.filter(CommentReaction.citizen_id == citizen.id)
     existing = q.first()
@@ -1351,7 +1417,9 @@ def clear_comment_reaction(
         db.delete(existing)
         db.commit()
         db.refresh(comment)
-    return _comment_reaction_summary(comment, me_citizen=citizen, me_rep=rep)
+    return _comment_reaction_summary(
+        comment, me_citizen=citizen, me_rep=rep, me_candidate=candidate,
+    )
 
 
 @router.post("/posts/{post_id}/comments", response_model=CommentRead, status_code=201)
@@ -1362,21 +1430,24 @@ def create_comment(
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     """Create a top-level comment (parent_comment_id NULL) or a reply
     (parent_comment_id pointing at a top-level comment on the same
-    post). Phase 3 reply threading.
+    post). Phase 3 reply threading; Phase 4c adds candidate parity.
 
-    Top-level: any signed-in citizen, or the page-owning rep (Phase 2).
-    Reply: only the post creator (page-owning rep) OR the parent
-           top-level comment's original author may reply. Two-party
-           rule keeps citizen-vs-citizen pile-ons off the thread.
+    Top-level: any signed-in citizen, the page-owning rep (Phase 2),
+               or the page-owning candidate (Phase 4c).
+    Reply: only the post creator (page owner, rep OR candidate) OR
+           the parent top-level comment's original author may reply.
+           Two-party rule keeps citizen-vs-citizen pile-ons off the
+           thread.
     Reply-to-reply: rejected (400). Replies stay one level deep so
            the render is a simple flat pool.
     """
     post = _load_post_or_404(db, post_id)
-    citizen, rep = _resolve_engager(
-        me_citizen=me_citizen, me_rep=me_rep,
+    citizen, rep, candidate = _resolve_engager(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
         page_official_id=post.official_id,
     )
 
@@ -1399,12 +1470,13 @@ def create_comment(
                 status_code=400,
                 detail="Replies can only target top-level comments, not other replies.",
             )
-        # Two-party rule: caller must be (a) the page-owning rep OR
-        # (b) the parent comment's original author (either as a
-        # citizen or as the rep on their own page if they wrote
-        # the parent).
+        # Two-party rule: caller must be (a) the page-owning rep or
+        # candidate OR (b) the parent comment's original author
+        # (citizen, rep, or candidate — whichever side authored
+        # the top-level comment).
         is_post_creator = (
-            rep is not None and rep.official_id == post.official_id
+            (rep is not None and rep.official_id == post.official_id)
+            or (candidate is not None and candidate.candidate_id == post.official_id)
         )
         is_parent_author = (
             (citizen is not None
@@ -1413,6 +1485,9 @@ def create_comment(
             or (rep is not None
                 and parent.author_rep_id is not None
                 and parent.author_rep_id == rep.id)
+            or (candidate is not None
+                and getattr(parent, "author_candidate_id", None) is not None
+                and parent.author_candidate_id == candidate.id)
         )
         if not (is_post_creator or is_parent_author):
             raise HTTPException(
@@ -1424,15 +1499,21 @@ def create_comment(
             )
 
     # Pick the display name + identity from whichever side resolved.
-    # Rep comments inherit the rep's display_name; citizens use
-    # their CitizenAccount.display_name (which the UI renders with
-    # "(Unverified)" until they confirm their address).
-    display_name = (rep.display_name if rep is not None else citizen.display_name)
+    # Rep / candidate comments inherit that account's display_name;
+    # citizens use their CitizenAccount.display_name (which the UI
+    # renders with "(Unverified)" until they confirm their address).
+    if rep is not None:
+        display_name = rep.display_name
+    elif candidate is not None:
+        display_name = candidate.display_name
+    else:
+        display_name = citizen.display_name
     comment = PostComment(
         post_id=post.id,
         parent_comment_id=parent_id,
         citizen_id=citizen.id if citizen is not None else None,
         author_rep_id=rep.id if rep is not None else None,
+        author_candidate_id=candidate.id if candidate is not None else None,
         citizen_display_name=display_name,
         body=payload.body.strip(),
         scope_state=citizen.state if citizen is not None else None,
@@ -1453,7 +1534,9 @@ def create_comment(
     # New comment has no reactions yet — _comment_to_read handles that,
     # and it gives the UI a consistent shape so it can drop the row
     # into the list without special-casing "freshly-created" comments.
-    return _comment_to_read(comment, me_citizen=citizen, me_rep=rep)
+    return _comment_to_read(
+        comment, me_citizen=citizen, me_rep=rep, me_candidate=candidate,
+    )
 
 
 @router.delete("/comments/{comment_id}", status_code=204)
@@ -1462,6 +1545,7 @@ def delete_comment(
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     """Soft-delete a comment. Allowed ONLY for the comment's author.
 
@@ -1472,9 +1556,9 @@ def delete_comment(
     review, and admins take action through a separate moderation
     surface (TBD).
 
-    Phase 2 self-engagement: "author" now covers either a citizen
-    OR a rep — when a rep commented on their own page, they can
-    delete their own comment via the same endpoint.
+    Phase 2 + 4c self-engagement: "author" now covers citizen, rep,
+    OR candidate — whichever identity authored the comment may
+    delete it via the same endpoint.
     """
     comment = db.get(PostComment, comment_id)
     if not comment or comment.deleted_at is not None:
@@ -1490,7 +1574,12 @@ def delete_comment(
         and getattr(comment, "author_rep_id", None) is not None
         and comment.author_rep_id == me_rep.id
     )
-    if not (is_author_citizen or is_author_rep):
+    is_author_candidate = (
+        me_candidate is not None
+        and getattr(comment, "author_candidate_id", None) is not None
+        and comment.author_candidate_id == me_candidate.id
+    )
+    if not (is_author_citizen or is_author_rep or is_author_candidate):
         raise HTTPException(
             status_code=403,
             detail="Only the comment author may delete it. Use Report instead.",

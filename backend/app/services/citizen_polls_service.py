@@ -163,6 +163,7 @@ def serialize_citizen_poll(
     me_citizen: Optional[CitizenAccount],
     me_rep: Optional[RepAccount],
     *,
+    me_candidate=None,  # Optional[CandidateAccount] — added Phase 4c
     active_scope: str = "country",
     allowed_scopes: Optional[List[str]] = None,
     scope_labels: Optional[dict] = None,
@@ -179,13 +180,13 @@ def serialize_citizen_poll(
     author = db.get(CitizenAccount, poll.author_citizen_id) if poll.author_citizen_id else None
 
     # Caller's own vote on the poll, if any. Used to highlight the
-    # option they picked in the wire shape. Two identity paths:
-    #   • citizen — keyed on citizen_id (the original path)
-    #   • rep — keyed on author_rep_id (Phase 2 self-engagement, used
-    #     when the page-owning rep votes on a citizen poll sitting
-    #     on their page). Rep path checked first so a rep who's also
-    #     signed in as a citizen on the same browser sees their rep
-    #     vote, not a stale citizen one.
+    # option they picked in the wire shape. Three identity paths:
+    #   • citizen — keyed on citizen_id (the original path).
+    #   • rep — keyed on author_rep_id (Phase 2 self-engagement).
+    #   • candidate — keyed on author_candidate_id (Phase 4c).
+    # Page-owner paths (rep/candidate) checked first so a multi-
+    # session browser shows the page-owner's vote, not a stale
+    # citizen one.
     voter_choice_id = None
     if me_rep is not None:
         existing_vote = (
@@ -193,6 +194,17 @@ def serialize_citizen_poll(
             .filter(
                 PollVote.poll_id == poll.id,
                 PollVote.author_rep_id == me_rep.id,
+            )
+            .first()
+        )
+        if existing_vote:
+            voter_choice_id = existing_vote.option_id
+    if voter_choice_id is None and me_candidate is not None:
+        existing_vote = (
+            db.query(PollVote)
+            .filter(
+                PollVote.poll_id == poll.id,
+                PollVote.author_candidate_id == me_candidate.id,
             )
             .first()
         )
