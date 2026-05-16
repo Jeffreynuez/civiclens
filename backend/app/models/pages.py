@@ -292,6 +292,13 @@ class PostReaction(Base):
         ForeignKey("rep_accounts.id", ondelete="CASCADE"),
         default=None, index=True,
     )
+    # Phase 4c — candidate self-reaction (parity with rep). Same XOR
+    # pattern: exactly one of citizen_id / author_rep_id /
+    # author_candidate_id is set per row.
+    author_candidate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
     # 'up' or 'down'. Kept as a short string rather than a DB enum so we
     # can add neutral reactions (heart, eyes, etc.) later without a
     # migration.
@@ -305,12 +312,13 @@ class PostReaction(Base):
     post: Mapped["Post"] = relationship(back_populates="reactions")
 
 
-# One reaction per (post, citizen) AND one per (post, rep). NULLs in
-# the author column don't collide thanks to SQLite/Postgres unique-
-# index NULL-distinct semantics, so a rep-row and a citizen-row on
-# the same post coexist cleanly.
-Index("uq_post_reaction_citizen", PostReaction.post_id, PostReaction.citizen_id, unique=True)
-Index("uq_post_reaction_rep",     PostReaction.post_id, PostReaction.author_rep_id, unique=True)
+# One reaction per (post, citizen) AND one per (post, rep) AND one
+# per (post, candidate). NULLs in the author column don't collide
+# thanks to SQLite/Postgres unique-index NULL-distinct semantics,
+# so rows from each identity kind coexist cleanly on the same post.
+Index("uq_post_reaction_citizen",  PostReaction.post_id, PostReaction.citizen_id, unique=True)
+Index("uq_post_reaction_rep",      PostReaction.post_id, PostReaction.author_rep_id, unique=True)
+Index("uq_post_reaction_candidate", PostReaction.post_id, PostReaction.author_candidate_id, unique=True)
 
 
 class PostComment(Base):
@@ -334,6 +342,12 @@ class PostComment(Base):
     )
     author_rep_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    # Phase 4c — candidate comments on their own page. Same XOR shape
+    # as PostReaction: exactly one identity column is set per row.
+    author_candidate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
         default=None, index=True,
     )
     # Phase 3 reply threading. NULL = top-level comment, anyone signed
@@ -430,6 +444,11 @@ class CommentReaction(Base):
         ForeignKey("rep_accounts.id", ondelete="CASCADE"),
         default=None, index=True,
     )
+    # Phase 4c — candidate reaction on a comment. Same XOR.
+    author_candidate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
     kind: Mapped[str] = mapped_column(String(8))   # 'up' | 'down'
     scope_state: Mapped[Optional[str]] = mapped_column(String(2), default=None, index=True)
     scope_district: Mapped[Optional[str]] = mapped_column(String(8), default=None, index=True)
@@ -440,8 +459,9 @@ class CommentReaction(Base):
     comment: Mapped["PostComment"] = relationship(back_populates="reactions")
 
 
-Index("uq_comment_reaction_citizen", CommentReaction.comment_id, CommentReaction.citizen_id, unique=True)
-Index("uq_comment_reaction_rep",     CommentReaction.comment_id, CommentReaction.author_rep_id, unique=True)
+Index("uq_comment_reaction_citizen",  CommentReaction.comment_id, CommentReaction.citizen_id, unique=True)
+Index("uq_comment_reaction_rep",      CommentReaction.comment_id, CommentReaction.author_rep_id, unique=True)
+Index("uq_comment_reaction_candidate", CommentReaction.comment_id, CommentReaction.author_candidate_id, unique=True)
 
 
 class Poll(Base):
@@ -581,6 +601,11 @@ class PollComment(Base):
     )
     author_rep_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    # Phase 4c — candidate comment on a citizen poll on their page.
+    author_candidate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
         default=None, index=True,
     )
     # Phase 3 reply threading — see PostComment.parent_comment_id for
@@ -803,10 +828,17 @@ class PollVote(Base):
         ForeignKey("citizen_accounts.id", ondelete="SET NULL"), default=None, index=True,
     )
     # Rep self-vote on their own poll (Phase 2 self-engagement). At
-    # most one of citizen_id / author_rep_id / (voter_token-only) is
-    # set per row. The unique index below dedupes per rep.
+    # most one of citizen_id / author_rep_id / author_candidate_id /
+    # (voter_token-only) is set per row. The unique index below
+    # dedupes per rep.
     author_rep_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    # Phase 4c — candidate self-vote on their own poll. Same shape +
+    # NULL-distinct unique index pattern.
+    author_candidate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
         default=None, index=True,
     )
     # Denormalized geography. Copied from CitizenAccount at vote time.
@@ -827,9 +859,10 @@ class PollVote(Base):
 # with another NULL citizen_id row, which is handled by the second
 # unique index keyed on voter_token. The rep index follows the same
 # pattern for the self-vote case.
-Index("uq_poll_vote_poll_citizen", PollVote.poll_id, PollVote.citizen_id, unique=True)
-Index("uq_poll_vote_poll_token",   PollVote.poll_id, PollVote.voter_token, unique=True)
-Index("uq_poll_vote_poll_rep",     PollVote.poll_id, PollVote.author_rep_id, unique=True)
+Index("uq_poll_vote_poll_citizen",  PollVote.poll_id, PollVote.citizen_id, unique=True)
+Index("uq_poll_vote_poll_token",    PollVote.poll_id, PollVote.voter_token, unique=True)
+Index("uq_poll_vote_poll_rep",      PollVote.poll_id, PollVote.author_rep_id, unique=True)
+Index("uq_poll_vote_poll_candidate", PollVote.poll_id, PollVote.author_candidate_id, unique=True)
 
 
 # ── Rep-created events ────────────────────────────────────────────────

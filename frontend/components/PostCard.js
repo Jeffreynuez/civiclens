@@ -1000,7 +1000,10 @@ export default function PostCard({
   // party rule. Reply rows have `depth=1` and never carry their own
   // replies (the data model is one-level deep).
   function renderCommentRow(c, depth, replies) {
-    const isAuthorComment = c.author_kind === 'rep';
+    // Page-owner authored: either a rep (Phase 2) or a candidate
+    // (Phase 4c) commenting on their own page. Both render with
+    // the same "Author" badge.
+    const isAuthorComment = c.author_kind === 'rep' || c.author_kind === 'candidate';
     const isMyComment = (
       (citizen && c.citizen_id != null && c.citizen_id === citizen.id) ||
       (isOwner && isAuthorComment)
@@ -1017,7 +1020,7 @@ export default function PostCard({
     const isTopLevel = depth === 0;
     const viewerIsParentAuthor = (
       (citizen && c.citizen_id != null && c.citizen_id === citizen.id) ||
-      (isOwner && c.author_kind === 'rep')
+      (isOwner && (c.author_kind === 'rep' || c.author_kind === 'candidate'))
     );
     const canReplyHere = isTopLevel && (isOwner || viewerIsParentAuthor);
 

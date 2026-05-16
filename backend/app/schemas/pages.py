@@ -218,12 +218,16 @@ class CommentRead(BaseModel):
     # the rep's display_name in this case so renderers don't need a
     # second lookup.
     author_rep_id: Optional[int] = None
-    # Discriminator: 'citizen' or 'rep'. Lets the UI render an
-    # 'Author' badge when author_kind=='rep' (since rep comments on
-    # their own pages are always the page author), or compare the
-    # rep_id when threading replies in Phase 3. Defaulted here +
-    # derived in the validator below so model_validate(orm_obj)
-    # picks the right value without hand-construction.
+    # Phase 4c — candidate-authored comment. Same shape as
+    # author_rep_id: set when a candidate engaging on their own
+    # candidate page authored this comment; null otherwise.
+    author_candidate_id: Optional[int] = None
+    # Discriminator: 'citizen' | 'rep' | 'candidate'. Lets the UI
+    # render an 'Author' badge when author_kind ∈ {'rep', 'candidate'}
+    # (both are page-owner identities), or compare the identity id
+    # when threading replies in Phase 3. Defaulted here + derived in
+    # the validator below so model_validate(orm_obj) picks the right
+    # value without hand-construction.
     author_kind: str = "citizen"
     citizen_display_name: str
     body: str
@@ -240,9 +244,12 @@ class CommentRead(BaseModel):
         # the router hand-builds responses for freshly-created rows
         # before the ORM has refreshed). Otherwise derive from
         # whichever identity column is populated. The default "citizen"
-        # is only correct when author_rep_id is None.
-        if self.author_rep_id is not None and self.author_kind == "citizen":
-            self.author_kind = "rep"
+        # is only correct when both author_*_id columns are None.
+        if self.author_kind == "citizen":
+            if self.author_rep_id is not None:
+                self.author_kind = "rep"
+            elif self.author_candidate_id is not None:
+                self.author_kind = "candidate"
         return self
     # Per-comment reactions. `my_reaction` is the caller's own — only
     # populated when the caller is an authenticated citizen.
@@ -620,7 +627,9 @@ class PollCommentRead(BaseModel):
     # their own (newly-claimed) page and chimes in, the comment is
     # authored by the rep. author_kind below disambiguates.
     author_rep_id: Optional[int] = None
-    # 'citizen' | 'rep'. See CommentRead.author_kind.
+    # Phase 4c — same shape for candidate-authored poll comments.
+    author_candidate_id: Optional[int] = None
+    # 'citizen' | 'rep' | 'candidate'. See CommentRead.author_kind.
     author_kind: str = "citizen"
     citizen_display_name: str
     body: str
@@ -640,8 +649,11 @@ class PollCommentRead(BaseModel):
     def _derive_author_kind(self) -> "PollCommentRead":
         # Same logic as CommentRead._derive_author_kind — see there
         # for the rationale.
-        if self.author_rep_id is not None and self.author_kind == "citizen":
-            self.author_kind = "rep"
+        if self.author_kind == "citizen":
+            if self.author_rep_id is not None:
+                self.author_kind = "rep"
+            elif self.author_candidate_id is not None:
+                self.author_kind = "candidate"
         return self
 
 
