@@ -948,6 +948,10 @@ def _comment_to_read(
     return CommentRead(
         id=c.id,
         post_id=c.post_id,
+        # Phase 3 reply threading — exposed so the frontend can
+        # group replies under their top-level parents and render
+        # the conversation pool.
+        parent_comment_id=getattr(c, "parent_comment_id", None),
         citizen_id=c.citizen_id,
         author_rep_id=rep_id,
         author_kind=author_kind,
@@ -1192,11 +1196,66 @@ def create_comment(
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
 ):
+    """Create a top-level comment (parent_comment_id NULL) or a reply
+    (parent_comment_id pointing at a top-level comment on the same
+    post). Phase 3 reply threading.
+
+    Top-level: any signed-in citizen, or the page-owning rep (Phase 2).
+    Reply: only the post creator (page-owning rep) OR the parent
+           top-level comment's original author may reply. Two-party
+           rule keeps citizen-vs-citizen pile-ons off the thread.
+    Reply-to-reply: rejected (400). Replies stay one level deep so
+           the render is a simple flat pool.
+    """
     post = _load_post_or_404(db, post_id)
     citizen, rep = _resolve_engager(
         me_citizen=me_citizen, me_rep=me_rep,
         page_official_id=post.official_id,
     )
+
+    # Reply-path validation. Done before write so we don't half-create
+    # rows that fail the gate.
+    parent_id = payload.parent_comment_id
+    if parent_id is not None:
+        parent = db.get(PostComment, parent_id)
+        if parent is None or parent.deleted_at is not None or parent.post_id != post.id:
+            raise HTTPException(
+                status_code=404,
+                detail="Parent comment not found on this post.",
+            )
+        # One-level-deep enforcement. A reply target must itself be a
+        # top-level comment. Replies-to-replies would let the
+        # conversation drift into nested arguments — exactly what
+        # the two-party rule is designed to avoid.
+        if parent.parent_comment_id is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Replies can only target top-level comments, not other replies.",
+            )
+        # Two-party rule: caller must be (a) the page-owning rep OR
+        # (b) the parent comment's original author (either as a
+        # citizen or as the rep on their own page if they wrote
+        # the parent).
+        is_post_creator = (
+            rep is not None and rep.official_id == post.official_id
+        )
+        is_parent_author = (
+            (citizen is not None
+                and parent.citizen_id is not None
+                and parent.citizen_id == citizen.id)
+            or (rep is not None
+                and parent.author_rep_id is not None
+                and parent.author_rep_id == rep.id)
+        )
+        if not (is_post_creator or is_parent_author):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Only the post author and the original commenter can reply "
+                    "in this thread."
+                ),
+            )
+
     # Pick the display name + identity from whichever side resolved.
     # Rep comments inherit the rep's display_name; citizens use
     # their CitizenAccount.display_name (which the UI renders with
@@ -1204,6 +1263,7 @@ def create_comment(
     display_name = (rep.display_name if rep is not None else citizen.display_name)
     comment = PostComment(
         post_id=post.id,
+        parent_comment_id=parent_id,
         citizen_id=citizen.id if citizen is not None else None,
         author_rep_id=rep.id if rep is not None else None,
         citizen_display_name=display_name,

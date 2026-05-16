@@ -125,6 +125,14 @@ export default function PostCard({
   const [commentDraft, setCommentDraft] = useState('');
   const [commentBusy, setCommentBusy] = useState(false);
   const [commentErr, setCommentErr] = useState(null);
+  // Phase 3 reply threading state. replyOpenFor is the id of the
+  // top-level comment whose reply composer is currently expanded
+  // (null = no composer open). replyDraft / replyBusy track the
+  // in-flight reply text. Only one composer is open at a time so
+  // the thread doesn't visually fork.
+  const [replyOpenFor, setReplyOpenFor] = useState(null);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyBusy, setReplyBusy] = useState(false);
   // Sort/filter control. `latest` is the default; my_district and
   // my_state are citizen-only filters that ride on the same dropdown
   // for a single point of UX. Anonymous viewers and owners see a
@@ -310,6 +318,35 @@ export default function PostCard({
     if (data) {
       setComments((prev) => (prev ? [data, ...prev] : [data]));
       setCommentDraft('');
+      onCommentCountChanged?.(post.id, +1);
+    }
+  };
+
+  // Phase 3: post a reply inside a top-level thread. parentId is the
+  // top-level comment's id; backend enforces that this caller is
+  // allowed to reply (post creator OR parent comment's author) and
+  // that the parent itself is top-level (no reply-to-replies).
+  const handleSubmitReply = async (parentId) => {
+    if (!citizen && !isOwner) {
+      onCitizenLoginRequired?.();
+      return;
+    }
+    const body = (replyDraft || '').trim();
+    if (!body || replyBusy) return;
+    setReplyBusy(true);
+    setCommentErr(null);
+    const { data, error } = await createComment(post.id, body, parentId);
+    setReplyBusy(false);
+    if (error) {
+      setCommentErr(error);
+      return;
+    }
+    if (data) {
+      // Drop the new reply into the flat list — bucketing in the
+      // render groups it under its parent automatically.
+      setComments((prev) => (prev ? [data, ...prev] : [data]));
+      setReplyDraft('');
+      setReplyOpenFor(null);
       onCommentCountChanged?.(post.id, +1);
     }
   };
@@ -914,39 +951,88 @@ export default function PostCard({
                 >Show all</button>
               </div>
             )}
-            {comments?.filter((c) => aiFilterIds === null || aiFilterIds.has(c.id)).map((c) => {
-              // Rep-authored comments (Phase 2 self-engagement) are
-              // always by the page author. Citizen-authored comments
-              // are checked by canonical ID — comparing display_name
-              // collides when two citizens share a name. Authors
-              // also includes any rep_id match for the rep's own
-              // comments on their own page.
-              const isAuthorComment = c.author_kind === 'rep';
-              const isMyComment = (
-                (citizen && c.citizen_id != null && c.citizen_id === citizen.id) ||
-                (isOwner && isAuthorComment)
+            {/* Phase 3 reply threading. Bucket the flat comment list
+                into top-level + repliesByParent so the render shows
+                each top-level comment with its replies indented
+                below. The AI filter operates on top-level only — if
+                a top-level passes the filter, all its replies render
+                regardless of their individual filter match (a thread
+                that passes is a thread you want to read in full).
+                Apply the user's chosen sort to top-level here; the
+                inner reply pool is always rendered oldest-first
+                because conversations read naturally that way. */}
+            {(() => {
+              const all = comments || [];
+              const topLevel = all.filter((c) => c.parent_comment_id == null);
+              const repliesByParent = new Map();
+              for (const c of all) {
+                if (c.parent_comment_id != null) {
+                  if (!repliesByParent.has(c.parent_comment_id)) {
+                    repliesByParent.set(c.parent_comment_id, []);
+                  }
+                  repliesByParent.get(c.parent_comment_id).push(c);
+                }
+              }
+              // Replies render oldest-first for conversational flow.
+              for (const replies of repliesByParent.values()) {
+                replies.sort((a, b) =>
+                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+                );
+              }
+              const visibleTopLevel = topLevel.filter(
+                (c) => aiFilterIds === null || aiFilterIds.has(c.id),
               );
-              const canDelete = isMyComment;
-              // Report: any signed-in user (rep or citizen) who's
-              // NOT the comment author. Anonymous viewers see nothing
-              // (no anon reporting → less spam-report abuse). Once
-              // the user has reported a comment in this session,
-              // canReport flips false to keep the button from
-              // re-firing the API.
-              const reporterSignedIn = !!citizen || isOwner;
-              const canReport = reporterSignedIn && !isMyComment && !reportedCommentIds.has(c.id);
-              const reportedThis = reportedCommentIds.has(c.id);
-              const locLabel = [c.scope_district, c.scope_city].filter(Boolean).join(' · ');
-              return (
-                <div
-                  key={c.id}
-                  style={{
-                    padding: '8px 10px',
-                    border: '1px solid var(--cl-border)',
-                    borderRadius: '8px',
-                    background: 'white',
-                  }}
-                >
+              return visibleTopLevel.map((c) => renderCommentRow(
+                c,
+                /* depth */ 0,
+                repliesByParent.get(c.id) || [],
+              ));
+            })()}
+          </div>
+        </div>
+      )}
+    </article>
+  );
+
+  // Render one comment row — used for both top-level comments and
+  // their replies. Top-level rows additionally pass `replies` which
+  // get rendered indented below + a Reply button gated on the two-
+  // party rule. Reply rows have `depth=1` and never carry their own
+  // replies (the data model is one-level deep).
+  function renderCommentRow(c, depth, replies) {
+    const isAuthorComment = c.author_kind === 'rep';
+    const isMyComment = (
+      (citizen && c.citizen_id != null && c.citizen_id === citizen.id) ||
+      (isOwner && isAuthorComment)
+    );
+    const canDelete = isMyComment;
+    const reporterSignedIn = !!citizen || isOwner;
+    const canReport = reporterSignedIn && !isMyComment && !reportedCommentIds.has(c.id);
+    const reportedThis = reportedCommentIds.has(c.id);
+    const locLabel = [c.scope_district, c.scope_city].filter(Boolean).join(' · ');
+
+    // Two-party reply gate (Phase 3). Only the page owner and the
+    // top-level comment's original author may reply. Replies don't
+    // get a Reply button — depth caps at 1.
+    const isTopLevel = depth === 0;
+    const viewerIsParentAuthor = (
+      (citizen && c.citizen_id != null && c.citizen_id === citizen.id) ||
+      (isOwner && c.author_kind === 'rep')
+    );
+    const canReplyHere = isTopLevel && (isOwner || viewerIsParentAuthor);
+
+    return (
+      <div key={c.id}>
+        <div
+          style={{
+            padding: '8px 10px',
+            border: '1px solid var(--cl-border)',
+            borderRadius: '8px',
+            background: 'white',
+            marginLeft: depth > 0 ? '20px' : 0,
+            borderLeft: depth > 0 ? '3px solid var(--cl-accent-soft, #d8eccd)' : '1px solid var(--cl-border)',
+          }}
+        >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
                     <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--cl-text)' }}>
                       {c.citizen_display_name}
@@ -1068,15 +1154,106 @@ export default function PostCard({
                         Reported ✓
                       </span>
                     )}
+                    {/* Reply button — visible only on top-level
+                        comments AND only to the page owner or the
+                        comment's original author. Hidden everywhere
+                        else (the backend would 403 anyway). */}
+                    {canReplyHere && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReplyOpenFor((open) => (open === c.id ? null : c.id));
+                          setReplyDraft('');
+                        }}
+                        style={{
+                          marginLeft: (canDelete || canReport || reportedThis) ? 6 : 'auto',
+                          border: 'none', background: 'transparent',
+                          color: 'var(--cl-accent)', fontSize: '0.7rem',
+                          fontWeight: 700, cursor: 'pointer', padding: '2px 4px',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        {replyOpenFor === c.id ? 'Cancel' : 'Reply'}
+                      </button>
+                    )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
-      )}
-    </article>
-  );
+
+        {/* Replies + composer — top-level rows only. Render the
+            existing reply pool first, then the inline composer if
+            this is the thread the user clicked Reply on. */}
+        {isTopLevel && replies && replies.length > 0 && (
+          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {replies.map((r) => renderCommentRow(r, 1, []))}
+          </div>
+        )}
+        {isTopLevel && replyOpenFor === c.id && (
+          <div
+            style={{
+              marginTop: 6, marginLeft: 20,
+              padding: 8,
+              border: '1px solid var(--cl-border)',
+              borderRadius: 8,
+              background: 'var(--cl-bg)',
+            }}
+          >
+            <textarea
+              value={replyDraft}
+              onChange={(e) => setReplyDraft(e.target.value.slice(0, 1000))}
+              placeholder={
+                isOwner ? 'Reply (as the post author)…'
+                  : 'Reply to your comment…'
+              }
+              rows={2}
+              disabled={replyBusy}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                border: '1px solid var(--cl-border)', borderRadius: 6,
+                fontSize: '0.82rem', fontFamily: 'inherit',
+                color: 'var(--cl-text)', background: 'white',
+                resize: 'vertical', minHeight: 36, boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+              <span style={{ fontSize: '0.68rem', color: 'var(--cl-text-light)' }}>
+                {replyDraft.length}/1000
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => { setReplyOpenFor(null); setReplyDraft(''); }}
+                  style={{
+                    padding: '5px 10px', border: '1px solid var(--cl-border)',
+                    background: 'white', color: 'var(--cl-text-light)',
+                    borderRadius: 6, fontSize: '0.72rem', fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSubmitReply(c.id)}
+                  disabled={replyBusy || !replyDraft.trim()}
+                  style={{
+                    padding: '5px 12px', border: 'none',
+                    background: (replyBusy || !replyDraft.trim()) ? 'var(--cl-border)' : 'var(--cl-accent)',
+                    color: 'white', borderRadius: 6,
+                    fontSize: '0.72rem', fontWeight: 700,
+                    cursor: (replyBusy || !replyDraft.trim()) ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {replyBusy ? 'Posting…' : 'Post reply'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 }
 
 function ReactionButton({ kind, count, active, disabled, onClick, title }) {

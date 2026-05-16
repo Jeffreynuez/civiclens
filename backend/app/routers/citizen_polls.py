@@ -661,9 +661,17 @@ def create_citizen_poll_comment(
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
 ):
-    """Phase 2 self-engagement: accepts either a citizen session or
+    """Create a top-level comment or a reply on a citizen poll.
+
+    Phase 2 self-engagement: accepts either a citizen session or
     the rep that owns the target page (so a newly-claimed page's
     rep can chime in on the pre-claim citizen-poll thread).
+
+    Phase 3 reply threading: when payload.parent_comment_id is set,
+    enforces the two-party rule — only the poll's creator (the
+    original citizen author, or the page-owning rep on archived
+    citizen polls) and the parent top-level comment's author may
+    reply. Replies-to-replies are rejected (400).
 
     Comments allowed on both active and archived polls — the
     archived 'Pre-claim discussion' surface stays read+write so
@@ -690,9 +698,54 @@ def create_citizen_poll_comment(
             detail="Sign in to comment on this poll.",
         )
 
+    # Reply-path validation (Phase 3). The "post creator" for a
+    # citizen poll is the original citizen author; the page-owning
+    # rep also counts as a creator-equivalent voice on their own
+    # page (parity with rep posts).
+    parent_id = payload.parent_comment_id
+    if parent_id is not None:
+        parent = db.get(PollComment, parent_id)
+        if parent is None or parent.deleted_at is not None or parent.poll_id != poll.id:
+            raise HTTPException(
+                status_code=404,
+                detail="Parent comment not found on this poll.",
+            )
+        if parent.parent_comment_id is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Replies can only target top-level comments, not other replies.",
+            )
+        # Two-party rule:
+        #   (a) the citizen author of the poll itself
+        #   (b) the page-owning rep (added for parity with rep posts)
+        #   (c) the parent top-level comment's original author
+        is_poll_creator = (
+            citizen is not None
+            and poll.author_citizen_id is not None
+            and citizen.id == poll.author_citizen_id
+        )
+        is_page_owner = (rep is not None)
+        is_parent_author = (
+            (citizen is not None
+                and parent.citizen_id is not None
+                and parent.citizen_id == citizen.id)
+            or (rep is not None
+                and parent.author_rep_id is not None
+                and parent.author_rep_id == rep.id)
+        )
+        if not (is_poll_creator or is_page_owner or is_parent_author):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Only the poll's creator and the original commenter "
+                    "can reply in this thread."
+                ),
+            )
+
     display_name = rep.display_name if rep is not None else citizen.display_name
     comment = PollComment(
         poll_id=poll.id,
+        parent_comment_id=parent_id,
         citizen_id=citizen.id if citizen is not None else None,
         author_rep_id=rep.id if rep is not None else None,
         citizen_display_name=display_name,
@@ -715,6 +768,7 @@ def create_citizen_poll_comment(
     return PollCommentRead(
         id=comment.id,
         poll_id=comment.poll_id,
+        parent_comment_id=comment.parent_comment_id,
         citizen_id=comment.citizen_id,
         author_rep_id=comment.author_rep_id,
         author_kind=("rep" if comment.author_rep_id is not None else "citizen"),
