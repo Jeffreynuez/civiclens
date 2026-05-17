@@ -582,21 +582,17 @@ function CitizenPollCard({
   const cast = async (optionId) => {
     if (!citizen && !isOwner) return onCitizenLoginRequired?.();
     if (!canVote || busy) return;
-    // Build alreadyActed map for THIS option (per-option dedupe —
-    // a citizen who voted A can still vote B; that switches their
-    // vote, not blocks it).
-    const alreadyActed = {};
-    for (const id of activeIdentities) {
-      if (voterChoicesByIdentity[id.kind] === optionId) alreadyActed[id.kind] = true;
-    }
-    const decision = pickEngagementIdentity({
-      identities: activeIdentities, alreadyActed,
-    });
+    const decision = pickEngagementIdentity({ identities: activeIdentities });
     if (decision.none) return onCitizenLoginRequired?.();
     if (decision.single) return fireVote(optionId, null);
-    if (decision.autoPick) return fireVote(optionId, decision.autoPick);
+    // Multi-identity → always show the picker. currentState='voted'
+    // only when the identity has voted for THIS specific option.
     setVotePicker({
-      optionId, mode: decision.mode, identities: decision.showPicker,
+      optionId,
+      identities: decision.showPicker.map((id) => ({
+        ...id,
+        currentState: voterChoicesByIdentity[id.kind] === optionId ? 'voted' : null,
+      })),
     });
   };
 
@@ -785,15 +781,12 @@ function CitizenPollCard({
               </div>
             </button>
             {/* Phase 6 — IdentityPicker anchors to this option's
-                wrapper when we need disambiguation. */}
+                wrapper. currentState is already set on each identity
+                by `cast` above so we just pass them through. */}
             {votePicker && votePicker.optionId === opt.id && (
               <IdentityPicker
                 open
-                identities={(votePicker.identities || []).map((id) => ({
-                  ...id,
-                  currentState: voterChoicesByIdentity[id.kind] != null ? 'up' : null,
-                }))}
-                mode={votePicker.mode}
+                identities={votePicker.identities || []}
                 onPick={onVotePick}
                 onClose={() => setVotePicker(null)}
               />

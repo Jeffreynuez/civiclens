@@ -106,19 +106,7 @@ export default function PollCard({
       onCitizenLoginRequired?.();
       return;
     }
-    // Build "alreadyActed" map keyed on whether each identity has
-    // already voted for THIS option. A citizen who's already voted
-    // for option A can still vote for option B (it switches their
-    // vote, not creates a second one) — but they shouldn't get an
-    // auto-pick that re-fires the same option.
-    const alreadyActed = {};
-    for (const id of activeIdentities) {
-      const choice = voterChoicesByIdentity[id.kind];
-      if (choice === optionId) alreadyActed[id.kind] = true;
-    }
-    const decision = pickEngagementIdentity({
-      identities: activeIdentities, alreadyActed,
-    });
+    const decision = pickEngagementIdentity({ identities: activeIdentities });
     if (decision.none) {
       onCitizenLoginRequired?.();
       return;
@@ -127,17 +115,15 @@ export default function PollCard({
       await fireVote(optionId, null);
       return;
     }
-    if (decision.autoPick) {
-      await fireVote(optionId, decision.autoPick);
-      return;
-    }
-    // 2+ identities haven't voted for this option yet, OR all have
-    // (toggle/retract mode). Pop the picker anchored under this
-    // option button.
+    // Multi-identity → always show the picker. currentState='voted'
+    // when this identity has voted for THIS specific option (not a
+    // different option — they can still click to switch votes).
     setVotePicker({
       optionId,
-      mode: decision.mode,
-      identities: decision.showPicker,
+      identities: decision.showPicker.map((id) => ({
+        ...id,
+        currentState: voterChoicesByIdentity[id.kind] === optionId ? 'voted' : null,
+      })),
     });
   };
 
@@ -264,15 +250,12 @@ export default function PollCard({
         </div>
       </button>
       {/* Phase 6 — IdentityPicker anchors to this option's wrapper
-          when the user clicked here AND we need disambiguation. */}
+          when the user clicked here. currentState is already set on
+          each identity by `cast` above so we pass it through. */}
       {votePicker && votePicker.optionId === opt.id && (
         <IdentityPicker
           open
-          identities={(votePicker.identities || []).map((id) => ({
-            ...id,
-            currentState: voterChoicesByIdentity[id.kind] != null ? 'up' : null,
-          }))}
-          mode={votePicker.mode}
+          identities={votePicker.identities || []}
           onPick={onVotePick}
           onClose={() => setVotePicker(null)}
         />
