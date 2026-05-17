@@ -644,6 +644,23 @@ export async function fetchCandidateMe() {
   return request('/api/candidate-auth/me');
 }
 
+// ── Notifications (in-app, Phase 5 MVP) ──────────────────────────────
+// Returns { unread_count, items: [{id, kind, payload, created_at, read_at, recipient_kind}] }
+// Anonymous callers get unread_count=0 + items=[] (no auth error).
+export async function fetchNotifications({ limit = 50, unreadOnly = false } = {}) {
+  return request('/api/notifications', {
+    query: { limit, unread_only: unreadOnly ? 'true' : undefined },
+  });
+}
+
+export async function markNotificationRead(notificationId) {
+  return request(`/api/notifications/${notificationId}/read`, { method: 'POST' });
+}
+
+export async function markAllNotificationsRead() {
+  return request('/api/notifications/read-all', { method: 'POST' });
+}
+
 // ── Citizen polls (on unclaimed rep pages) ────────────────────────────
 // The page-scoped list endpoint returns active + archived buckets, the
 // caller's role, and the rate-limit signals (caller_has_active_poll,

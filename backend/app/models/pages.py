@@ -244,10 +244,17 @@ class PostImage(Base):
     post_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("posts.id", ondelete="CASCADE"), default=None, index=True,
     )
-    # Which rep owns this upload. Gates the "attach to my post" check
-    # in create_post so one rep can't appropriate another's image.
-    uploader_id: Mapped[int] = mapped_column(
-        ForeignKey("rep_accounts.id", ondelete="CASCADE"), index=True,
+    # Which page-owner uploaded this. Gates the "attach to my post"
+    # check in create_post so one owner can't appropriate another's
+    # image. Phase 4d adds the candidate parallel — exactly ONE of
+    # uploader_id / uploader_candidate_id is set per row.
+    uploader_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    uploader_candidate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
     )
     filename: Mapped[str] = mapped_column(String(128))   # UUID + extension
     content_type: Mapped[str] = mapped_column(String(64))
@@ -1221,3 +1228,54 @@ class VoteExplainer(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, default=None,
     )
+
+
+# ── Notifications (Phase 5 MVP) ──────────────────────────────────────
+class Notification(Base):
+    """In-app notification — one row per (recipient, event). MVP scope
+    covers reply notifications only ("someone replied to your comment");
+    later kinds (page-owner posts, poll-close alerts, mentions) can
+    land on the same table by adding more `kind` values.
+
+    Recipient is keyed polymorphically: recipient_kind is one of
+    'citizen' | 'rep' | 'candidate', and recipient_id points at the
+    matching accounts table. We don't enforce the FK at the schema
+    layer because the kind+id pair is the real foreign key and a
+    SQL CHECK across nullable columns is awkward. The list endpoint
+    filters by (recipient_kind, recipient_id) on the caller's
+    session-derived identity, so a misaligned row would simply not
+    surface for anyone (failsafe).
+
+    payload_json carries kind-specific context as a small JSON-encoded
+    dict so the frontend can render the right copy + deep-link target
+    without an extra round-trip. For kind='reply':
+        {comment_id, parent_comment_id, post_id, official_id,
+         replier_name, preview}
+    """
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient_kind: Mapped[str] = mapped_column(String(16), index=True)
+    recipient_id: Mapped[int] = mapped_column(Integer, index=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+    # NULL until the recipient marks it read. The unread-count query
+    # is `WHERE recipient_kind=X AND recipient_id=Y AND read_at IS
+    # NULL`, so this column carries an index for that fast path.
+    read_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, default=None, index=True,
+    )
+
+
+# Composite index for "give me my recent notifications, newest first".
+# The single-column indexes above cover the unread-count path; this
+# composite avoids the secondary sort on created_at for the list.
+Index(
+    "ix_notifications_recipient_recent",
+    Notification.recipient_kind,
+    Notification.recipient_id,
+    Notification.created_at.desc(),
+)
