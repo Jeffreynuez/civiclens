@@ -13,13 +13,60 @@ import {
 import PageButton from './PageButton';
 import TabStrip from './TabStrip';
 
-const PARTY_COLORS = { R: '#e63946', D: '#457b9d', I: '#6c3ec1', NP: '#666' };
 const PARTY_NAMES = { R: 'Republican', D: 'Democrat', I: 'Independent', NP: 'Non-partisan' };
+
+// Compact icon button used in the collapsed-hero row. Mirrors the
+// rep ProfileView treatment but tinted for the candidate's dark
+// header — transparent fill over the dark hero, light icon strokes,
+// translucent white border. The `active` prop swaps to a brighter
+// fill so on/off states read at a glance.
+function CompactIconButton({ title, ariaLabel, onClick, children, active = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={ariaLabel || title}
+      style={{
+        width: 28,
+        height: 28,
+        padding: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: active ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)',
+        color: 'white',
+        border: active ? '1px solid white' : '1px solid rgba(255,255,255,0.35)',
+        borderRadius: 6,
+        cursor: 'pointer',
+        transition: 'background 0.15s ease, border-color 0.15s ease',
+        flexShrink: 0,
+      }}
+      onMouseOver={(e) => {
+        if (active) return;
+        e.currentTarget.style.background = 'rgba(255,255,255,0.22)';
+      }}
+      onMouseOut={(e) => {
+        if (active) return;
+        e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 /**
  * Candidate profile — mirrors the shape of ProfileView but for candidates running
  * in a 2026 race. Supports a full detail payload or a lightweight stub
  * (falls back to fetchCandidate by id).
+ *
+ * Hero treatment ports the rep ProfileView pattern: centered avatar /
+ * name / title / chips with a chevron pill that toggles between a full
+ * hero and a single-row compact hero. The candidate variant intentionally
+ * keeps the dark `var(--cl-primary)` background on both the back/close
+ * row and the hero itself so it stays visually distinct from the rep's
+ * light/white profile chrome.
  */
 export default function CandidateProfile({
   candidate,
@@ -42,6 +89,16 @@ export default function CandidateProfile({
   const [full, setFull] = useState(candidate);
   const [activeTab, setActiveTab] = useState('overview');
 
+  // Hero collapse state — when true, the dark hero is condensed to a
+  // single row (small avatar + name + Follow / Compare / View Rep /
+  // Page icons + party chip). Frees vertical space so the tabs and
+  // tab content stay reachable on shorter viewports. Always defaults
+  // to collapsed; the user taps the chevron pill to expand. We do
+  // NOT persist this to localStorage so the default never gets
+  // overridden by a prior session's preference.
+  const [heroCollapsed, setHeroCollapsed] = useState(true);
+  const toggleHero = () => setHeroCollapsed((v) => !v);
+
   useEffect(() => {
     // If the candidate entry is thin (e.g. only id), fetch full detail.
     if (candidate?.id && !candidate.top_issues) {
@@ -53,6 +110,14 @@ export default function CandidateProfile({
       setFull(candidate);
     }
   }, [candidate?.id, candidate?.top_issues, candidate]);
+
+  // Reset tab + hero collapse whenever the active candidate changes,
+  // so navigating between candidates always starts on Overview with
+  // the compact hero (mirrors the rep ProfileView reset).
+  useEffect(() => {
+    setActiveTab('overview');
+    setHeroCollapsed(true);
+  }, [candidate?.id]);
 
   // Subscribe so the Follow button re-renders when the tracked store changes.
   useTrackedOfficials();
@@ -87,6 +152,23 @@ export default function CandidateProfile({
     }
   };
 
+  // Cross-nav availability — the candidate is also a sitting Congress
+  // member (bioguide_id) or a sitting state official (official_id +
+  // state scope). One simple label — "View Rep." — for both, since
+  // the user just wants to flip to the other view.
+  const hasRepCrossNav =
+    (c.bioguide_id && onMemberPick) ||
+    (c.official_id &&
+      (c.official_scope || '').toLowerCase() === 'state' &&
+      onStatePersonPick);
+  const goToRep = () => {
+    if (c.bioguide_id && onMemberPick) {
+      onMemberPick({ bioguide_id: c.bioguide_id });
+    } else if (c.official_id && onStatePersonPick) {
+      onStatePersonPick({ state: c.state, id: c.official_id });
+    }
+  };
+
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'issues', label: 'Issues' },
@@ -114,183 +196,404 @@ export default function CandidateProfile({
           : { width: `${width}px`, flexShrink: 0 }
       }
     >
-      {/* Header */}
-      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--cl-border)', background: 'var(--cl-primary)', color: 'white' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <button
-            onClick={onBack}
+      {/* Back + Collapse + Close row — sits at the top of the dark
+          header so the candidate's signature color extends edge-to-edge
+          and visually distinguishes the panel from the rep profile.
+          The middle chevron toggles the hero between compact and full. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          background: 'var(--cl-primary)',
+          borderBottom: '1px solid rgba(255,255,255,0.18)',
+          minHeight: isMobile ? 48 : undefined,
+        }}
+      >
+        <div
+          onClick={onBack}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onBack?.(); }}
+          style={{
+            flex: 1,
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: isMobile ? '14px 16px' : '10px 16px',
+            fontSize: isMobile ? '0.95rem' : '0.85rem',
+            color: 'white', cursor: 'pointer',
+            fontWeight: 500,
+            minHeight: isMobile ? 44 : undefined,
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.10)')}
+          onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+        >
+          <svg width={isMobile ? 18 : 16} height={isMobile ? 18 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          {backLabel || 'Back'}
+        </div>
+        {/* Hero collapse toggle — chevron in a translucent-white pill
+            so it reads as a discoverable affordance against the dark
+            header (matches the rep profile's green pill treatment but
+            uses white-on-primary instead). Sits between Back and × so
+            it's always reachable. */}
+        <button
+          type="button"
+          onClick={toggleHero}
+          aria-label={heroCollapsed ? 'Expand profile header' : 'Collapse profile header'}
+          aria-expanded={!heroCollapsed}
+          title={heroCollapsed ? 'Expand profile header' : 'Collapse profile header'}
+          style={{
+            background: 'rgba(255,255,255,0.18)',
+            border: '1px solid rgba(255,255,255,0.45)',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            color: 'white',
+            width: isMobile ? 36 : 30,
+            height: isMobile ? 36 : 30,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            margin: isMobile ? '0 4px' : '0 2px',
+            flexShrink: 0,
+            transition: 'background 0.15s ease',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.30)')}
+          onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.18)')}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
             style={{
-              background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.35)',
-              padding: isMobile ? '10px 16px' : '4px 10px',
-              borderRadius: '8px',
-              fontSize: isMobile ? '0.92rem' : '0.78rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              minHeight: isMobile ? 44 : undefined,
+              transform: heroCollapsed ? 'rotate(0deg)' : 'rotate(180deg)',
+              transition: 'transform 0.18s ease',
             }}
           >
-            ← {backLabel || 'Back'}
+            <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
+        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label="Close profile"
+            title="Close"
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'rgba(255,255,255,0.85)',
+              padding: isMobile ? '12px 18px' : '8px 14px',
+              fontSize: isMobile ? '1.4rem' : '1.15rem',
+              lineHeight: 1,
+              minWidth: isMobile ? 44 : undefined,
+              minHeight: isMobile ? 44 : undefined,
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.color = 'white')}
+            onMouseOut={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.85)')}
+          >
+            ×
           </button>
-          {onClose && (
-            <button
-              onClick={onClose}
-              aria-label="Close profile"
-              title="Close"
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'rgba(255,255,255,0.8)',
-                padding: isMobile ? '10px 14px' : '2px 6px',
-                fontSize: isMobile ? '1.55rem' : '1.25rem',
-                lineHeight: 1,
-                minWidth: isMobile ? 44 : undefined,
-                minHeight: isMobile ? 44 : undefined,
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.color = 'white')}
-              onMouseOut={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}
-            >
-              ×
-            </button>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+        )}
+      </div>
+
+      {/* Compact hero — visible when the user has collapsed the full
+          hero. Single dark row: avatar + name/office + action icons
+          (Follow / Compare / View Rep / Page) + party chip. The icons
+          mirror the full-hero buttons so users don't lose access to
+          Follow/etc when collapsed. Tab strip and tab content land
+          right below. */}
+      {heroCollapsed && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 12px',
+            background: 'var(--cl-primary)',
+            color: 'white',
+            borderBottom: '1px solid rgba(255,255,255,0.18)',
+          }}
+        >
           <div
             style={{
-              width: '72px', height: '72px', borderRadius: '50%',
+              width: 36, height: 36, borderRadius: '50%',
               background: c.photo_url ? `url(${c.photo_url}) center/cover` : 'rgba(255,255,255,0.22)',
               border: '2px solid rgba(255,255,255,0.35)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.4rem', fontWeight: 700, flexShrink: 0,
+              fontSize: '0.78rem', fontWeight: 700, flexShrink: 0,
             }}
           >
             {!c.photo_url && c.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '1.2rem', fontWeight: 700, lineHeight: 1.2 }}>{c.name}</div>
-            <div style={{ fontSize: '0.82rem', opacity: 0.88, marginTop: '2px' }}>
-              Candidate for {c.seeking_office}
+            <div style={{
+              fontSize: '0.95rem', fontWeight: 700, color: 'white',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {c.name}
             </div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-              <span style={{
-                fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px',
-                borderRadius: '10px', background: 'rgba(255,255,255,0.22)',
-              }}>
-                {PARTY_NAMES[party] || party}
-              </span>
-              {c.incumbent && (
-                <span style={{
-                  fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px',
-                  borderRadius: '10px', background: '#f4a261', color: 'white',
-                }}>
-                  INCUMBENT
-                </span>
-              )}
-              {c.hometown && (
-                <span style={{
-                  fontSize: '0.68rem', fontWeight: 600, padding: '2px 8px',
-                  borderRadius: '10px', background: 'rgba(255,255,255,0.12)',
-                }}>
-                  {c.hometown}
-                </span>
-              )}
+            <div style={{
+              fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {c.seeking_office ? `Candidate for ${c.seeking_office}` : 'Candidate'}
             </div>
           </div>
+          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+            <CompactIconButton
+              title={isFollowing ? 'Following — click to unfollow' : 'Follow'}
+              ariaLabel={isFollowing ? 'Unfollow' : 'Follow'}
+              onClick={toggleFollow}
+              active={isFollowing}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M8 13.5s-4.5-3-4.5-7a2.5 2.5 0 0 1 4.5-1.5A2.5 2.5 0 0 1 12.5 6.5c0 4-4.5 7-4.5 7z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                  fill={isFollowing ? 'currentColor' : 'none'}
+                />
+              </svg>
+            </CompactIconButton>
+            {onCompareToggle && (
+              <CompactIconButton
+                title={isComparing ? 'In compare — click to remove' : 'Add to compare'}
+                ariaLabel={isComparing ? 'Remove from compare' : 'Add to compare'}
+                onClick={() => onCompareToggle(c)}
+                active={isComparing}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M2.5 6h9M9 3.5L11.5 6 9 8.5M13.5 10h-9M6 7.5L3.5 10 6 12.5"
+                    stroke="currentColor" strokeWidth="1.4" fill="none"
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </CompactIconButton>
+            )}
+            {hasRepCrossNav && (
+              <CompactIconButton
+                title="View Rep."
+                ariaLabel="Open this candidate's current-office profile"
+                onClick={goToRep}
+              >
+                {/* Capitol-dome silhouette stand-in: outlined building. */}
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M2.5 13.5h11M3.5 13.5V8M6.5 13.5V8M9.5 13.5V8M12.5 13.5V8M2.5 8h11L8 4z"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </CompactIconButton>
+            )}
+            {onOpenPage && (
+              <CompactIconButton
+                title="Open Page"
+                ariaLabel="Open candidate's Page"
+                onClick={() => onOpenPage(c.id, {
+                  displayName: c.name,
+                  role: c.seeking_office ? `Candidate for ${c.seeking_office}` : 'Candidate',
+                  photoUrl: c.photo_url,
+                })}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M3.5 1.5h6L13 5v9.5h-9.5zM9.5 1.5V5H13"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    fill="none"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </CompactIconButton>
+            )}
+          </div>
+          <span style={{
+            display: 'inline-block', padding: '2px 8px', borderRadius: '12px',
+            fontSize: '0.7rem', fontWeight: 700,
+            background: 'rgba(255,255,255,0.22)',
+            color: 'white',
+            flexShrink: 0,
+          }}>
+            {party}
+          </span>
         </div>
+      )}
 
-        {/* Action row — mobile bumps padding + font so each button
-            clears the 44px tap-target minimum. flex-wrap stays on for
-            both modes since this row already has 4–5 actions. */}
-        <div style={{ display: 'flex', gap: isMobile ? 8 : 6, marginTop: '12px', flexWrap: 'wrap' }}>
-          <button
-            onClick={toggleFollow}
+      {/* Hero — full version. Hidden when collapsed. Centered avatar /
+          name / office / chips / action row, all on the dark
+          candidate-signature background. Mirrors the rep ProfileView's
+          centered hero layout while keeping the candidate's color
+          identity. */}
+      {!heroCollapsed && (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '20px 20px 14px',
+            background: 'var(--cl-primary)',
+            color: 'white',
+            borderBottom: '1px solid rgba(255,255,255,0.18)',
+          }}
+        >
+          {c.photo_url ? (
+            <img
+              src={c.photo_url}
+              alt={c.name}
+              // display:block + margin auto so the avatar reliably centers
+              // in the textAlign:center hero (same fix as ProfileView).
+              style={{
+                display: 'block', width: '88px', height: '88px',
+                borderRadius: '50%', objectFit: 'cover',
+                border: '3px solid rgba(255,255,255,0.35)',
+                margin: '0 auto 10px',
+                background: 'rgba(255,255,255,0.18)',
+              }}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          ) : (
+            <div style={{
+              width: '88px', height: '88px', borderRadius: '50%',
+              background: 'rgba(255,255,255,0.22)',
+              border: '3px solid rgba(255,255,255,0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.75rem', fontWeight: 700, color: 'white',
+              margin: '0 auto 10px',
+            }}>
+              {c.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+            </div>
+          )}
+          <h2 style={{ fontSize: '1.2rem', marginBottom: '4px', fontWeight: 700, color: 'white' }}>
+            {c.name}
+          </h2>
+          <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)' }}>
+            Candidate for {c.seeking_office}
+          </p>
+          {/* Chip row — party + INCUMBENT + hometown. Centered to match
+              the avatar/name above. */}
+          <div style={{
+            display: 'flex', justifyContent: 'center',
+            gap: '6px', flexWrap: 'wrap', marginTop: '8px',
+          }}>
+            <span style={{
+              fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px',
+              borderRadius: '10px', background: 'rgba(255,255,255,0.22)',
+            }}>
+              {PARTY_NAMES[party] || party}
+            </span>
+            {c.incumbent && (
+              <span style={{
+                fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px',
+                borderRadius: '10px', background: '#f4a261', color: 'white',
+              }}>
+                INCUMBENT
+              </span>
+            )}
+            {c.hometown && (
+              <span style={{
+                fontSize: '0.68rem', fontWeight: 600, padding: '2px 8px',
+                borderRadius: '10px', background: 'rgba(255,255,255,0.12)',
+              }}>
+                {c.hometown}
+              </span>
+            )}
+          </div>
+
+          {/* Action row — Follow / Compare / Campaign Site / View Rep
+              / Page. Centered like the rep hero. Mobile bumps padding so
+              each button hits the 44px minimum tap target. */}
+          <div
             style={{
-              padding: isMobile ? '11px 18px' : '6px 12px',
-              fontSize: isMobile ? '0.92rem' : '0.76rem',
-              fontWeight: 700,
-              borderRadius: '8px', cursor: 'pointer',
-              background: isFollowing ? '#1d5a2c' : 'rgba(255,255,255,0.22)',
-              color: 'white', border: '1px solid rgba(255,255,255,0.35)',
-              minHeight: isMobile ? 44 : undefined,
+              marginTop: '14px',
+              display: 'flex',
+              justifyContent: 'center',
+              gap: isMobile ? 8 : 6,
+              flexWrap: 'wrap',
             }}
           >
-            {isFollowing ? '✓ Following' : '+ Follow'}
-          </button>
-          {onCompareToggle && (
             <button
-              onClick={() => onCompareToggle(c)}
+              onClick={toggleFollow}
               style={{
-                padding: isMobile ? '11px 18px' : '6px 12px',
-                fontSize: isMobile ? '0.9rem' : '0.76rem',
+                padding: isMobile ? '11px 22px' : '7px 18px',
+                fontSize: isMobile ? '0.92rem' : '0.82rem',
                 fontWeight: 700,
                 borderRadius: '8px', cursor: 'pointer',
-                background: isComparing ? '#f4a261' : 'rgba(255,255,255,0.22)',
+                background: isFollowing ? '#1d5a2c' : 'rgba(255,255,255,0.22)',
                 color: 'white', border: '1px solid rgba(255,255,255,0.35)',
                 minHeight: isMobile ? 44 : undefined,
               }}
             >
-              {isComparing ? '✓ In Compare' : '+ Compare'}
+              {isFollowing ? '✓ Following' : '+ Follow'}
             </button>
-          )}
-          {c.website && (
-            <a
-              href={c.website}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                padding: isMobile ? '11px 18px' : '6px 12px',
-                fontSize: isMobile ? '0.9rem' : '0.76rem',
-                fontWeight: 700,
-                borderRadius: '8px', background: 'rgba(255,255,255,0.22)',
-                color: 'white', border: '1px solid rgba(255,255,255,0.35)',
-                textDecoration: 'none',
-                minHeight: isMobile ? 44 : undefined,
-                display: 'inline-flex', alignItems: 'center',
-              }}
-            >
-              Campaign Site ↗
-            </a>
-          )}
-          {/* Cross-nav: jump to this candidate's sitting-office profile. The
-              candidate is also a sitting Congress member (bioguide_id) or a
-              sitting state official (official_id + state scope). One simple
-              label — "View Rep." — for both, since the user just wants to
-              flip to the other view. */}
-          {((c.bioguide_id && onMemberPick)
-            || (c.official_id && (c.official_scope || '').toLowerCase() === 'state' && onStatePersonPick)) && (
-            <button
-              onClick={() => {
-                if (c.bioguide_id && onMemberPick) {
-                  onMemberPick({ bioguide_id: c.bioguide_id });
-                } else if (c.official_id && onStatePersonPick) {
-                  onStatePersonPick({ state: c.state, id: c.official_id });
-                }
-              }}
-              title="Open this candidate's current-office profile"
-              style={{
-                padding: isMobile ? '11px 18px' : '6px 12px',
-                fontSize: isMobile ? '0.9rem' : '0.76rem',
-                fontWeight: 700,
-                borderRadius: '8px', cursor: 'pointer',
-                background: 'rgba(255,255,255,0.22)', color: 'white',
-                border: '1px solid rgba(255,255,255,0.35)',
-                minHeight: isMobile ? 44 : undefined,
-              }}
-            >
-              View Rep.
-            </button>
-          )}
-          {onOpenPage && (
-            <PageButton
-              size={isMobile ? 'md' : 'sm'}
-              officialId={c.id}
-              onOpen={(id) => onOpenPage(id, {
-                displayName: c.name,
-                role: c.seeking_office ? `Candidate for ${c.seeking_office}` : 'Candidate',
-                photoUrl: c.photo_url,
-              })}
-            />
-          )}
+            {onCompareToggle && (
+              <button
+                onClick={() => onCompareToggle(c)}
+                style={{
+                  padding: isMobile ? '11px 18px' : '7px 14px',
+                  fontSize: isMobile ? '0.9rem' : '0.82rem',
+                  fontWeight: 700,
+                  borderRadius: '8px', cursor: 'pointer',
+                  background: isComparing ? '#f4a261' : 'rgba(255,255,255,0.22)',
+                  color: 'white', border: '1px solid rgba(255,255,255,0.35)',
+                  minHeight: isMobile ? 44 : undefined,
+                }}
+              >
+                {isComparing ? '✓ In Compare' : '+ Compare'}
+              </button>
+            )}
+            {c.website && (
+              <a
+                href={c.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: isMobile ? '11px 18px' : '7px 14px',
+                  fontSize: isMobile ? '0.9rem' : '0.82rem',
+                  fontWeight: 700,
+                  borderRadius: '8px', background: 'rgba(255,255,255,0.22)',
+                  color: 'white', border: '1px solid rgba(255,255,255,0.35)',
+                  textDecoration: 'none',
+                  minHeight: isMobile ? 44 : undefined,
+                  display: 'inline-flex', alignItems: 'center',
+                }}
+              >
+                Campaign Site ↗
+              </a>
+            )}
+            {hasRepCrossNav && (
+              <button
+                onClick={goToRep}
+                title="Open this candidate's current-office profile"
+                style={{
+                  padding: isMobile ? '11px 18px' : '7px 14px',
+                  fontSize: isMobile ? '0.9rem' : '0.82rem',
+                  fontWeight: 700,
+                  borderRadius: '8px', cursor: 'pointer',
+                  background: 'rgba(255,255,255,0.22)', color: 'white',
+                  border: '1px solid rgba(255,255,255,0.35)',
+                  minHeight: isMobile ? 44 : undefined,
+                }}
+              >
+                View Rep.
+              </button>
+            )}
+            {onOpenPage && (
+              <PageButton
+                size={isMobile ? 'md' : 'sm'}
+                officialId={c.id}
+                onOpen={(id) => onOpenPage(id, {
+                  displayName: c.name,
+                  role: c.seeking_office ? `Candidate for ${c.seeking_office}` : 'Candidate',
+                  photoUrl: c.photo_url,
+                })}
+              />
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Tabs — uses the shared TabStrip with horizontal-overflow fade
           indicators. tabs.map normalizes `key` → `id` at the call
