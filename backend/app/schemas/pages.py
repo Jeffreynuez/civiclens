@@ -133,13 +133,34 @@ class PostImageRead(BaseModel):
 
 # ── Posts ─────────────────────────────────────────────────────────────
 class PostCreate(BaseModel):
-    body: str = Field(..., min_length=1, max_length=5000)
+    # Body is OPTIONAL — a poll-only or image-only post is valid as
+    # long as at least one of (body, poll, image_ids) carries content.
+    # The model_validator below enforces that "at least one non-empty"
+    # rule. Empty-string body is the canonical empty value (matches
+    # what the frontend sends when the user typed nothing); the SQL
+    # column is Text so empty stores cleanly.
+    body: str = Field(default="", max_length=5000)
     poll: Optional[PollCreate] = None
     # Optional list of image IDs previously uploaded via
     # /api/pages/images/upload. The create_post handler claims those
     # rows by setting their post_id. Cap matches the user-facing "5
     # images max" limit; longer lists are rejected with 422.
     image_ids: List[int] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def _require_at_least_one(self) -> "PostCreate":
+        """A post must carry at least one of: body text, a poll, or
+        images. An empty post-shaped object would be noise on the
+        feed; we reject it before it hits the database."""
+        has_body = bool((self.body or "").strip())
+        has_poll = self.poll is not None
+        has_images = bool(self.image_ids)
+        if not (has_body or has_poll or has_images):
+            raise ValueError(
+                "A post needs at least one of: text body, an attached poll, "
+                "or one or more images."
+            )
+        return self
 
 
 class AuthorSummary(BaseModel):

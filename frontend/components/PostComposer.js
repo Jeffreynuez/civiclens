@@ -106,13 +106,25 @@ export default function PostComposer({
   const resolvedClosesAt = computeClosesAt(timing, durationValue, durationUnit, dateValue);
   const revealRequiresClose = presentationMode === 'reveal_after_close' && !resolvedClosesAt;
 
-  const canSubmit = body.trim().length > 0 && !busy && (
-    !pollOpen || (
-      question.trim().length > 0 &&
-      options.filter((o) => o.trim()).length >= 2 &&
-      !revealRequiresClose
-    )
+  // A post needs at least one of: body text, an attached poll (with
+  // a valid question + ≥2 options), or one or more images. Body-only
+  // is the common case; poll-only and image-only are explicitly
+  // allowed so reps + candidates can publish a poll without having
+  // to write anything alongside it, or share an image without
+  // padding the body with filler.
+  const hasBody = body.trim().length > 0;
+  const hasValidPoll = pollOpen && (
+    question.trim().length > 0
+    && options.filter((o) => o.trim()).length >= 2
+    && !revealRequiresClose
   );
+  const hasImages = images.length > 0;
+  // Poll-open guard — if the user opened the poll panel but hasn't
+  // filled it in, block submission even when body or images would
+  // otherwise suffice. Better to nudge them to either complete or
+  // remove the poll than to silently drop a half-typed question.
+  const pollPanelOk = !pollOpen || hasValidPoll;
+  const canSubmit = !busy && pollPanelOk && (hasBody || hasValidPoll || hasImages);
 
   const reset = () => {
     setBody(''); setQuestion(''); setOptions(['', '']);

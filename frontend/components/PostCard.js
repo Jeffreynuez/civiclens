@@ -713,19 +713,24 @@ export default function PostCard({
         </div>
       )}
 
-      {/* Body */}
-      <div
-        style={{
-          marginTop: '10px',
-          fontSize: '0.92rem',
-          lineHeight: 1.55,
-          color: 'var(--cl-text)',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}
-      >
-        {post.body}
-      </div>
+      {/* Body — skip the whole div when the post is poll-only or
+          image-only. Without this guard, an empty post.body still
+          rendered the wrapper div with marginTop: 10px, leaving a
+          dead gap above the poll / image. */}
+      {(post.body || '').trim() && (
+        <div
+          style={{
+            marginTop: '10px',
+            fontSize: '0.92rem',
+            lineHeight: 1.55,
+            color: 'var(--cl-text)',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          {post.body}
+        </div>
+      )}
 
       {/* Image gallery — responsive grid driven by image count so a
           single image gets full width, two sit side-by-side, and
