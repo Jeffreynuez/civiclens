@@ -6,26 +6,24 @@
 /**
  * IdentityPicker — small popover dropdown that appears next to a
  * like / vote / react button when the user is signed in to multiple
- * identities AND needs to disambiguate which one performs the action.
+ * identities and needs to pick which one performs the action.
  *
- * Two modes:
- *   • pick    — accounts that haven't acted yet. Click one → fire the
- *               action as that identity.
- *   • toggle  — all identities have already acted. Click one → retract
- *               (toggle off) that identity's reaction. Each entry shows
- *               its current state (e.g. "✓ Up") so the user can see
- *               what's set without guessing.
- *
- * Positioning: anchored next to the click target via the `anchor` prop
- * (a DOM rect or null for in-flow). For phase-6 simplicity we render
- * inline below the trigger when no anchor is provided.
+ * Always shows the same set: every signed-in identity, regardless of
+ * whether they've already acted. Identities that have ALREADY acted
+ * with this picker's specific kind/option get a ✓ marker so the user
+ * can see at a glance who's done what. Clicking an identity that
+ * already acted is equivalent to a toggle — the backend's reaction
+ * endpoint already handles "click the same kind twice → remove" for
+ * the rep / candidate / citizen path identically.
  *
  * Props:
  *   open       — controls visibility
  *   identities — array of { kind, label, sublabel, currentState? }
- *                currentState is 'up' | 'down' | null — used in
- *                toggle mode to show what's currently set.
- *   mode       — 'pick' | 'toggle' (drives the per-entry hint)
+ *                currentState ∈ {'up' | 'down' | 'voted' | null}.
+ *                Caller sets this to the kind ONLY when the identity
+ *                has acted with THIS picker's specific kind/option
+ *                (e.g. for the 👍 picker, currentState='up' iff that
+ *                identity up-voted; 'down' votes don't qualify).
  *   onPick(kind) — fired when the user selects an identity
  *   onClose()    — fired when the user clicks outside or presses Esc
  */
@@ -36,6 +34,13 @@ const KIND_BADGE = {
   rep:       { label: 'Rep',       color: '#2a7a2a' },
   candidate: { label: 'Candidate', color: '#2a7a2a' },
 };
+
+// Per-row max label width before CSS-ellipsis kicks in. Tuned to
+// fit the picker's ~200px minWidth alongside the badge + sublabel
+// + ✓ marker. Full text remains in the row's title attribute so
+// hover shows it.
+const LABEL_MAX_WIDTH = 130;
+const SUBLABEL_MAX_WIDTH = 100;
 
 export default function IdentityPicker({
   open, identities = [], mode = 'pick', onPick, onClose,
@@ -125,13 +130,20 @@ export default function IdentityPicker({
         textTransform: 'uppercase', letterSpacing: '0.06em',
         padding: '6px 10px 4px',
       }}>
-        {mode === 'toggle' ? 'Toggle off' : 'Act as'}
+        Act as
       </div>
       {identities.map((id) => {
         const badge = KIND_BADGE[id.kind] || { label: id.kind, color: '#666' };
-        const stateLabel = mode === 'toggle' && id.currentState
-          ? (id.currentState === 'up' ? '✓ Liked' : '✓ Disliked')
-          : null;
+        // ✓ stamp: render whenever this identity has acted with the
+        // picker's specific kind/option (currentState is set by the
+        // caller — see IdentityPicker docstring). Clicking the row
+        // is a toggle when this is set; the backend handles "same
+        // kind twice → remove" symmetrically across all three
+        // identity paths.
+        let stateLabel = null;
+        if (id.currentState === 'up') stateLabel = '✓ Liked';
+        else if (id.currentState === 'down') stateLabel = '✓ Disliked';
+        else if (id.currentState === 'voted') stateLabel = '✓ Voted';
         return (
           <button
             key={id.kind}
@@ -157,6 +169,7 @@ export default function IdentityPicker({
             }}
             onMouseOver={(e) => { e.currentTarget.style.background = 'var(--cl-bg)'; }}
             onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            title={[id.label, id.sublabel].filter(Boolean).join(' · ')}
           >
             <span style={{
               fontSize: '0.58rem', fontWeight: 800,
@@ -167,9 +180,23 @@ export default function IdentityPicker({
             }}>
               {badge.label}
             </span>
-            <span style={{ flex: 1, fontWeight: 600 }}>{id.label}</span>
+            {/* Label truncates with ellipsis when it would overflow
+                the row. min-width:0 lets flexbox compress; the title
+                attribute on the parent button surfaces the full
+                text on hover. */}
+            <span style={{
+              flex: 1, fontWeight: 600,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              minWidth: 0, maxWidth: LABEL_MAX_WIDTH,
+            }}>
+              {id.label}
+            </span>
             {id.sublabel && (
-              <span style={{ fontSize: '0.7rem', color: 'var(--cl-text-light)' }}>
+              <span style={{
+                fontSize: '0.7rem', color: 'var(--cl-text-light)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                maxWidth: SUBLABEL_MAX_WIDTH, flexShrink: 0,
+              }}>
                 {id.sublabel}
               </span>
             )}
@@ -178,6 +205,7 @@ export default function IdentityPicker({
                 fontSize: '0.7rem', fontWeight: 700,
                 color: 'var(--cl-accent)',
                 marginLeft: 'auto',
+                flexShrink: 0,
               }}>
                 {stateLabel}
               </span>
@@ -233,18 +261,29 @@ export function PostingAsPicker({ identities = [], value, onChange }) {
         display: 'inline-flex', alignItems: 'center', gap: 6,
         fontSize: '0.72rem', color: 'var(--cl-text-light)',
         marginBottom: 6,
+        maxWidth: '100%',
       }}>
-        <span>Posting as</span>
+        <span style={{ flexShrink: 0 }}>Posting as</span>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 4,
           padding: '1px 8px', borderRadius: 999,
           background: badge.color, color: 'white',
           fontSize: '0.62rem', fontWeight: 800,
           letterSpacing: '0.04em', textTransform: 'uppercase',
+          flexShrink: 0,
         }}>
           {badge.label}
         </span>
-        <span style={{ fontWeight: 600, color: 'var(--cl-text)' }}>{only.label}</span>
+        <span
+          style={{
+            fontWeight: 600, color: 'var(--cl-text)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            maxWidth: LABEL_MAX_WIDTH, minWidth: 0,
+          }}
+          title={only.label}
+        >
+          {only.label}
+        </span>
       </div>
     );
   }
@@ -253,11 +292,12 @@ export function PostingAsPicker({ identities = [], value, onChange }) {
   const current = identities.find((i) => i.kind === value) || identities[0];
   const badge = KIND_BADGE[current.kind] || { label: current.kind, color: '#666' };
   return (
-    <div ref={wrapRef} style={{ position: 'relative', marginBottom: 6 }}>
+    <div ref={wrapRef} style={{ position: 'relative', marginBottom: 6, display: 'inline-block', maxWidth: '100%' }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        title={current.label}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '3px 10px 3px 4px',
@@ -265,6 +305,7 @@ export function PostingAsPicker({ identities = [], value, onChange }) {
           background: 'white', color: 'var(--cl-text)',
           fontFamily: 'inherit', fontSize: '0.74rem',
           cursor: 'pointer',
+          maxWidth: '100%',
         }}
       >
         <span style={{
@@ -272,11 +313,18 @@ export function PostingAsPicker({ identities = [], value, onChange }) {
           padding: '1px 7px', borderRadius: 999,
           background: badge.color, color: 'white',
           letterSpacing: '0.04em', textTransform: 'uppercase',
+          flexShrink: 0,
         }}>
           {badge.label}
         </span>
-        <span style={{ fontWeight: 600 }}>{current.label}</span>
-        <span aria-hidden style={{ fontSize: '0.62rem', color: 'var(--cl-text-light)' }}>▾</span>
+        <span style={{
+          fontWeight: 600,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          maxWidth: LABEL_MAX_WIDTH, minWidth: 0,
+        }}>
+          {current.label}
+        </span>
+        <span aria-hidden style={{ fontSize: '0.62rem', color: 'var(--cl-text-light)', flexShrink: 0 }}>▾</span>
       </button>
       <IdentityPicker
         open={open}

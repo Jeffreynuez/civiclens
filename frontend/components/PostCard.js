@@ -135,36 +135,21 @@ export default function PostCard({
       onCitizenLoginRequired?.();
       return;
     }
-    // Build the "already acted" map: an identity counts as already-
-    // acted when they have a reaction of THIS kind (a different
-    // reaction kind is fine — clicking Up while you've Down-voted
-    // should let you flip, not require the picker).
-    const alreadyActed = {};
-    for (const id of activeIdentities) {
-      const r = myReactionsByIdentity[id.kind];
-      if (r === kind) alreadyActed[id.kind] = true;
-    }
-    const decision = pickEngagementIdentity({
-      identities: activeIdentities, alreadyActed,
-    });
+    const decision = pickEngagementIdentity({ identities: activeIdentities });
     if (decision.single) {
-      // One identity total — no picker needed ever.
+      // One identity total — no picker needed.
       await fireReaction(kind, null);
       return;
     }
-    if (decision.autoPick) {
-      // Only one identity hasn't acted with this kind yet → fire as them.
-      await fireReaction(kind, decision.autoPick);
-      return;
-    }
-    // Otherwise pop the picker. Stash the kind + mode so onPick knows
-    // what to fire.
+    // Multi-identity → always show the picker. Each entry's
+    // currentState is set ONLY when that identity has acted with
+    // THIS picker's kind (a Down-voter doesn't get a ✓ on the Up
+    // picker — they can still click Up to flip, no need to mark).
     setReactPicker({
       kind,
-      mode: decision.mode,
       identities: decision.showPicker.map((id) => ({
         ...id,
-        currentState: myReactionsByIdentity[id.kind] || null,
+        currentState: myReactionsByIdentity[id.kind] === kind ? kind : null,
       })),
     });
   };
@@ -387,30 +372,20 @@ export default function PostCard({
       onCitizenLoginRequired?.();
       return;
     }
-    // Same alreadyActed logic as post-level reactions: an identity
-    // counts as already-acted only when they have the SAME kind.
-    // A different kind should be allowed to flip the reaction.
     const myReactionsByIdentity = perCommentReactions || {};
-    const alreadyActed = {};
-    for (const id of activeIdentities) {
-      if (myReactionsByIdentity[id.kind] === kind) alreadyActed[id.kind] = true;
-    }
-    const decision = pickEngagementIdentity({
-      identities: activeIdentities, alreadyActed,
-    });
+    const decision = pickEngagementIdentity({ identities: activeIdentities });
     if (decision.single) {
       await fireCommentReaction(commentId, kind, null);
       return;
     }
-    if (decision.autoPick) {
-      await fireCommentReaction(commentId, kind, decision.autoPick);
-      return;
-    }
+    // Multi-identity → always show the picker. currentState is set
+    // only when the identity has reacted with THIS picker's kind
+    // (no ✓ on the 👍 picker for a Down-voter).
     setCommentReactPicker({
       commentId, kind,
-      mode: decision.mode,
       identities: decision.showPicker.map((id) => ({
-        ...id, currentState: myReactionsByIdentity[id.kind] || null,
+        ...id,
+        currentState: myReactionsByIdentity[id.kind] === kind ? kind : null,
       })),
     });
   };

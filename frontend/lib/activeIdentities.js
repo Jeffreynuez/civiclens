@@ -66,33 +66,36 @@ export function useActiveIdentities({ isOwner = false } = {}) {
 }
 
 /**
- * Helper — decide which identity should perform an action, given:
- *   identities: list of {kind, label} from useActiveIdentities
- *   alreadyActed: object mapping kind → truthy value when that
- *                 identity has already done the action (e.g. for
- *                 likes/votes pulled from my_reactions / voter_choices)
+ * Helper — decide whether to show the IdentityPicker.
  *
  * Returns one of:
- *   { autoPick: <kind> }            — only one identity hasn't acted;
- *                                     fire automatically as that one
- *   { showPicker: [...identities] } — 2+ haven't acted (or 0 have any
- *                                     remaining picks but the picker
- *                                     opens in toggle-off mode); the
- *                                     UI pops the dropdown
  *   { single: <kind> }              — only one identity is signed in;
- *                                     no picker needed ever
- *   { none: true }                  — no identities signed in
+ *                                     no picker needed ever, fire as
+ *                                     that one.
+ *   { showPicker: [...identities] } — 2+ identities are signed in;
+ *                                     ALWAYS pop the picker so the
+ *                                     user explicitly picks. Even
+ *                                     when an identity has already
+ *                                     acted, it stays in the list so
+ *                                     the user can click to toggle
+ *                                     off — the backend's react
+ *                                     endpoint already handles toggle
+ *                                     semantics for "second click of
+ *                                     the same kind", so the frontend
+ *                                     doesn't need a separate mode.
+ *   { none: true }                  — no identities signed in.
+ *
+ * The picker entries the caller renders should additionally carry
+ * `currentState` (set by the caller via the alreadyActed map) so
+ * the UI can stamp a ✓ on identities that have already acted with
+ * this picker's specific kind / option.
  */
-export function pickEngagementIdentity({ identities, alreadyActed = {} } = {}) {
+export function pickEngagementIdentity({ identities } = {}) {
   if (!identities || identities.length === 0) return { none: true };
   if (identities.length === 1) return { single: identities[0].kind };
-
-  const remaining = identities.filter((id) => !alreadyActed[id.kind]);
-  if (remaining.length === 1) return { autoPick: remaining[0].kind };
-  if (remaining.length >= 2) {
-    return { showPicker: remaining, mode: 'pick' };
-  }
-  // remaining.length === 0 → all identities have already acted.
-  // Open the picker in toggle-off mode so the user can retract one.
-  return { showPicker: identities, mode: 'toggle' };
+  // Multi-identity: always show the picker. Easier to reason about
+  // ("if I'm signed in to multiple, I always pick"), and removes
+  // the auto-fire-when-only-one-remaining shortcut that was making
+  // testing confusing.
+  return { showPicker: identities };
 }
