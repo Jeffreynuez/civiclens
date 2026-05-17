@@ -718,18 +718,7 @@ export default function PostCard({
           rendered the wrapper div with marginTop: 10px, leaving a
           dead gap above the poll / image. */}
       {(post.body || '').trim() && (
-        <div
-          style={{
-            marginTop: '10px',
-            fontSize: '0.92rem',
-            lineHeight: 1.55,
-            color: 'var(--cl-text)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
-        >
-          {post.body}
-        </div>
+        <PostBody body={post.body} />
       )}
 
       {/* Image gallery — responsive grid driven by image count so a
@@ -1482,6 +1471,109 @@ export default function PostCard({
       </div>
     );
   }
+}
+
+// Cutoff threshold for the collapse-on-render behavior. Posts whose
+// body exceeds this character count render in a clipped frame with a
+// gradient fade + "Expand" button anchored at bottom-right. Below the
+// threshold the post renders normally (full body, no controls).
+// Tuned to roughly the bottom of a 6–7 line paragraph at default
+// type sizes — short statements stay uncluttered, longer essays
+// don't crowd out everything below them on first paint.
+const BODY_COLLAPSE_THRESHOLD_CHARS = 400;
+const BODY_COLLAPSED_HEIGHT_PX = 160;
+
+function PostBody({ body }) {
+  // Initially collapsed for long posts so the page doesn't open with
+  // a wall of text scrolling past the fold. The user clicks Expand
+  // to read the rest; Collapse re-clips. Posts under the threshold
+  // skip both states and render the body as-is.
+  const isLong = (body || '').length > BODY_COLLAPSE_THRESHOLD_CHARS;
+  const [expanded, setExpanded] = useState(false);
+
+  if (!isLong) {
+    return (
+      <div
+        style={{
+          marginTop: '10px',
+          fontSize: '0.92rem',
+          lineHeight: 1.55,
+          color: 'var(--cl-text)',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '10px', position: 'relative' }}>
+      <div
+        style={{
+          fontSize: '0.92rem',
+          lineHeight: 1.55,
+          color: 'var(--cl-text)',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          // Cap the height when collapsed; let it grow naturally
+          // when expanded. The transition is purely cosmetic — the
+          // user sees the body slide open instead of snap.
+          maxHeight: expanded ? 'none' : `${BODY_COLLAPSED_HEIGHT_PX}px`,
+          overflow: 'hidden',
+          transition: 'max-height 0.25s ease',
+        }}
+      >
+        {body}
+      </div>
+
+      {/* Gradient fade — sits on top of the bottom edge of the
+          collapsed body so the text appears to dissolve rather than
+          getting hard-cut. pointer-events:none lets clicks pass
+          through to the body underneath (e.g. for text selection). */}
+      {!expanded && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: 0, right: 0, bottom: 0,
+            height: 70,
+            background: 'linear-gradient(to top, white 30%, rgba(255,255,255,0))',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      {/* Expand / Collapse pill, bottom-right corner of the body.
+          Uses the same accent green as other primary CTAs so it
+          reads as the next action. When expanded we flip the label
+          to "Show less" so the user can re-collapse without
+          scrolling back to find a separate control. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          position: 'absolute',
+          right: 4,
+          bottom: 4,
+          padding: '5px 12px',
+          borderRadius: 999,
+          border: '1px solid var(--cl-accent)',
+          background: 'var(--cl-accent)',
+          color: 'white',
+          fontFamily: 'inherit',
+          fontSize: '0.72rem',
+          fontWeight: 700,
+          cursor: 'pointer',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+          zIndex: 2,
+        }}
+      >
+        {expanded ? 'Show less' : 'Expand'}
+      </button>
+    </div>
+  );
 }
 
 function ReactionButton({ kind, count, active, disabled, onClick, title }) {
