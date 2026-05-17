@@ -811,29 +811,27 @@ def create_post(
     # one query, then iterate the client's id list to preserve gallery
     # order. Validation per image:
     #   • Must exist (id lookup fails → 400).
-    #   • Must belong to this rep (another rep's image → 403).
+    #   • Must belong to the SAME page owner posting (other owner's
+    #     image → 403). Rep posts match on uploader_id; candidate
+    #     posts match on uploader_candidate_id (Phase 4d).
     #   • Must still be an orphan (post_id IS NULL); reattaching is
     #     a bug in the client and we refuse rather than silently move
     #     an image across posts.
-    #
-    # Image upload is rep-only today; candidate-side image upload
-    # gets a parallel uploader_candidate_id column in a follow-up
-    # increment. For now we reject image_ids on candidate posts so
-    # we don't silently swallow images that would never resolve.
     if payload.image_ids:
-        if rep is None:
-            raise HTTPException(
-                400,
-                "Image attachments aren't supported on candidate posts yet — "
-                "post the text first, image upload is coming in a follow-up.",
-            )
         fetched = db.query(PostImage).filter(PostImage.id.in_(payload.image_ids)).all()
         by_id = {img.id: img for img in fetched}
         for idx, img_id in enumerate(payload.image_ids):
             img = by_id.get(img_id)
             if img is None:
                 raise HTTPException(400, f"Image {img_id} not found.")
-            if img.uploader_id != rep.id:
+            # Ownership check — gated on whichever identity is
+            # authoring the post.
+            owns_image = (
+                (rep is not None and img.uploader_id == rep.id)
+                or (candidate is not None
+                    and getattr(img, "uploader_candidate_id", None) == candidate.id)
+            )
+            if not owns_image:
                 raise HTTPException(403, f"Image {img_id} was not uploaded by you.")
             if img.post_id is not None:
                 raise HTTPException(400, f"Image {img_id} is already attached to another post.")
@@ -1617,6 +1615,34 @@ def create_comment(
     # visible, just not filterable on sentiment / tone).
     from app.services.comment_classifier import classify_post_comment
     bg_tasks.add_task(classify_post_comment, comment.id)
+
+    # Phase 5 reply notification — fired in-process (not via
+    # background task) because the row is tiny and we want the
+    # notification visible on the recipient's next poll. Only fires
+    # when this comment is a reply (parent_id is non-NULL); top-
+    # level comments don't generate a notification today (no
+    # subscriber model yet).
+    if parent_id is not None:
+        try:
+            from app.services.notifications_inapp import emit_reply_notification
+            # `parent` was loaded earlier in the reply-validation
+            # block; reuse that object to avoid a second SELECT.
+            replier_name = (
+                rep.display_name if rep is not None
+                else candidate.display_name if candidate is not None
+                else citizen.display_name
+            )
+            emit_reply_notification(
+                db, reply=comment, parent=parent,
+                replier_display_name=replier_name,
+                official_id=post.official_id,
+            )
+        except Exception:
+            # Don't let a notification-emission bug fail the comment
+            # write — the user has already seen their comment land,
+            # the bell just won't ring this once.
+            logger.exception("Failed to emit reply notification for comment %s", comment.id)
+
     # New comment has no reactions yet — _comment_to_read handles that,
     # and it gives the UI a consistent shape so it can drop the row
     # into the list without special-casing "freshly-created" comments.
@@ -1865,15 +1891,28 @@ def _ensure_uploads_dir() -> Path:
 async def upload_post_image(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    rep: RepAccount = Depends(get_current_rep),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     """Upload a single image as an unclaimed orphan.
 
-    Flow: rep uploads → gets {id, url} back → shows thumbnail in the
-    composer → on publish, sends image_ids to /posts to claim them.
-    Images not claimed within a post stay as orphans on disk; a future
-    janitor can sweep them.
+    Flow: page owner uploads → gets {id, url} back → composer shows
+    the thumbnail → on publish, sends image_ids to /posts to claim
+    them. Images not claimed within a post stay as orphans on disk;
+    a future janitor can sweep them.
+
+    Phase 4d: candidates can upload images too. The uploader gets
+    written to either uploader_id (rep) or uploader_candidate_id
+    (candidate); create_post's image-attachment validation checks
+    whichever applies. Requires a rep OR candidate session — pure
+    citizen sessions can't upload images (no surface for them to
+    attach images to today).
     """
+    if me_rep is None and me_candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sign in as a rep or candidate to upload images.",
+        )
     ct = (file.content_type or "").lower()
     if ct not in _ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -1905,7 +1944,8 @@ async def upload_post_image(
         raise HTTPException(status_code=500, detail="Could not save image.") from e
 
     img = PostImage(
-        uploader_id=rep.id,
+        uploader_id=me_rep.id if me_rep is not None else None,
+        uploader_candidate_id=me_candidate.id if me_candidate is not None else None,
         filename=fname,
         content_type=ct,
         file_size=len(data),
