@@ -101,7 +101,7 @@ const SHIPPED = [
   ['Events as a tab on rep + candidate pages', 'Upcoming events moved out of the bottom-of-feed position into a top tab strip alongside Feed (and Dashboard for owners), so events stay one tap from the hero regardless of post volume on mobile.'],
   ['Candidate profile centered hero + collapse toggle', 'Candidates now have the same centered-hero layout + chevron-collapse treatment as reps, with their signature dark color preserved so the two profile types stay visually distinct at a glance.'],
   ['Congress photo coverage backfill', 'Wikipedia-sourced portraits added for 91 sitting members of Congress missing from the community photo mirror — entire new 119th Congress class + mid-cycle appointees (Ashley Moody, John James, Mike Lawler, Nick Begich III, and ~87 others) now render with real photos instead of initials.'],
-  ['Feedback button + triage pipeline', 'Users tap Feedback from the navbar menu → embedded Google Form opens in an overlay → submission lands in a linked Sheet. From there: an Apps Script trigger sends an instant acknowledgement to submitters who included an email, and a weekly Monday digest classifies new submissions (bug / feature / correction / praise / antagonistic / irrelevant) + drafts personalized reply emails for review.'],
+  ['Feedback button + triage pipeline', 'Users tap Feedback from the navbar menu → embedded Google Form opens in an overlay → submission lands in a linked Sheet. From there: an Apps Script trigger sends an instant acknowledgement to submitters who included an email, and a weekly Monday digest classifies new submissions (bug / feature / correction / praise / general) + drafts personalized reply emails for review.'],
 ];
 
 const IN_PROGRESS = [
