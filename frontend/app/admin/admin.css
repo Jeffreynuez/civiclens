@@ -201,7 +201,17 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  white-space: nowrap;
+  /* Allow the label to wrap inside the card on narrow widths.
+     Previously `white-space: nowrap` + `overflow: hidden` on the
+     parent meant labels like "Hidden content" and "Resolved this
+     week" got truncated to "HIDDEN CONTEN" / "RESOLVED THIS WE"
+     when the 3-column grid squeezed each card down to ~110px on
+     portrait mobile. Wrapping is a defense-in-depth for any
+     viewport that's still ≥3-column but tight; at ≤480px we also
+     drop to a single column (see media query below) so wrap
+     rarely fires there. */
+  white-space: normal;
+  word-wrap: break-word;
 }
 .ad-kpi__dot {
   width: 8px;
@@ -230,6 +240,46 @@
   .ad-kpis { gap: 8px; }
   .ad-kpi { padding: 12px; }
   .ad-kpi__num { font-size: 1.5rem; }
+}
+/* Portrait phones — 3 cards crammed into ~360-420px width are too
+   tight even with label wrap, and the number sits flush-left so the
+   eye has to hunt across three offset columns. Stack to a single
+   column at ≤480px so each card spans the full width, with content
+   centered for cleaner scanning. Landscape mobile (>480px) keeps
+   the 3-column layout, which the user confirmed reads fine. */
+@media (max-width: 480px) {
+  .ad-kpis {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .ad-kpi {
+    padding: 14px 18px;
+    align-items: center;
+    text-align: center;
+  }
+  .ad-kpi__label { justify-content: center; }
+  .ad-kpi__num { font-size: 1.75rem; }
+}
+
+/* Filter chip pills — at narrow widths the wrapped pill looked
+   awkward because a long chip ("Poll comment", "Account suspension")
+   would drop to its own line inside the 999px-rounded container,
+   making the pill ovalize vertically with weird internal alignment.
+   Swap to a single horizontally-scrolling row so the pill shape
+   stays intact and long chips remain reachable via swipe. Scrollbar
+   is hidden to keep the pill looking like a pill, matching the
+   pattern already in use on .ad-subnav above. */
+@media (max-width: 640px) {
+  .ad-filters__chips {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    max-width: 100%;
+  }
+  .ad-filters__chips::-webkit-scrollbar { display: none; }
+  .ad-chip { white-space: nowrap; flex-shrink: 0; }
 }
 
 /* ===============================================================
@@ -267,6 +317,12 @@
   padding: 3px;
   border-radius: 999px;
   border: 1px solid var(--cl-border);
+  /* On narrow viewports we swap to a single horizontally-scrolling
+     row (see @media below). Constrain the chip pill so it never
+     spans wider than its parent — without this, long labels like
+     "Poll comment" or "Account suspension" could spill past the
+     viewport edge. */
+  max-width: 100%;
 }
 .ad-chip {
   display: inline-flex;
