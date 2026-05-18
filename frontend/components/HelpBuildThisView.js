@@ -101,12 +101,11 @@ const SHIPPED = [
   ['Events as a tab on rep + candidate pages', 'Upcoming events moved out of the bottom-of-feed position into a top tab strip alongside Feed (and Dashboard for owners), so events stay one tap from the hero regardless of post volume on mobile.'],
   ['Candidate profile centered hero + collapse toggle', 'Candidates now have the same centered-hero layout + chevron-collapse treatment as reps, with their signature dark color preserved so the two profile types stay visually distinct at a glance.'],
   ['Congress photo coverage backfill', 'Wikipedia-sourced portraits added for 91 sitting members of Congress missing from the community photo mirror — entire new 119th Congress class + mid-cycle appointees (Ashley Moody, John James, Mike Lawler, Nick Begich III, and ~87 others) now render with real photos instead of initials.'],
-  ['Feedback triage pipeline', 'In-product feedback collected via a Google Form → linked Sheet, with an instant Apps Script acknowledgement to submitters who included an email, plus a weekly Monday digest that classifies submissions (bug / feature / correction / praise / antagonistic / irrelevant) and drafts personalized reply emails for review.'],
+  ['Feedback button + triage pipeline', 'Users tap Feedback from the navbar menu → embedded Google Form opens in an overlay → submission lands in a linked Sheet. From there: an Apps Script trigger sends an instant acknowledgement to submitters who included an email, and a weekly Monday digest classifies new submissions (bug / feature / correction / praise / antagonistic / irrelevant) + drafts personalized reply emails for review.'],
 ];
 
 const IN_PROGRESS = [
   ['Filling out the remaining 49 states', 'Profile photos, issues, experience, state legislators, local-rep data — content work, ongoing.'],
-  ['In-product "Send feedback" surface', 'The feedback form + triage pipeline are live (see Shipped), but the form itself isn\'t yet linked from inside the app. Adding a discoverable Send-feedback button in the navbar / settings menu.'],
   ['Email deliverability hardening', 'Adding SPF / DKIM / DMARC records on civicview.app so acknowledgement and notification emails clear Yahoo / Gmail / Outlook spam filters reliably. Setup happens in the Workspace admin console + DNS provider.'],
   ['Election-win promotion flow (UI)', 'Backend endpoint shipped (admin can promote a winning candidate to a rep account and archive the defeated incumbent). UI surface for triggering the promotion + a confirmation flow still pending.'],
   ['Crowdfunding launch + legal structure', 'Forming an LLC, evaluating 501(c)(3).'],
