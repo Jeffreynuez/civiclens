@@ -60,75 +60,13 @@ const STATE_HOUSE_DISTRICTS = {
  *   onClose()      — dismiss without signing in
  *   onSuccess(me)  — called after a successful login
  */
-const DEMO_PASSWORD = '***REDACTED-DURING-PUBLIC-FLIP-AUDIT***';
-
-const DEMO_CITIZENS = [
-  { label: 'Maria Hernandez',   email: 'maria.hernandez@example.invalid',   city: 'Naples',          cd: 'FL-19' },
-  { label: 'James Whitford',    email: 'james.whitford@example.invalid',    city: 'Naples',          cd: 'FL-19' },
-  { label: 'Patricia Reyes',    email: 'patricia.reyes@example.invalid',    city: 'Naples',          cd: 'FL-19' },
-  { label: 'David Goldman',     email: 'david.goldman@example.invalid',     city: 'Naples',          cd: 'FL-19' },
-  { label: 'Emily Chen',        email: 'emily.chen@example.invalid',        city: 'Naples',          cd: 'FL-19' },
-  { label: 'Anthony Brooks',    email: 'anthony.brooks@example.invalid',    city: 'Fort Myers',      cd: 'FL-19' },
-  { label: 'Rosa Martinez',     email: 'rosa.martinez@example.invalid',     city: 'Fort Myers',      cd: 'FL-19' },
-  { label: "Kevin O'Neill",     email: 'kevin.oneill@example.invalid',      city: 'Fort Myers',      cd: 'FL-19' },
-  { label: 'Susan Albright',    email: 'susan.albright@example.invalid',    city: 'Marco Island',    cd: 'FL-19' },
-  { label: 'Carlos Vega',       email: 'carlos.vega@example.invalid',       city: 'Bonita Springs',  cd: 'FL-19' },
-  { label: 'Tyrone Washington', email: 'tyrone.washington@example.invalid', city: 'Orlando',         cd: 'FL-10' },
-  { label: 'Ashley Rivera',     email: 'ashley.rivera@example.invalid',     city: 'Orlando',         cd: 'FL-10' },
-  { label: 'Michael Patel',     email: 'michael.patel@example.invalid',     city: 'Orlando',         cd: 'FL-10' },
-  { label: 'Zoe Johnson',       email: 'zoe.johnson@example.invalid',       city: 'Orlando',         cd: 'FL-10' },
-  { label: 'Gregory Hanks',     email: 'gregory.hanks@example.invalid',     city: 'Winter Park',     cd: 'FL-10' },
-  { label: 'Daniela Cortez',    email: 'daniela.cortez@example.invalid',    city: 'Apopka',          cd: 'FL-10' },
-  { label: 'Juan Delgado',      email: 'juan.delgado@example.invalid',      city: 'Tampa',           cd: 'FL-15' },
-  { label: 'Sarah Kowalski',    email: 'sarah.kowalski@example.invalid',    city: 'Tampa',           cd: 'FL-15' },
-  { label: 'Marcus Greene',     email: 'marcus.greene@example.invalid',     city: 'Tampa',           cd: 'FL-15' },
-  { label: 'Nadia Patel',       email: 'nadia.patel@example.invalid',       city: 'Riverview',       cd: 'FL-15' },
-  { label: 'Brian Holloway',    email: 'brian.holloway@example.invalid',    city: 'Brandon',         cd: 'FL-15' },
-  { label: 'Luis Fernandez',    email: 'luis.fernandez@example.invalid',    city: 'Miami',           cd: 'FL-27' },
-  { label: 'Beatriz Castillo',  email: 'beatriz.castillo@example.invalid',  city: 'Miami',           cd: 'FL-27' },
-  { label: 'Diane Kohler',      email: 'diane.kohler@example.invalid',      city: 'Miami',           cd: 'FL-27' },
-  { label: 'Robert Laurent',    email: 'robert.laurent@example.invalid',    city: 'Coral Gables',    cd: 'FL-27' },
-  { label: 'DeShawn Williams',  email: 'deshawn.williams@example.invalid',  city: 'Jacksonville',    cd: 'FL-4'  },
-  { label: 'Kimberly Boyd',     email: 'kimberly.boyd@example.invalid',     city: 'Jacksonville',    cd: 'FL-4'  },
-  { label: 'Thomas Macleod',    email: 'thomas.macleod@example.invalid',    city: 'Jacksonville',    cd: 'FL-4'  },
-  { label: 'Ayana Harris',      email: 'ayana.harris@example.invalid',      city: 'Jacksonville',    cd: 'FL-4'  },
-  { label: 'Rachel Simmons',    email: 'rachel.simmons@example.invalid',    city: 'Tallahassee',     cd: 'FL-2'  },
-  { label: 'Jorge Ruiz',        email: 'jorge.ruiz@example.invalid',        city: 'Tallahassee',     cd: 'FL-2'  },
-  { label: 'Priya Nair',        email: 'priya.nair@example.invalid',        city: 'Tallahassee',     cd: 'FL-2'  },
-  { label: 'Naomi Feldman',     email: 'naomi.feldman@example.invalid',     city: 'West Palm Beach', cd: 'FL-22' },
-  { label: 'Eric Santos',       email: 'eric.santos@example.invalid',       city: 'West Palm Beach', cd: 'FL-22' },
-  { label: 'Steven Horowitz',   email: 'steven.horowitz@example.invalid',   city: 'Boca Raton',      cd: 'FL-22' },
-  { label: 'Jamaal Price',      email: 'jamaal.price@example.invalid',      city: 'Boynton Beach',   cd: 'FL-21' },
-  { label: 'Linda Chang',       email: 'linda.chang@example.invalid',       city: 'Boynton Beach',   cd: 'FL-21' },
-  { label: 'Barbara Klein',     email: 'barbara.klein@example.invalid',     city: 'Delray Beach',    cd: 'FL-21' },
-  { label: 'Christopher Ortiz', email: 'christopher.ortiz@example.invalid', city: 'St. Petersburg',  cd: 'FL-13' },
-  { label: 'Monica Bennett',    email: 'monica.bennett@example.invalid',    city: 'St. Petersburg',  cd: 'FL-13' },
-  { label: 'Ahmed Rahman',      email: 'ahmed.rahman@example.invalid',      city: 'St. Petersburg',  cd: 'FL-13' },
-  { label: 'Lauren McAllister', email: 'lauren.mcallister@example.invalid', city: 'Gainesville',     cd: 'FL-3'  },
-  { label: 'Raj Gupta',         email: 'raj.gupta@example.invalid',         city: 'Gainesville',     cd: 'FL-3'  },
-  { label: 'Angela Thompson',   email: 'angela.thompson@example.invalid',   city: 'Ocala',           cd: 'FL-3'  },
-  { label: 'William Fischer',   email: 'william.fischer@example.invalid',   city: 'Pensacola',       cd: 'FL-1'  },
-  { label: 'Darrell Coleman',   email: 'darrell.coleman@example.invalid',   city: 'Pensacola',       cd: 'FL-1'  },
-  { label: 'Sophia Ramos',      email: 'sophia.ramos@example.invalid',      city: 'Daytona Beach',   cd: 'FL-7'  },
-  { label: 'Travis Nguyen',     email: 'travis.nguyen@example.invalid',     city: 'Deltona',         cd: 'FL-7'  },
-  { label: 'Evelyn Richards',   email: 'evelyn.richards@example.invalid',   city: 'St. Augustine',   cd: 'FL-6'  },
-  { label: 'Malik Carter',      email: 'malik.carter@example.invalid',      city: 'Palm Coast',      cd: 'FL-6'  },
-
-  // Out-of-state accounts — one each across 10 states so the country-
-  // scope filter on a rep's page has non-FL signal to differentiate
-  // from the state-scope filter. Filterable here by typing the 2-letter
-  // state code into the demo-filter box.
-  { label: 'Olivia Nguyen',     email: 'olivia.nguyen@example.invalid',     city: 'Los Angeles, CA', cd: 'CA-34' },
-  { label: 'Daniel Reed',       email: 'daniel.reed@example.invalid',       city: 'San Antonio, TX', cd: 'TX-20' },
-  { label: 'Rachel Goldberg',   email: 'rachel.goldberg@example.invalid',   city: 'New York, NY',    cd: 'NY-12' },
-  { label: 'Andre Walker',      email: 'andre.walker@example.invalid',      city: 'Chicago, IL',     cd: 'IL-1'  },
-  { label: 'Mia Carter',        email: 'mia.carter@example.invalid',        city: 'Philadelphia, PA', cd: 'PA-3' },
-  { label: 'Dwayne Alston',     email: 'dwayne.alston@example.invalid',     city: 'Cleveland, OH',   cd: 'OH-11' },
-  { label: 'Kenisha Ellis',     email: 'kenisha.ellis@example.invalid',     city: 'Atlanta, GA',     cd: 'GA-5'  },
-  { label: 'Elena Park',        email: 'elena.park@example.invalid',        city: 'Seattle, WA',     cd: 'WA-7'  },
-  { label: 'Terrance Brooks',   email: 'terrance.brooks@example.invalid',   city: 'Detroit, MI',     cd: 'MI-13' },
-  { label: 'Priscilla Novak',   email: 'priscilla.novak@example.invalid',   city: 'Arlington, VA',   cd: 'VA-8'  },
-];
+// Dead-code cleanup: the Phase 1.5 demo-citizen picker (a fixed list of
+// 60 seeded accounts + a shared password) was retired when the self-serve
+// demo-signup flow shipped. The constants stayed behind as dead references
+// — removed entirely here before the repo went public so the names +
+// addresses + password aren't visible at HEAD. Historical commits were
+// scrubbed in the same pass — see SECURITY.md §1 for the git-filter-repo
+// procedure used.
 
 const FIELD_LABEL = {
   display: 'block',
