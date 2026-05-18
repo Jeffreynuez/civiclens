@@ -133,41 +133,48 @@ All three are free for public repos and take ~5 minutes total to enable. For
 private repos, Dependabot + Secret Scanning are still free; CodeQL costs $49 per
 active committer per month under GitHub Advanced Security.
 
-1. **GitHub** → `Jeffreynuez/civiclens` → Settings → Code security and analysis.
+1. **GitHub** → `Jeffreynuez/civiclens` → Settings → **Advanced Security**.
+   (Path: `/settings/security_analysis`. GitHub reorganized this from
+   "Code security and analysis" sometime in 2024; same features, new
+   shell. CodeQL on private repos requires GitHub Advanced Security
+   licensing ($49/seat/mo); on public repos everything below is free.)
 
-2. Turn on:
+2. **Dependabot section** — turn on:
    - **Dependabot alerts** — notifies you when a dependency has a known CVE.
    - **Dependabot security updates** — auto-opens PRs that upgrade vulnerable
      dependencies. Just review and merge.
-   - **Dependabot version updates** — optional; opens regular update PRs for any
-     dependency. Useful but noisy.
-   - **Secret scanning** — alerts if an API key (AWS, Stripe, Anthropic, etc.)
-     lands in a commit. Catches accidents like committing a `.env` file.
-   - **Push protection** — prevents pushes containing detected secrets from
-     reaching GitHub at all. Strongly recommended.
-   - **Code scanning** → Set up → CodeQL → Default. Runs static analysis on every
-     PR; catches SQL injection patterns, hardcoded credentials, unsafe HTML, etc.
+   - **Dependabot malware alerts** — flags dependencies that turn out to be
+     outright malicious (typosquats, hijacked packages). Free.
+   - **Grouped security updates** — bundles related security PRs into one
+     instead of opening a separate PR per package. Cleaner queue.
+   - **Dependabot version updates** — controlled by `.github/dependabot.yml`
+     in this repo (already committed). Once that file is in the repo,
+     GitHub picks it up automatically. The "Configure" button here would
+     open an inline YAML editor as a fallback; not needed since the file
+     is checked in.
 
-3. **Add a `dependabot.yml`** in `.github/` to opt into Python + npm ecosystems
-   explicitly:
-   ```yaml
-   version: 2
-   updates:
-     - package-ecosystem: "pip"
-       directory: "/backend"
-       schedule:
-         interval: "weekly"
-       open-pull-requests-limit: 5
-     - package-ecosystem: "npm"
-       directory: "/frontend"
-       schedule:
-         interval: "weekly"
-       open-pull-requests-limit: 5
-   ```
+3. **Scroll further down on the same page** to find:
+   - **Secret scanning** → Enable. Alerts if an API key (Anthropic,
+     Stripe, AWS, etc.) lands in a commit.
+   - **Push protection** (sub-toggle of Secret scanning) → Enable.
+     Blocks the push at GitHub's edge before secrets ever reach the
+     remote. Strongly recommended.
+   - **Code scanning** → Set up → CodeQL → choose **Default**
+     configuration. Runs static analysis on every PR; catches SQL
+     injection patterns, hardcoded credentials, unsafe HTML, common
+     vuln patterns. Free on public repos; gated by GitHub Advanced
+     Security ($49/seat/mo) on private repos — if grayed out, skip and
+     rely on Dependabot + Secret Scanning instead, which are the
+     highest-leverage tools anyway.
 
-4. After enabling, walk through any alerts that fire in the first 24 hours.
-   Likely candidates: outdated `pydantic`, `sqlalchemy`, `next`, `react` — all
-   safe to update with the auto-generated PRs.
+4. The `.github/dependabot.yml` config is already in the repo (committed
+   alongside this doc) and covers Python (backend) + npm (frontend) +
+   GitHub Actions on a weekly schedule. No additional setup needed
+   after pushing the commit.
+
+5. After enabling, walk through any alerts that fire in the first 24
+   hours. Likely candidates: outdated `pydantic`, `sqlalchemy`, `next`,
+   `react` — all safe to update with the auto-generated PRs.
 
 ---
 
