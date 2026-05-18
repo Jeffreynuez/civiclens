@@ -50,3 +50,7 @@ build/
 # remove this if you do want such things tracked.
 .cowork/
 .local/
+
+# Microsoft Office lockfiles — created while a doc is open in Word/Excel/PowerPoint.
+# Pattern: ~$<original-filename>. Never want these in git.
+~$*
