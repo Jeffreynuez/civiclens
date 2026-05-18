@@ -86,11 +86,14 @@ export default function PageView({
   // to the backend per request; see `effectiveScope` below.
   const [ownerScope, setOwnerScope] = useState(null);
   const [viewerScope, setViewerScope] = useState(null);
-  // Owner toggle between the feed (compose + posts) and the
-  // constituent dashboard (rollup of reactions/comments/votes).
-  // 'feed' is the default so nothing changes for citizens or
-  // unclaimed pages. Dashboard is gated to `isOwner` in the render.
-  const [ownerView, setOwnerView] = useState('feed');
+  // Top-level view tab for the page main column. Three states:
+  //   'feed'      — composer (owner) + posts + citizen polls (default)
+  //   'events'    — upcoming events list + RepEventComposer (owner)
+  //   'dashboard' — engagement rollup (owner-only — citizens can't pick it)
+  // Feed/Events are visible to everyone; Dashboard is gated to the
+  // page owner in the tab strip render. 'feed' stays the default so
+  // citizens and unclaimed pages keep their current first impression.
+  const [activeView, setActiveView] = useState('feed');
   // When the owner clicks a post in the dashboard, we flip back to
   // the feed and tag the post id so PostCard highlighting can pulse
   // it into view. Cleared after highlight consumed.
@@ -102,10 +105,6 @@ export default function PageView({
   // viewports because the 300px reserved column was wider than the
   // remaining horizontal room.
   const isCompact = useIsCompact();
-  // On compact viewports the events sidebar shrinks to a "first 2"
-  // preview with a "Show all" toggle so it doesn't dominate the
-  // vertical scroll.
-  const [eventsExpanded, setEventsExpanded] = useState(false);
   // Scroll-driven collapse for the OwnerScopeFilter / ViewerScopeFilter
   // so the "POLL VIEW" / "FILTER constituent feedback" copy hides once
   // the user has started reading the feed. The chip row stays visible.
@@ -146,7 +145,7 @@ export default function PageView({
   // uses the same CSS keyframe PostCard's return-to-list highlight
   // uses (defined in global CSS) — here we toggle it via class.
   useEffect(() => {
-    if (!highlightPostId || ownerView !== 'feed') return undefined;
+    if (!highlightPostId || activeView !== 'feed') return undefined;
     // next tick so the feed render has mounted the article.
     const t = setTimeout(() => {
       const el = typeof document !== 'undefined'
@@ -160,7 +159,7 @@ export default function PageView({
       setHighlightPostId(null);
     }, 80);
     return () => clearTimeout(t);
-  }, [highlightPostId, ownerView]);
+  }, [highlightPostId, activeView]);
 
   // Re-fetch whenever the page id OR the signed-in rep id OR the
   // signed-in citizen id changes. `is_owner` + reaction summary (my
@@ -560,58 +559,61 @@ export default function PageView({
               </div>
             )}
 
-            {/* Owner-only view toggle — swaps the composer+feed for the
-                constituent dashboard (engagement rollup across all posts).
-                Hidden to non-owners so the control surface matches the
-                public read-only view. */}
-            {isOwner && (
-              <div
-                style={{
-                  display: 'flex', gap: '6px', marginBottom: '10px',
-                  padding: '4px',
-                  background: 'white', border: '1px solid var(--cl-border)',
-                  borderRadius: '999px',
-                  width: 'fit-content',
-                }}
-                role="tablist"
-                aria-label="Owner view"
-              >
-                {[
-                  { key: 'feed',      label: 'Feed' },
-                  { key: 'dashboard', label: 'Dashboard' },
-                ].map(({ key, label }) => {
-                  const active = ownerView === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setOwnerView(key)}
-                      style={{
-                        padding: '5px 14px', borderRadius: '999px',
-                        border: 'none',
-                        background: active ? 'var(--cl-accent)' : 'transparent',
-                        color: active ? 'white' : 'var(--cl-text-light)',
-                        fontSize: '0.8rem', fontWeight: 700,
-                        cursor: 'pointer',
-                        transition: 'background 0.15s, color 0.15s',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {/* Page view selector — always rendered for everyone.
+                Feed and Events are visible to all visitors; Dashboard
+                is appended only for the page owner (engagement rollup
+                across all posts). Moving Events into the tab strip
+                meant the events section no longer sits below an
+                ever-growing post list on mobile — selecting Events
+                swaps the main column to the events list instead. */}
+            <div
+              style={{
+                display: 'flex', gap: '6px', marginBottom: '10px',
+                padding: '4px',
+                background: 'white', border: '1px solid var(--cl-border)',
+                borderRadius: '999px',
+                width: 'fit-content',
+              }}
+              role="tablist"
+              aria-label="Page view"
+            >
+              {[
+                { key: 'feed',   label: 'Feed' },
+                { key: 'events', label: 'Events' },
+                ...(isOwner ? [{ key: 'dashboard', label: 'Dashboard' }] : []),
+              ].map(({ key, label }) => {
+                const active = activeView === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setActiveView(key)}
+                    style={{
+                      padding: '5px 14px', borderRadius: '999px',
+                      border: 'none',
+                      background: active ? 'var(--cl-accent)' : 'transparent',
+                      color: active ? 'white' : 'var(--cl-text-light)',
+                      fontSize: '0.8rem', fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'background 0.15s, color 0.15s',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
 
-            {/* Owner-only scope filter rail. Sits above the composer so
-                it's the first thing an owner sees — filter state
-                changes trigger a page refetch, which recomputes poll
-                counts + reactions + comment_count server-side. The
-                filter also drives the Dashboard's scope, so the owner
-                gets consistent slicing across Feed and Dashboard. */}
-            {isOwner && (
+            {/* Owner-only scope filter rail. Feed-view only — scope
+                filters drive engagement-metric slicing, which only
+                applies to the feed / dashboard views. Sits above the
+                composer so it's the first thing an owner sees —
+                filter state changes trigger a page refetch, which
+                recomputes poll counts + reactions + comment_count
+                server-side. */}
+            {isOwner && activeView === 'feed' && (
               <OwnerScopeFilter
                 scopes={payload?.allowed_engagement_scopes || []}
                 labels={payload?.engagement_scope_labels || {}}
@@ -624,20 +626,20 @@ export default function PageView({
             {/* Dashboard takes over the main column when the owner
                 toggles into it. Feed content (composer + posts) is
                 hidden but not unmounted below the dashboard — we just
-                branch on ownerView to render one or the other. */}
-            {isOwner && ownerView === 'dashboard' && (
+                branch on activeView to render one or the other. */}
+            {isOwner && activeView === 'dashboard' && (
               <Dashboard
                 officialId={officialId}
                 scope={ownerScope}
                 onJumpToPost={(postId) => {
-                  setOwnerView('feed');
+                  setActiveView('feed');
                   setHighlightPostId(postId);
                 }}
               />
             )}
 
             {/* Composer — owner only, feed view only */}
-            {isOwner && ownerView === 'feed' && (
+            {isOwner && activeView === 'feed' && (
               <PostComposer
                 officialId={officialId}
                 onCreated={handlePostCreated}
@@ -647,11 +649,12 @@ export default function PageView({
 
             {/* Viewer-side poll filter — shown to everyone who ISN'T
                 the page owner (owners get OwnerScopeFilter instead,
-                which is strictly more powerful). Lets citizens and
+                which is strictly more powerful). Feed-view only —
+                same reasoning as OwnerScopeFilter. Lets citizens and
                 anonymous viewers re-slice poll counts to their fellow
                 constituents' level without touching reactions or
                 comment counts. */}
-            {!isOwner && (
+            {!isOwner && activeView === 'feed' && (
               <ViewerScopeFilter
                 scopes={payload?.allowed_engagement_scopes || []}
                 labels={payload?.engagement_scope_labels || {}}
@@ -662,9 +665,97 @@ export default function PageView({
               />
             )}
 
-            {/* Feed — always rendered for non-owners; owners see it
-                only when ownerView === 'feed'. */}
-            {(!isOwner || ownerView === 'feed') && (
+            {/* Events panel — shown when the user picks the Events
+                tab. Renders the full list (no "show first 2" preview)
+                since clicking the tab signals the user wants to see
+                events; for the owner it also surfaces RepEventComposer
+                so they can add upcoming events without leaving this
+                view. Replaces the old bottom-of-feed inline events
+                section on mobile, which used to get buried below an
+                ever-growing post list. */}
+            {activeView === 'events' && (
+              <div
+                style={{
+                  background: 'white',
+                  border: '1px solid var(--cl-border)',
+                  borderRadius: 14,
+                  padding: 16,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.4px',
+                    color: 'var(--cl-text-light)',
+                    marginBottom: 10,
+                  }}
+                >
+                  Upcoming Events
+                </div>
+                {events.length === 0 ? (
+                  <div style={{ fontSize: '0.82rem', color: 'var(--cl-text-light)' }}>
+                    No upcoming events posted.
+                  </div>
+                ) : (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {events.map((evt) => {
+                      const d = evt.start_at ? new Date(evt.start_at.replace('Z', '')) : null;
+                      const when = d && !Number.isNaN(d.getTime())
+                        ? d.toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                          })
+                        : evt.start_at;
+                      return (
+                        <li
+                          key={evt.id}
+                          style={{
+                            padding: '10px 0',
+                            borderBottom: '1px solid var(--cl-border)',
+                          }}
+                        >
+                          <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--cl-text)' }}>
+                            {evt.title}
+                          </div>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--cl-text-light)', marginTop: '2px' }}>
+                            {when}
+                            {evt.location ? ` · ${evt.location}` : ''}
+                          </div>
+                          {evt.url && (
+                            <a
+                              href={evt.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                fontSize: '0.76rem',
+                                color: 'var(--cl-accent)',
+                                textDecoration: 'none',
+                                marginTop: '4px',
+                                display: 'inline-block',
+                              }}
+                            >
+                              RSVP →
+                            </a>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {isOwner && (
+                  <RepEventComposer
+                    officialId={officialId}
+                    events={events.filter((e) => e?.source === 'rep')}
+                    onCreated={handleEventCreated}
+                    onDeleted={handleEventDeleted}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Feed — only when activeView === 'feed' (for everyone). */}
+            {activeView === 'feed' && (
               <>
                 {loading && (
                   <div style={{ padding: '8px 0' }}>
@@ -732,114 +823,11 @@ export default function PageView({
               </>
             )}
 
-            {/* Events inline — only on compact viewports. Shows first 2
-                events with a "Show all" toggle so the section doesn't
-                dominate the vertical scroll on mobile. The sticky
-                desktop sidebar version below is hidden on compact. */}
-            {isCompact && (
-              <div
-                style={{
-                  marginTop: 16,
-                  background: 'white',
-                  border: '1px solid var(--cl-border)',
-                  borderRadius: 14,
-                  padding: 16,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.4px',
-                    color: 'var(--cl-text-light)',
-                    marginBottom: 10,
-                  }}
-                >
-                  Upcoming Events
-                </div>
-                {events.length === 0 ? (
-                  <div style={{ fontSize: '0.82rem', color: 'var(--cl-text-light)' }}>
-                    No upcoming events posted.
-                  </div>
-                ) : (
-                  <>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                      {(eventsExpanded ? events : events.slice(0, 2)).map((evt) => {
-                        const d = evt.start_at ? new Date(evt.start_at.replace('Z', '')) : null;
-                        const when = d && !Number.isNaN(d.getTime())
-                          ? d.toLocaleString(undefined, {
-                              month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                            })
-                          : evt.start_at;
-                        return (
-                          <li
-                            key={evt.id}
-                            style={{
-                              padding: '10px 0',
-                              borderBottom: '1px solid var(--cl-border)',
-                            }}
-                          >
-                            <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--cl-text)' }}>
-                              {evt.title}
-                            </div>
-                            <div style={{ fontSize: '0.76rem', color: 'var(--cl-text-light)', marginTop: '2px' }}>
-                              {when}
-                              {evt.location ? ` · ${evt.location}` : ''}
-                            </div>
-                            {evt.url && (
-                              <a
-                                href={evt.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  fontSize: '0.76rem',
-                                  color: 'var(--cl-accent)',
-                                  textDecoration: 'none',
-                                  marginTop: '4px',
-                                  display: 'inline-block',
-                                }}
-                              >
-                                RSVP →
-                              </a>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    {events.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={() => setEventsExpanded((v) => !v)}
-                        style={{
-                          marginTop: 8,
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--cl-accent)',
-                          fontSize: '0.82rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          padding: '4px 0',
-                          fontFamily: 'var(--cl-font-sans)',
-                        }}
-                      >
-                        {eventsExpanded
-                          ? 'Show fewer'
-                          : `Show all ${events.length} events →`}
-                      </button>
-                    )}
-                  </>
-                )}
-                {isOwner && (
-                  <RepEventComposer
-                    officialId={officialId}
-                    events={events.filter((e) => e?.source === 'rep')}
-                    onCreated={handleEventCreated}
-                    onDeleted={handleEventDeleted}
-                  />
-                )}
-              </div>
-            )}
+            {/* (Mobile inline events section removed — events now live
+                in the top-of-page Events tab, which surfaces them
+                without burying them below an ever-growing post list.
+                Desktop sidebar version still renders below for ambient
+                reference at wider viewports.) */}
           </main>
 
           {/* Side column — upcoming events. Hidden on compact (mobile +
