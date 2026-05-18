@@ -25,7 +25,7 @@ python-multipart>=0.0.9,<1
 # SQLite (no extra dep needed; SQLite ships with Python). The
 # `-binary` distribution avoids needing libpq + a C toolchain on
 # the build machine, which Render's free build tier doesn't have.
-psycopg2-binary>=2.9,<3
+psycopg2-binary>=2.9.12,<3
 # Anthropic API client — powers AI features (comment classification,
 # post summaries, etc.). The client is initialized lazily inside
 # app/services/ai_service.py so a missing ANTHROPIC_API_KEY at boot
