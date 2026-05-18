@@ -79,18 +79,27 @@ the API behind Cloudflare changes that for $0.
        `(http.request.uri.path contains "/api/admin/")`)
    - **With the same characteristics…**: leave as `IP` (default) — rate-limits
      per source IP, so one bad actor doesn't lock out other users.
-   - **When rate exceeds…**:
-     - Requests: `10`
-     - Period: `1 minute`
+   - **When rate exceeds…** — Cloudflare's free tier ONLY offers a 10-second
+     period (the 1-minute / 10-minute / 1-hour options unlock on Pro at
+     $20/mo). On free, lower the threshold to compensate:
+     - Requests: `5`
+     - Period: `10 seconds`
+     - Effective cap = 30 req/min per IP, still well above normal admin use
+       but well below brute-force speeds.
+     - On Pro: Requests `10`, Period `1 minute`.
    - **Then take action…**:
      - Choose action: `Block`
-   - **For duration…**: change from the `10 seconds` default to `1 minute` (or
-     `10 minutes` if you want to be more aggressive). The default 10s is too
-     short — an attacker just waits it out and resumes.
+   - **For duration…** — also tier-gated. Free tier = 10 seconds only; Pro
+     unlocks 1m / 10m / 1h / 1d. On free, leave at `10 seconds`. On Pro,
+     bump to `1 minute` or `10 minutes` for stronger deterrence.
 
-   Click **Deploy**. Test by hitting any `/api/admin/*` endpoint 11 times in
-   60 seconds from one IP — the 11th request should return 429 (from
+   Click **Deploy**. Test by hammering any `/api/admin/*` endpoint 6 times
+   in 10 seconds from one IP — the 6th request should return 429 (from
    Cloudflare, not your backend).
+
+   When to upgrade to Cloudflare Pro: once you see measurable abuse traffic
+   in the free-tier dashboard, or after your first real attack incident.
+   Until then free is genuinely fine.
 
    This is your highest-value endpoint to rate-limit; brute-forcing admin auth
    would be the obvious first attack.
