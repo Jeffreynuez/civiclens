@@ -46,7 +46,7 @@ from datetime import datetime
 
 from app.auth import hash_password
 from app.db import SessionLocal
-from app.models.pages import BillSummary, CitizenAccount, Poll, RepAccount
+from app.models.pages import BillSummary, CandidateAccount, CitizenAccount, Poll, RepAccount
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_SEED_PATH = BACKEND_DIR / "demo_accounts.json"
 DEFAULT_CITIZEN_SEED_PATH = BACKEND_DIR / "demo_citizen_accounts.json"
+DEFAULT_CANDIDATE_SEED_PATH = BACKEND_DIR / "demo_candidate_accounts.json"
 # Pre-fetched CRS summaries for the bills users see on day one. Built
 # by backend/scripts/seed_bill_summaries.py and committed alongside
 # the code so production loads them on first boot — no Congress.gov
@@ -351,6 +352,136 @@ def seed_demo_citizens(db: Optional[Session] = None) -> int:
 
     return created
 
+
+# ── Candidate seed ────────────────────────────────────────────────────
+def _load_candidate_seed_payload() -> Optional[Dict[str, Any]]:
+    """Parallel to _load_seed_payload but for the candidate-accounts seed.
+    Env override: DEMO_CANDIDATE_ACCOUNTS_JSON. Default path is
+    backend/demo_candidate_accounts.json."""
+    env_blob = os.getenv("DEMO_CANDIDATE_ACCOUNTS_JSON")
+    if env_blob:
+        try:
+            return json.loads(env_blob)
+        except json.JSONDecodeError as exc:
+            logger.error("DEMO_CANDIDATE_ACCOUNTS_JSON is set but not valid JSON: %s", exc)
+            return None
+
+    if DEFAULT_CANDIDATE_SEED_PATH.exists():
+        try:
+            with DEFAULT_CANDIDATE_SEED_PATH.open("r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except json.JSONDecodeError as exc:
+            logger.error("demo_candidate_accounts.json is not valid JSON: %s", exc)
+            return None
+
+    return None
+
+
+def _validate_candidate(entry: Dict[str, Any]) -> bool:
+    required = ("candidate_id", "email", "password", "display_name")
+    for k in required:
+        if not entry.get(k):
+            logger.warning("Skipping demo candidate — missing field '%s' in: %r", k, entry)
+            return False
+    return True
+
+
+def seed_demo_candidates(db: Optional[Session] = None) -> int:
+    """
+    Insert any seeded candidate accounts that aren't already present.
+    Mirrors seed_demo_accounts() (rep) and seed_demo_citizens() —
+    idempotent on (candidate_id, email), so re-runs are no-ops.
+
+    Used primarily for local testing of the candidate-side login + 2FA
+    flow. Production candidate accounts are provisioned via the admin
+    queue after manual verification (see admin.py), NOT this seed file.
+
+    Notable defaults:
+      • claim_status defaults to 'pending' to match the production
+        provisioning path; the demo entry sets it to 'active' so the
+        login endpoint accepts the credentials without an admin flip.
+      • owner_state is upper-cased + truncated to 2 chars to match the
+        column constraint, mirroring the rep + citizen seeders.
+
+    Returns the number of newly-created accounts.
+    """
+    payload = _load_candidate_seed_payload()
+    if not payload:
+        logger.info("No candidate-accounts seed source found — skipping candidate seed step.")
+        return 0
+
+    candidates: List[Dict[str, Any]] = payload.get("candidates") or []
+    if not candidates:
+        logger.info("Candidate-accounts seed source had no candidates — skipping.")
+        return 0
+
+    owns_session = db is None
+    db = db or SessionLocal()
+    created = 0
+    try:
+        for entry in candidates:
+            if not _validate_candidate(entry):
+                continue
+
+            email = entry["email"].strip().lower()
+            candidate_id = entry["candidate_id"].strip()
+
+            existing = (
+                db.query(CandidateAccount)
+                .filter(
+                    (CandidateAccount.email == email)
+                    | (CandidateAccount.candidate_id == candidate_id)
+                )
+                .first()
+            )
+            if existing:
+                # Idempotent — leave hand-edited rows alone (especially
+                # password hashes the operator may have rotated).
+                continue
+
+            owner_state = (entry.get("owner_state") or "").strip().upper()[:2] or None
+            owner_district = entry.get("owner_district") or None
+            owner_city = entry.get("owner_city") or None
+            claim_status = (entry.get("claim_status") or "pending").strip().lower()
+            if claim_status not in {"pending", "active"}:
+                logger.warning(
+                    "Candidate seed for %s has unknown claim_status=%r — coercing to 'pending'.",
+                    candidate_id, claim_status,
+                )
+                claim_status = "pending"
+
+            acct = CandidateAccount(
+                candidate_id=candidate_id,
+                email=email,
+                password_hash=hash_password(entry["password"]),
+                display_name=entry["display_name"].strip(),
+                owner_state=owner_state,
+                owner_district=owner_district,
+                owner_city=owner_city,
+                claim_status=claim_status,
+                is_active=True,
+            )
+            db.add(acct)
+            created += 1
+            logger.info(
+                "Seeded candidate account %s (email=%s, claim_status=%s).",
+                candidate_id, email, claim_status,
+            )
+
+        if created:
+            db.commit()
+            logger.info("Candidate seed: %d new candidate account(s) inserted.", created)
+        else:
+            logger.info("Demo candidate accounts already present — nothing to seed.")
+    except Exception:
+        db.rollback()
+        logger.exception("Candidate-account seeding failed — rolled back.")
+        raise
+    finally:
+        if owns_session:
+            db.close()
+
+    return created
 
 
 # ── Pre-launch fresh-start cleanup ───────────────────────────────────

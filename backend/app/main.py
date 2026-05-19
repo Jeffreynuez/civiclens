@@ -41,6 +41,7 @@ from app.seed import (
     maybe_run_fresh_start_wipe,
     seed_bill_summaries,
     seed_demo_accounts,
+    seed_demo_candidates,
     seed_demo_citizens,
 )
 
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
         maybe_run_fresh_start_wipe()
         seed_demo_accounts()
         seed_demo_citizens()
+        seed_demo_candidates()
         # Pre-fetched CRS bill summaries — populates the bill_summaries
         # cache so the rep-profile Bills tab gets instant Summary
         # expansions on day one without Congress.gov round-trips.
