@@ -353,7 +353,15 @@ export default function Navbar({
   return (
     <nav
       className={`flex items-center justify-between shadow-sm border-b ${isCompact ? 'px-3 py-2 gap-2' : 'px-6 py-3'}`}
-      style={{ background: 'var(--cl-primary)', height: '56px', position: 'relative', zIndex: 50 }}
+      // zIndex 100 — bumped from 50 so the navbar's stacking context
+      // (and the IdentitySwitcher dropdown inside it) wins over any
+      // page-level sticky bar at the same nominal z-index. The
+      // ConstituentDashboard sticky Back bar also uses zIndex 50 and
+      // sits later in DOM order; previously that clipped the first
+      // row of the dropdown (the citizen entry) behind the bar. The
+      // PageView / dashboard / modal overlay layers are all ≥1200
+      // so this bump can't accidentally land above them.
+      style={{ background: 'var(--cl-primary)', height: '56px', position: 'relative', zIndex: 100 }}
     >
       {/* Logo — Phase 4-wiring: swap the prior clock-circle placeholder for
           the locked-in magnify-lens-with-flag mark. Reverse variant has the
