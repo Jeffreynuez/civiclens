@@ -15,8 +15,27 @@ import ViewerScopeFilter from './ViewerScopeFilter';
 import Dashboard from './Dashboard';
 import CitizenPollsSection from './CitizenPollsSection';
 import Navbar from './Navbar';
+import TwoFactorSection from './TwoFactorSection';
 import { Skeleton, EmptyState, ErrorState, Newspaper } from './ui';
 import { useIsCompact } from '@/lib/useViewport';
+
+/**
+ * Derive the page-context kind (rep vs candidate) from the official_id
+ * URL slug. Candidate IDs in our registry use `fl-cand-…` or `…-candidate`
+ * suffixes; everything else is a rep page. Used to drive which
+ * contextual login button shows in the navbar (navy 'Rep Login' on
+ * rep pages, purple 'Candidate Login' on candidate pages).
+ */
+function inferPageKind(officialId) {
+  if (!officialId) return 'rep';
+  // The two patterns currently in use:
+  //   • State + cand prefix:   fl-cand-byron-donalds, fl-cand-test-…
+  //   • Test/internal suffix:  test-civicview-internal-candidate
+  // A future change to the registry naming conventions can override
+  // this via the parent passing `pageKind` explicitly.
+  if (/(^|-)cand(idate)?(-|$)/i.test(officialId)) return 'candidate';
+  return 'rep';
+}
 
 /**
  * Full-viewport page view for a single rep or candidate.
@@ -79,6 +98,29 @@ export default function PageView({
   // out first. Both optional — if not wired, the items don't render.
   onOpenHelpBuild,
   onOpenFeedback,
+  // Unified navbar identity slot (Task #70) — pass the candidate
+  // session through so IdentitySwitcher can render its row alongside
+  // the citizen + rep entries. The rep `me` already flows through;
+  // candidate is new. Logout + open-dashboard handlers forwarded
+  // from the parent.
+  candidate,
+  onCandidateLogout,
+  onOpenRepDashboard,
+  onOpenCandidateDashboard,
+  // Page-contextual login buttons — wired from the parent. The navbar
+  // renders only the one matching the current page type (rep on a
+  // rep page, candidate on a candidate page). On a candidate page
+  // the existing `onRequestLogin` (rep login) is still used by the
+  // unclaimed-page CTA in the page body, so we keep that wire too.
+  onRequestCandidateLogin,
+  // Override the default 'feed' active tab — used when the parent
+  // opens the page in response to a dashboard click (e.g. user
+  // selected their rep identity from the navbar's IdentitySwitcher).
+  initialActiveView,
+  // Optional override — when the parent already knows whether this
+  // is a rep or candidate page, pass it. Falls back to the
+  // inferPageKind() heuristic on the official_id otherwise.
+  pageKind: pageKindOverride,
 }) {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -99,7 +141,7 @@ export default function PageView({
   // Feed/Events are visible to everyone; Dashboard is gated to the
   // page owner in the tab strip render. 'feed' stays the default so
   // citizens and unclaimed pages keep their current first impression.
-  const [activeView, setActiveView] = useState('feed');
+  const [activeView, setActiveView] = useState(initialActiveView || 'feed');
   // When the owner clicks a post in the dashboard, we flip back to
   // the feed and tag the post id so PostCard highlighting can pulse
   // it into view. Cleared after highlight consumed.
@@ -320,6 +362,25 @@ export default function PageView({
           onCitizenLogin={onCitizenLoginRequired}
           onCitizenLogout={onCitizenLogout}
           onCitizenDashboard={onCitizenDashboard}
+          /* Rep + candidate identities now flow through the unified
+             IdentitySwitcher inside the navbar (Task #70). The
+             below-navbar rep-identity pill row has been removed; its
+             Back button + centered page name stay below. */
+          rep={me}
+          onRepLogout={onLogout}
+          onOpenRepDashboard={onOpenRepDashboard}
+          candidate={candidate}
+          onCandidateLogout={onCandidateLogout}
+          onOpenCandidateDashboard={onOpenCandidateDashboard}
+          /* Page context — drives whether 'Rep Login' or 'Candidate
+             Login' shows in the navbar. Inferred from the official_id
+             slug when not explicitly overridden by the parent. */
+          pageContext={{
+            kind: pageKindOverride || inferPageKind(officialId),
+            label: ownerName,
+          }}
+          onRepLogin={onRequestLogin}
+          onCandidateLogin={onRequestCandidateLogin}
           onOpenTracked={onOpenTracked}
           onSubscribe={onSubscribe}
           onOpenHelpBuild={onOpenHelpBuild}
@@ -362,51 +423,13 @@ export default function PageView({
         >
           {ownerName}
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {me ? (
-            <>
-              <span
-                style={{
-                  fontSize: '0.78rem', color: 'var(--cl-text-light)',
-                  padding: '6px 10px', border: '1px solid var(--cl-border)',
-                  borderRadius: '8px', background: 'white',
-                }}
-                title={`Signed in as ${me.display_name}`}
-              >
-                {me.display_name}
-              </span>
-              {onLogout && (
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  title="Sign out"
-                  aria-label="Sign out"
-                  style={{
-                    padding: '6px 10px', borderRadius: '8px',
-                    border: '1px solid var(--cl-border)', background: 'white',
-                    color: 'var(--cl-text-light)', fontSize: '0.78rem', fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Sign out
-                </button>
-              )}
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={onRequestLogin}
-              style={{
-                padding: '6px 12px', borderRadius: '8px',
-                border: '1px solid var(--cl-accent)', background: 'white',
-                color: 'var(--cl-accent)', fontSize: '0.82rem', fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Rep login
-            </button>
-          )}
-        </div>
+        {/* Identity slot (signed-in name + sign-out, or the page-typed
+            login button) now lives in the navbar — see IdentitySwitcher
+            and the contextual Rep / Candidate Login buttons above. This
+            div is kept as an empty right spacer so the centered page
+            name stays centered between the Back button and the right
+            edge of the below-navbar strip. */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: 80 }} />
       </div>
 
       {/* Content */}
@@ -636,14 +659,26 @@ export default function PageView({
                 hidden but not unmounted below the dashboard — we just
                 branch on activeView to render one or the other. */}
             {isOwner && activeView === 'dashboard' && (
-              <Dashboard
-                officialId={officialId}
-                scope={ownerScope}
-                onJumpToPost={(postId) => {
-                  setActiveView('feed');
-                  setHighlightPostId(postId);
-                }}
-              />
+              <>
+                <Dashboard
+                  officialId={officialId}
+                  scope={ownerScope}
+                  onJumpToPost={(postId) => {
+                    setActiveView('feed');
+                    setHighlightPostId(postId);
+                  }}
+                />
+                {/* Account security — 2FA enrollment + recovery codes
+                    for the page owner. The backend's resolve_caller
+                    uses rep > candidate > citizen priority, so this
+                    panel manages whichever identity is active on the
+                    page they own (rep on a rep page, candidate on a
+                    candidate page). Mirrors the placement on the
+                    citizen ConstituentDashboard. */}
+                <div style={{ marginTop: 18 }}>
+                  <TwoFactorSection />
+                </div>
+              </>
             )}
 
             {/* Composer — owner only, feed view only */}

@@ -7,12 +7,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchAllMembers, fetchAllCandidates } from '@/lib/api';
 import { adminWhoami, adminUnreadCount } from '@/lib/pagesApi';
 import { useAuth } from '@/lib/auth';
+import { useCandidateAuth, logoutCandidate as logoutCandidateLib } from '@/lib/candidateAuth';
+import { logoutRep as logoutRepLib } from '@/lib/auth';
 import { useTrackedBills } from '@/lib/trackedBills';
 import { useTrackedOfficials } from '@/lib/trackedOfficials';
 import { useTrackedElections } from '@/lib/trackedElections';
 import { useIsCompact } from '@/lib/useViewport';
 import NotificationBellMenu from '@/components/NotificationBellMenu';
 import CivicLensLogo from '@/components/brand/CivicLensLogo';
+import IdentitySwitcher from '@/components/IdentitySwitcher';
 
 const PARTY_COLORS = { R: '#e63946', D: '#457b9d', I: '#6c3ec1' };
 
@@ -35,11 +38,31 @@ export default function Navbar({
   // Phase 4b candidate identity. When set, the navbar renders a
   // candidate-styled identity pill (in addition to / instead of
   // citizen). Sign-out fires logoutCandidate via the parent
-  // handler. We don't expose a "sign in as candidate" button in
-  // the navbar today — that's discovered via the rep modal's
-  // "I'm a candidate instead" link.
+  // handler. As of the unified-identity-slot refactor (Task #70),
+  // candidate + rep + citizen all surface through IdentitySwitcher
+  // rather than the prior split (citizen in navbar, rep/candidate
+  // in a below-navbar pill).
   candidate,
   onCandidateLogout,
+  onOpenCandidateDashboard,
+  // Rep identity — the navbar now also surfaces a signed-in rep
+  // through IdentitySwitcher. Previously the rep pill lived in a
+  // separate row below the navbar (inside PageView's page-level
+  // top bar). The `me` from useAuth() is already read internally
+  // for the admin-badge probe; pass it through so the switcher
+  // can render the rep entry too.
+  rep,
+  onRepLogout,
+  onOpenRepDashboard,
+  // Page-context hints — drive which contextual login button shows
+  // in the navbar. When pageContext.kind === 'rep' AND no rep is
+  // signed in, a navy 'Rep Login' button appears; same for
+  // 'candidate' (purple). Citizen login button is always shown
+  // when no citizen is signed in, regardless of page context.
+  // pageContext shape: { kind: 'rep' | 'candidate', label?: string }
+  pageContext,
+  onRepLogin,
+  onCandidateLogin,
   // Click on the logo / wordmark — typically wired to a "go home"
   // handler in page.js that clears selectedState, selectedMember,
   // selectedCandidate, activeDistrict, etc. so the map zooms back
@@ -163,6 +186,22 @@ export default function Navbar({
   // blip during the mutually-exclusive logout cleanup), the UI
   // honors the user's intent of "I clicked sign out."
   const { me: repAuth } = useAuth();
+  // Same auto-fetch pattern for candidate — every Navbar mount gets
+  // the candidate session for free without each page having to pass
+  // it explicitly. Consumers can still override via the `candidate`
+  // prop if they want to suppress display (the unified IdentitySwitcher
+  // takes the first non-null of prop vs hook below).
+  const { candidate: candidateAuto } = useCandidateAuth();
+  const effectiveCandidate = candidate !== undefined ? candidate : candidateAuto;
+  const effectiveRep = rep !== undefined ? rep : repAuth;
+  // Auto-fetch fallback handlers — if a consumer didn't pass an
+  // explicit logout/dashboard handler, fall back to the lib-level
+  // logout (which fires the matching DELETE endpoint + clears local
+  // cache). Lets us promote the unified IdentitySwitcher to every
+  // page without having to thread per-page handlers through every
+  // Navbar mount.
+  const effectiveCandidateLogout = onCandidateLogout || logoutCandidateLib;
+  const effectiveRepLogout = onRepLogout || logoutRepLib;
   const [isAdmin, setIsAdmin] = useState(false);
   const [unreadReports, setUnreadReports] = useState(0);
   const clientSignedOut = !citizen && !repAuth;
@@ -591,174 +630,39 @@ export default function Navbar({
           </button>
         )}
 
-        {/* Phase 4b candidate identity pill. Renders inline before the
-            citizen pill when a candidate session is active. Same
-            visual treatment as the citizen pill but accent-coloured
-            so it reads as a different role at a glance. Discovery
-            of "sign in as candidate" stays in the rep modal's
-            footer link — no nav-bar entry today. */}
-        {candidate && (
-          <>
-            <span
-              title={`Signed in as candidate · ${candidate.display_name}${
-                candidate.owner_state ? ` · ${candidate.owner_state}` : ''}${
-                candidate.owner_district ? ` · ${candidate.owner_district}` : ''}`}
-              style={
-                isCompact
-                  ? {
-                      width: 36, height: 36, padding: 0,
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'var(--cl-accent, #2a7a2a)',
-                      color: 'white', border: '1px solid var(--cl-accent, #2a7a2a)',
-                      borderRadius: 999,
-                      fontSize: '0.78rem', fontWeight: 800,
-                      flexShrink: 0,
-                    }
-                  : {
-                      display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      padding: '6px 10px',
-                      background: 'var(--cl-accent, #2a7a2a)',
-                      color: 'white', border: '1px solid var(--cl-accent, #2a7a2a)',
-                      borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700,
-                      fontFamily: 'var(--cl-font-sans)',
-                    }
-              }
-            >
-              {isCompact ? (
-                <span aria-hidden="true">
-                  {(candidate.display_name || '?').trim().charAt(0).toUpperCase()}
-                </span>
-              ) : (
-                <>
-                  <span style={{
-                    fontSize: '0.62rem', fontWeight: 800,
-                    padding: '1px 5px', borderRadius: '9px',
-                    background: 'rgba(255,255,255,0.22)',
-                    color: 'white', letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                  }}>
-                    Candidate
-                  </span>
-                  {candidate.display_name}
-                </>
-              )}
-            </span>
-            {!isCompact && (
-              <button
-                onClick={() => onCandidateLogout?.()}
-                title="Sign out (candidate)"
-                style={{
-                  padding: '6px 10px', background: 'rgba(255,255,255,0.05)',
-                  color: 'white', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: '8px', cursor: 'pointer',
-                  fontSize: '0.78rem', fontWeight: 600,
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
-                onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-              >
-                Sign out
-              </button>
-            )}
-          </>
-        )}
+        {/* ── Unified identity slot (IdentitySwitcher) ────────────
+            Replaces the prior split where the citizen pill lived
+            in the navbar and the rep / candidate pill lived in a
+            separate row below the navbar. Now ALL three identities
+            surface in one place:
+              0 signed in → renders nothing (login buttons below take
+                            care of CTAs).
+              1 signed in → renders an inline pill with that
+                            identity's display name + Sign out.
+              2+ signed in → renders a 'Signed in (N)' dropdown
+                            with one row per identity, each with
+                            its own Open + Sign out actions.
+            The contextual login buttons below the switcher take
+            care of the not-signed-in CTAs (citizen always; rep
+            only on rep pages; candidate only on candidate pages). */}
+        <IdentitySwitcher
+          citizen={citizen}
+          rep={effectiveRep}
+          candidate={effectiveCandidate}
+          onOpenCitizenDashboard={onCitizenDashboard}
+          onOpenRepDashboard={onOpenRepDashboard}
+          onOpenCandidateDashboard={onOpenCandidateDashboard}
+          onCitizenLogout={onCitizenLogout}
+          onRepLogout={effectiveRepLogout}
+          onCandidateLogout={effectiveCandidateLogout}
+          isCompact={isCompact}
+        />
 
-        {/* Citizen-login pill. On desktop / tablet shows the full label
-            (or the citizen's display name + district when signed in).
-            On mobile compresses to an icon button: a circle with the
-            citizen's first initial when signed in, or a generic person
-            icon when signed out. The pill is hidden when a candidate
-            is signed in instead — mutual exclusivity is enforced at
-            the API layer, but we suppress the citizen sign-in CTA
-            here so the navbar shows one identity at a time. */}
-        {!candidate && citizen ? (
-          <>
-            <button
-              type="button"
-              onClick={() => onCitizenDashboard?.()}
-              title={`Open dashboard — ${citizen.display_name} · ${citizen.city}, ${citizen.state}${citizen.congressional_district ? ` · ${citizen.congressional_district}` : ''}`}
-              style={
-                isCompact
-                  ? {
-                      width: 36, height: 36, padding: 0,
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'rgba(255,255,255,0.14)',
-                      color: 'white', border: '1px solid rgba(255,255,255,0.28)',
-                      borderRadius: 999,
-                      fontSize: '0.78rem', fontWeight: 700,
-                      cursor: 'pointer', flexShrink: 0,
-                    }
-                  : {
-                      display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      padding: '6px 10px', background: 'rgba(255,255,255,0.14)',
-                      color: 'white', border: '1px solid rgba(255,255,255,0.28)',
-                      borderRadius: '8px', fontSize: '0.78rem', fontWeight: 600,
-                      cursor: 'pointer', fontFamily: 'var(--cl-font-sans)',
-                      transition: 'background var(--cl-duration-fast) var(--cl-ease-standard), border-color var(--cl-duration-fast) var(--cl-ease-standard)',
-                    }
-              }
-              onMouseOver={
-                isCompact
-                  ? undefined
-                  : (e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.22)';
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.40)';
-                    }
-              }
-              onMouseOut={
-                isCompact
-                  ? undefined
-                  : (e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.14)';
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.28)';
-                    }
-              }
-            >
-              {isCompact ? (
-                // Initial-letter avatar — recognizable cue that the user
-                // is signed in without burning horizontal space.
-                <span aria-hidden="true">
-                  {(citizen.display_name || '?').trim().charAt(0).toUpperCase()}
-                </span>
-              ) : (
-                <>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  {citizen.display_name}
-                  {citizen.congressional_district && (
-                    <span style={{
-                      fontSize: '0.66rem', fontWeight: 800,
-                      padding: '1px 5px', borderRadius: '9px',
-                      background: 'rgba(255,255,255,0.2)',
-                      color: 'white', letterSpacing: '0.02em',
-                    }}>
-                      {citizen.congressional_district}
-                    </span>
-                  )}
-                </>
-              )}
-            </button>
-            {/* Sign-out only on true desktop inline. On compact
-                viewports (mobile + tablet) it lives inside the
-                hamburger popover. */}
-            {!isCompact && (
-              <button
-                onClick={() => onCitizenLogout?.()}
-                title="Sign out (citizen)"
-                style={{
-                  padding: '6px 10px', background: 'rgba(255,255,255,0.05)',
-                  color: 'white', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600,
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
-                onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-              >
-                Sign out
-              </button>
-            )}
-          </>
-        ) : !candidate ? (
+        {/* Citizen login button — always visible when no citizen
+            signed in, at every breakpoint. The contextual Rep /
+            Candidate login buttons sit next to it when on the
+            matching page type. */}
+        {!citizen && (
           <button
             onClick={() => onCitizenLogin?.()}
             title="Sign in as a citizen to like, comment, and vote in polls"
@@ -795,7 +699,93 @@ export default function Navbar({
             </svg>
             {!isCompact && 'Citizen login'}
           </button>
-        ) : null}
+        )}
+
+        {/* Page-contextual Rep Login — only when viewing a rep page
+            AND no rep is currently signed in. Navy (#1d3557) so it
+            reads as 'official' and is visually distinct from the
+            white citizen pill + purple candidate pill. */}
+        {pageContext?.kind === 'rep' && !effectiveRep && (
+          <button
+            onClick={() => onRepLogin?.()}
+            title={`Sign in to manage this page${pageContext.label ? ' — ' + pageContext.label : ''}`}
+            style={
+              isCompact
+                ? {
+                    width: 36, height: 36, padding: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    background: '#1d3557', color: 'white',
+                    border: '1px solid #1d3557', borderRadius: 999,
+                    cursor: 'pointer', flexShrink: 0,
+                  }
+                : {
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '6px 12px', background: '#1d3557',
+                    color: 'white', border: '1px solid #1d3557',
+                    borderRadius: '8px', cursor: 'pointer',
+                    fontSize: '0.82rem', fontWeight: 700,
+                  }
+            }
+            onMouseOver={
+              isCompact
+                ? undefined
+                : (e) => { e.currentTarget.style.background = '#2a4a6e'; e.currentTarget.style.borderColor = '#2a4a6e'; }
+            }
+            onMouseOut={
+              isCompact
+                ? undefined
+                : (e) => { e.currentTarget.style.background = '#1d3557'; e.currentTarget.style.borderColor = '#1d3557'; }
+            }
+          >
+            <svg width={isCompact ? 16 : 14} height={isCompact ? 16 : 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            {!isCompact && 'Rep Login'}
+          </button>
+        )}
+
+        {/* Page-contextual Candidate Login — same pattern. Purple
+            (#6c3ec1) — distinct from rep navy AND from party R/D
+            primaries (so neither side feels co-opted) AND it
+            matches the candidate accent in IdentitySwitcher. */}
+        {pageContext?.kind === 'candidate' && !effectiveCandidate && (
+          <button
+            onClick={() => onCandidateLogin?.()}
+            title={`Sign in to manage this candidate page${pageContext.label ? ' — ' + pageContext.label : ''}`}
+            style={
+              isCompact
+                ? {
+                    width: 36, height: 36, padding: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    background: '#6c3ec1', color: 'white',
+                    border: '1px solid #6c3ec1', borderRadius: 999,
+                    cursor: 'pointer', flexShrink: 0,
+                  }
+                : {
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '6px 12px', background: '#6c3ec1',
+                    color: 'white', border: '1px solid #6c3ec1',
+                    borderRadius: '8px', cursor: 'pointer',
+                    fontSize: '0.82rem', fontWeight: 700,
+                  }
+            }
+            onMouseOver={
+              isCompact
+                ? undefined
+                : (e) => { e.currentTarget.style.background = '#8055d2'; e.currentTarget.style.borderColor = '#8055d2'; }
+            }
+            onMouseOut={
+              isCompact
+                ? undefined
+                : (e) => { e.currentTarget.style.background = '#6c3ec1'; e.currentTarget.style.borderColor = '#6c3ec1'; }
+            }
+          >
+            <svg width={isCompact ? 16 : 14} height={isCompact ? 16 : 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <path d="M3 21h18M5 21V11l7-4 7 4v10M9 21v-6h6v6" />
+            </svg>
+            {!isCompact && 'Candidate Login'}
+          </button>
+        )}
 
         {/* Subscribe / Committees / My Tracked / Help-build /
             Feedback — desktop ONLY (>1024px). Tablet and mobile both
@@ -1114,24 +1104,14 @@ export default function Navbar({
                     }}
                   />
                 )}
-                {/* Sign out — inline on desktop next to the citizen
-                    pill, so only show in hamburger on compact. */}
-                {citizen && isCompact && (
-                  <>
-                    <div style={{ height: 1, background: 'var(--cl-border)', margin: '4px 6px' }} />
-                    <MobileMenuItem
-                      icon={
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                          <polyline points="16 17 21 12 16 7" />
-                          <line x1="21" y1="12" x2="9" y2="12" />
-                        </svg>
-                      }
-                      label="Sign out"
-                      onClick={() => { setMobileMenuOpen(false); onCitizenLogout?.(); }}
-                    />
-                  </>
-                )}
+                {/* Per-identity sign-out moved into IdentitySwitcher's
+                    dropdown rows (visible at every breakpoint, since
+                    the dropdown opens on tap as a popover). The
+                    hamburger no longer carries a Sign out entry —
+                    keeps the per-identity action close to the
+                    identity it targets and avoids ambiguity about
+                    which session 'Sign out' would end when multiple
+                    are active. */}
               </div>
             )}
           </div>

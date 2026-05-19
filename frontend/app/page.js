@@ -190,6 +190,20 @@ export default function Home() {
   // header reads nicely while the /api/pages/{id} payload is loading.
   const [selectedPageOfficialId, setSelectedPageOfficialId] = useState(null);
   const [pageMeta, setPageMeta] = useState(null);
+  // One-shot hint for which PageView tab opens first. Used by the
+  // navbar IdentitySwitcher — clicking the rep / candidate identity
+  // navigates to their page AND wants the Dashboard tab pre-selected
+  // (instead of the default 'feed'). The hint is consumed by PageView
+  // via `initialActiveView` and cleared on the next render so a
+  // subsequent navigation doesn't accidentally reuse it.
+  const [pendingActiveView, setPendingActiveView] = useState(null);
+  const setActiveViewForNextPage = useCallback((view) => {
+    setPendingActiveView(view);
+    // Schedule a clear so the hint is only honored on the next mount.
+    // The microtask runs after React's state batch so PageView's
+    // useState reads the populated value on first render.
+    Promise.resolve().then(() => setPendingActiveView(null));
+  }, []);
   // Auth state for the rep-login flow — hydrates /api/auth/me on mount.
   const { me } = useAuth();
   // Pages-feature modals. Login modal can be surfaced from a page's "Rep
@@ -919,6 +933,21 @@ export default function Home() {
         onCitizenDashboard={() => setDashboardOpen(true)}
         candidate={candidate}
         onCandidateLogout={handleCandidateLogoutClick}
+        /* Unified IdentitySwitcher dashboard-jump handlers — clicking
+           a rep or candidate identity in the navbar navigates to that
+           identity's page with the Dashboard tab pre-selected. */
+        onOpenRepDashboard={(r) => {
+          if (r?.official_id) {
+            handleOpenPage(r.official_id, { displayName: r.display_name, role: r.role });
+            setActiveViewForNextPage('dashboard');
+          }
+        }}
+        onOpenCandidateDashboard={(c) => {
+          if (c?.candidate_id) {
+            handleOpenPage(c.candidate_id, { displayName: c.display_name });
+            setActiveViewForNextPage('dashboard');
+          }
+        }}
         onHome={handleStateDeselect}
         onOpenHelpBuild={() => setHelpBuildOpen(true)}
         onOpenFeedback={() => setFeedbackOpen(true)}
@@ -1128,6 +1157,7 @@ export default function Home() {
           me={me}
           onClose={handleClosePage}
           onRequestLogin={() => setLoginModalOpen(true)}
+          onRequestCandidateLogin={() => setCandidateLoginOpen(true)}
           onRequestClaim={handleRequestClaim}
           onRequestCitizenWaitlist={() => handleRequestCitizenWaitlist('comment')}
           onLogout={handleLogout}
@@ -1135,6 +1165,28 @@ export default function Home() {
           onCitizenLoginRequired={handleCitizenLoginOpen}
           onCitizenLogout={handleCitizenLogoutClick}
           onCitizenDashboard={() => setDashboardOpen(true)}
+          /* Candidate session + dashboard-jump handler — flows into
+             the IdentitySwitcher inside the page's compact Navbar
+             so the user can see / switch / sign out from any
+             active identity without backing out of the page. */
+          candidate={candidate}
+          onCandidateLogout={handleCandidateLogoutClick}
+          onOpenCandidateDashboard={(c) => {
+            // Navigate to that candidate's page (their own) and
+            // pre-select the Dashboard tab via initialActiveView.
+            if (c?.candidate_id) {
+              handleOpenPage(c.candidate_id, { displayName: c.display_name });
+              setActiveViewForNextPage('dashboard');
+            }
+          }}
+          onOpenRepDashboard={(r) => {
+            // Same pattern for rep.
+            if (r?.official_id) {
+              handleOpenPage(r.official_id, { displayName: r.display_name, role: r.role });
+              setActiveViewForNextPage('dashboard');
+            }
+          }}
+          initialActiveView={pendingActiveView}
           onOpenTracked={() => setTrackedOpen(true)}
           onSubscribe={() => handleRequestCitizenWaitlist('subscribe')}
           onOpenHelpBuild={() => setHelpBuildOpen(true)}
