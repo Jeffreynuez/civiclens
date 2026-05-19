@@ -24,6 +24,7 @@ import ClaimPageModal from '@/components/ClaimPageModal';
 import ConstituentDashboard from '@/components/ConstituentDashboard';
 import HelpBuildThisView from '@/components/HelpBuildThisView';
 import FeedbackView from '@/components/FeedbackView';
+import AccountSecurityView from '@/components/AccountSecurityView';
 import { fetchAllStateData, fetchBillSnapshot, fetchMemberDetail, fetchCandidate, fetchStatePerson } from '@/lib/api';
 import { STATE_NAME_TO_CODE } from '@/lib/constants';
 import { getAllTrackedBills, updateTrackedBill } from '@/lib/trackedBills';
@@ -82,6 +83,10 @@ export default function Home() {
   const [helpBuildOpen, setHelpBuildOpen] = useState(false);
   // Feedback overlay — embedded Google Form. Same mount pattern.
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // Account-security overlay — surfaces the TOTP 2FA enrollment +
+  // recovery-codes UI. Opens from the navbar hamburger via
+  // onOpenAccountSecurity. Same mount pattern as the feedback view.
+  const [accountSecurityOpen, setAccountSecurityOpen] = useState(false);
   // Lifted SidePanel tab so it survives the candidate-profile detour. Without
   // this, opening a candidate from Elections + clicking Back unmounts SidePanel
   // and resets the tab back to "congress".
@@ -922,6 +927,7 @@ export default function Home() {
         onHome={handleStateDeselect}
         onOpenHelpBuild={() => setHelpBuildOpen(true)}
         onOpenFeedback={() => setFeedbackOpen(true)}
+        onOpenAccountSecurity={() => setAccountSecurityOpen(true)}
       />
       <CitizenLoginModal
         open={citizenLoginOpen}
@@ -1196,6 +1202,41 @@ export default function Home() {
             onOpenHelpBuild: () => {
               setFeedbackOpen(false);
               setHelpBuildOpen(true);
+            },
+          }}
+        />
+      )}
+
+      {/* Account-security overlay — TOTP 2FA enrollment + recovery
+          codes. Same chrome + z-index pattern as the feedback view;
+          identity-aware via the API (rep > candidate > citizen
+          priority on the backend). */}
+      {accountSecurityOpen && (
+        <AccountSecurityView
+          onClose={() => setAccountSecurityOpen(false)}
+          compactNavbarProps={{
+            citizen,
+            onCitizenLogin: handleCitizenLoginOpen,
+            onCitizenLogout: handleCitizenLogoutClick,
+            onCitizenDashboard: () => {
+              setAccountSecurityOpen(false);
+              setDashboardOpen(true);
+            },
+            onOpenTracked: () => {
+              setAccountSecurityOpen(false);
+              setTrackedOpen(true);
+            },
+            onSubscribe: () => {
+              setAccountSecurityOpen(false);
+              handleRequestCitizenWaitlist('subscribe');
+            },
+            onOpenHelpBuild: () => {
+              setAccountSecurityOpen(false);
+              setHelpBuildOpen(true);
+            },
+            onOpenFeedback: () => {
+              setAccountSecurityOpen(false);
+              setFeedbackOpen(true);
             },
           }}
         />
