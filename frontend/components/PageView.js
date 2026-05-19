@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchPage } from '../lib/pagesApi';
 import { useAuth } from '../lib/auth';
+import { useCandidateAuth } from '../lib/candidateAuth';
 import { getVoterToken } from '../lib/voterToken';
 import PostCard from './PostCard';
 import PostComposer from './PostComposer';
@@ -290,19 +291,32 @@ export default function PageView({
 
   // ── Derived ───────────────────────────────────────────────────────
   // Defensive owner gate: the backend reports is_owner=true whenever
-  // the rep session validates against the page owner, BUT if the
-  // browser carries a stale rep token from a previous session (e.g.
-  // user signed out of the citizen flow but the rep token never got
-  // cleared in some pre-mutually-exclusive-sessions state), the
-  // backend will still happily report is_owner=true and the UI would
-  // surface rep-only affordances (post composer, comment Delete) to
-  // someone the user-facing app doesn't consider signed-in.
-  // We double-check against useAuth() so the UI gates strictly on
-  // the active client-side rep session.
+  // the rep OR candidate session validates against the page owner,
+  // BUT if the browser carries a stale token from a previous session
+  // the backend can still report is_owner=true and the UI would
+  // surface owner-only affordances (post composer, Dashboard tab,
+  // comment Delete) to someone the user-facing app doesn't consider
+  // signed-in. We double-check against useAuth + useCandidateAuth so
+  // the UI gates strictly on the active client-side session.
+  //
+  // Phase 4a fix: the original gate was rep-only, which broke the
+  // Dashboard tab on the candidate page — even with the backend
+  // correctly reporting is_owner=true via the candidate path, the
+  // frontend would force isOwner=false because repMe was null.
+  // Either matching identity is now sufficient; the explicit slug
+  // match still keeps stale-token sessions from leaking owner
+  // affordances onto a page they don't own.
   const { me: repMe } = useAuth();
-  const isOwner = !!payload?.is_owner
-    && !!repMe
-    && repMe.official_id === officialId;
+  const { candidate: candidateMe } = useCandidateAuth();
+  const repOwnerMatch  = !!repMe && repMe.official_id === officialId;
+  const candOwnerMatch = !!candidateMe && candidateMe.candidate_id === officialId;
+  const isOwner = (!!payload?.is_owner && (repOwnerMatch || candOwnerMatch))
+    // Belt-and-suspenders: even if the backend's is_owner is false
+    // (e.g. seed-drift edge cases where the DB row's candidate_id
+    // hasn't been re-pointed yet), trust the client-side session
+    // match so the owner can still reach their Dashboard tab.
+    || repOwnerMatch
+    || candOwnerMatch;
   const claimed = !!payload?.claimed;
   const ownerName = payload?.owner?.display_name || displayName || 'This official';
   const ownerRole = payload?.owner?.role || role || '';

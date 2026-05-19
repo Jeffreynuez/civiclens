@@ -8,6 +8,7 @@ import { fetchAllMembers, fetchAllCandidates } from '@/lib/api';
 import { adminWhoami, adminUnreadCount } from '@/lib/pagesApi';
 import { useAuth } from '@/lib/auth';
 import { useCandidateAuth, logoutCandidate as logoutCandidateLib } from '@/lib/candidateAuth';
+import { useCitizenAuth, logoutCitizen as logoutCitizenLib } from '@/lib/citizenAuth';
 import { logoutRep as logoutRepLib } from '@/lib/auth';
 import { useTrackedBills } from '@/lib/trackedBills';
 import { useTrackedOfficials } from '@/lib/trackedOfficials';
@@ -186,14 +187,21 @@ export default function Navbar({
   // blip during the mutually-exclusive logout cleanup), the UI
   // honors the user's intent of "I clicked sign out."
   const { me: repAuth } = useAuth();
-  // Same auto-fetch pattern for candidate — every Navbar mount gets
-  // the candidate session for free without each page having to pass
-  // it explicitly. Consumers can still override via the `candidate`
-  // prop if they want to suppress display (the unified IdentitySwitcher
-  // takes the first non-null of prop vs hook below).
+  // Auto-fetch ALL three identities so the navbar's IdentitySwitcher
+  // always has ground truth, regardless of which page is mounting
+  // the Navbar. Some mounts (ConstituentDashboard, polls, admin) don't
+  // pass every identity explicitly; without these hooks the dropdown
+  // would silently drop the un-passed ones (the bug that hid the
+  // citizen row on the ConstituentDashboard mount despite the user
+  // being signed in — citizen wasn't being threaded through the
+  // navbarProps reliably). The explicit `citizen` / `rep` /
+  // `candidate` props still win when passed — useful for the rare
+  // page that needs to suppress an identity.
   const { candidate: candidateAuto } = useCandidateAuth();
+  const { citizen: citizenAuto } = useCitizenAuth();
   const effectiveCandidate = candidate !== undefined ? candidate : candidateAuto;
   const effectiveRep = rep !== undefined ? rep : repAuth;
+  const effectiveCitizen = citizen !== undefined ? citizen : citizenAuto;
   // Auto-fetch fallback handlers — if a consumer didn't pass an
   // explicit logout/dashboard handler, fall back to the lib-level
   // logout (which fires the matching DELETE endpoint + clears local
@@ -202,9 +210,10 @@ export default function Navbar({
   // Navbar mount.
   const effectiveCandidateLogout = onCandidateLogout || logoutCandidateLib;
   const effectiveRepLogout = onRepLogout || logoutRepLib;
+  const effectiveCitizenLogout = onCitizenLogout || logoutCitizenLib;
   const [isAdmin, setIsAdmin] = useState(false);
   const [unreadReports, setUnreadReports] = useState(0);
-  const clientSignedOut = !citizen && !repAuth;
+  const clientSignedOut = !effectiveCitizen && !repAuth;
   useEffect(() => {
     if (clientSignedOut) {
       setIsAdmin(false);
@@ -217,7 +226,7 @@ export default function Navbar({
       setIsAdmin(status === 200);
     })();
     return () => { cancelled = true; };
-  }, [citizen, repAuth, clientSignedOut]);
+  }, [effectiveCitizen, repAuth, clientSignedOut]);
   useEffect(() => {
     if (!isAdmin) {
       setUnreadReports(0);
@@ -646,13 +655,13 @@ export default function Navbar({
             care of the not-signed-in CTAs (citizen always; rep
             only on rep pages; candidate only on candidate pages). */}
         <IdentitySwitcher
-          citizen={citizen}
+          citizen={effectiveCitizen}
           rep={effectiveRep}
           candidate={effectiveCandidate}
           onOpenCitizenDashboard={onCitizenDashboard}
           onOpenRepDashboard={onOpenRepDashboard}
           onOpenCandidateDashboard={onOpenCandidateDashboard}
-          onCitizenLogout={onCitizenLogout}
+          onCitizenLogout={effectiveCitizenLogout}
           onRepLogout={effectiveRepLogout}
           onCandidateLogout={effectiveCandidateLogout}
           isCompact={isCompact}
@@ -662,7 +671,7 @@ export default function Navbar({
             signed in, at every breakpoint. The contextual Rep /
             Candidate login buttons sit next to it when on the
             matching page type. */}
-        {!citizen && (
+        {!effectiveCitizen && (
           <button
             onClick={() => onCitizenLogin?.()}
             title="Sign in as a citizen to like, comment, and vote in polls"
