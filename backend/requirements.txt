@@ -33,3 +33,12 @@ psycopg2-binary>=2.9,<3
 # whole API down. Version floor 0.40 is the first release with
 # native streaming + citations support; ceiling is the next major.
 anthropic>=0.40,<1
+
+# Task #62 — TOTP 2FA for admin / rep / candidate accounts (citizens
+# optional). pyotp generates + verifies the 6-digit time-based codes;
+# cryptography (Fernet) symmetrically encrypts the per-account TOTP
+# secret at rest, keyed off SESSION_SECRET via HKDF so the encrypted
+# secret on disk is useless without the env var. Recovery codes are
+# bcrypt-hashed (no new dep — bcrypt already above for passwords).
+pyotp>=2.9,<3
+cryptography>=43,<46

@@ -34,6 +34,7 @@ from app.routers import (
     votes as votes_router,
     eos as eos_router,
     notifications as notifications_router,
+    two_factor as two_factor_router,
 )
 from app.db import init_db
 from app.seed import (
@@ -142,6 +143,11 @@ app.include_router(votes_router.router, prefix="/api/votes", tags=["Votes"])
 app.include_router(eos_router.router, prefix="/api/eos", tags=["Executive Orders"])
 # In-app notifications — bell badge + dropdown feed.
 app.include_router(notifications_router.router, prefix="/api/notifications", tags=["Notifications"])
+
+# 2FA (Task #62 Phase 1) — the router declares full /api/2fa/* paths
+# itself, so we mount it with no prefix. Same pattern the appeals
+# router uses with its admin-side endpoints.
+app.include_router(two_factor_router.router, tags=["2FA"])
 
 
 @app.get("/")

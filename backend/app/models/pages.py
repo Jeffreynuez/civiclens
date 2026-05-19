@@ -66,6 +66,12 @@ class RepAccount(Base):
     # the suspended set.
     suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
     suspended_reason: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    # TOTP 2FA fields — see CitizenAccount for the column-level docs.
+    # For reps these will be required (Phase 3+ enforcement); they're
+    # nullable here so the auto-migrate can ADD COLUMN on existing rows
+    # without backfill.
+    totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
 
     posts: Mapped[List["Post"]] = relationship(
         back_populates="author", cascade="all, delete-orphan",
@@ -137,6 +143,12 @@ class CandidateAccount(Base):
     # restore the suspended set via the existing tabs.
     suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
     suspended_reason: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    # TOTP 2FA fields — see CitizenAccount for the column-level docs.
+    # Candidates get the same enforcement treatment as reps in Phase 3+
+    # since they post on a verified page and an impersonation post would
+    # be just as damaging as one on a sitting rep's page.
+    totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
 
 
 # ── Posts + Polls ─────────────────────────────────────────────────────
@@ -944,6 +956,16 @@ class CitizenAccount(Base):
     # the citizen-login endpoint refuses with a clear error.
     suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
     suspended_reason: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    # TOTP 2FA fields — Task #62 Phase 1. Optional for citizens; required
+    # for reps + candidates + admin once enforced in Phase 3+.
+    #   totp_secret_encrypted: Fernet-encrypted base32 secret (see
+    #     services/totp_service.py). NULL until the user successfully
+    #     completes the enroll/verify flow.
+    #   totp_enabled_at: timestamp of successful enrollment. NULL means
+    #     2FA is not active on this account, regardless of whether a
+    #     secret is present (partial enrollments).
+    totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
 
 
 # ── Citizen waitlist ──────────────────────────────────────────────────
@@ -1279,3 +1301,46 @@ Index(
     Notification.recipient_id,
     Notification.created_at.desc(),
 )
+
+
+# ── TOTP recovery codes (Task #62 Phase 1) ────────────────────────────
+class RecoveryCode(Base):
+    """
+    One row per recovery code issued at 2FA enrollment.
+
+    Polymorphic ownership via three nullable FKs (citizen / rep /
+    candidate). Exactly one is set per row — matches the engagement-
+    attribution pattern used by PostReaction / PostComment / PollVote
+    elsewhere in this file. We deliberately avoid a single account_id
+    column with a string discriminator because FK constraints +
+    cascade-delete on account removal give us free referential
+    integrity per account type.
+
+    Lifecycle:
+      • created at 2FA enrollment (10 codes per account)
+      • used_at set the first time the plaintext code verifies; the
+        row is never deleted, so the audit trail of which codes were
+        used (and when) survives until the account itself does
+      • regeneration deletes all rows for the account and issues 10
+        fresh ones (see services/recovery_codes_service.py)
+    """
+    __tablename__ = "recovery_codes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code_hash: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Polymorphic ownership — exactly one of these is non-NULL per row.
+    # Application-level invariant enforced in services/recovery_codes_service.
+    citizen_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    rep_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    candidate_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
