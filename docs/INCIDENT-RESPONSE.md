@@ -16,8 +16,10 @@ Regardless of which scenario this is, do these five things first:
    sets the tone for everything that follows. Take a breath.
 
 2. **Confirm the incident is real.** Common false alarms:
-   - "The site is down" → check Render dashboard. Free-tier cold starts take
-     ~30s on first request after 15min idle. Not an incident.
+   - "The site is down" → check the Render dashboard. The paid plan is
+     always-on, so a true outage warrants investigation; check Render's
+     status page (status.render.com) first to rule out a provider-side
+     incident.
    - "Someone hacked my account" → confirm the user actually tried their correct
      password and isn't just locked out. Check `failed_login_log` if it exists.
    - "I see a 500 error" → check Sentry / Render logs. One-off 500s happen.
@@ -257,11 +259,13 @@ Routine rotation calendar (not incident-driven):
 
 ## Section 5 — Database backup + restore
 
-**Note:** Render free tier does NOT include automated Postgres backups. The
-procedures below assume Starter plan ($7/mo) or higher, which has daily
-automated backups retained for 7 days. If you're on free tier and lose data,
-you'll be relying on manual `pg_dump` exports you've been running yourself —
-make sure you actually have those before you need them.
+**Status:** automated daily Postgres backups are active on the current
+Render paid plan (retained for 7 days). The "Restore from a Render
+automatic backup" procedure below is your primary recovery path; the
+manual `pg_dump` instructions further down are belt-and-suspenders for
+the case where you also want an off-Render copy stored on your own
+machine or a private S3 bucket (recommended quarterly at minimum, since
+Render's retention doesn't help if Render itself has a major incident).
 
 **Make a manual backup right now:**
 

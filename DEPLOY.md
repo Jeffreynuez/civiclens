@@ -5,16 +5,17 @@ poke around.
 
 **Stack:**
 - Frontend → **Vercel** (Next.js, free tier)
-- Backend → **Render** (FastAPI, free tier)
-- Database → **Render Postgres** (free tier, 1GB, 30-day retention)
-- DNS → **Cloudflare** (already purchased, free)
-- Cost: **$0/month** + ~$15/year for the domain
+- Backend → **Render** (FastAPI, paid plan — always-on, no cold starts)
+- Database → **Render Postgres** (paid plan, persistent, automated daily backups)
+- DNS → **Cloudflare** (free tier — proxied for `api.civicview.app`,
+  DNS-only for the apex; see SECURITY.md §1 for the WAF / DDoS setup)
+- Cost: **~$24/month** + ~$15/year for the domain
 
-**Free-tier note:** Render's free web service sleeps after 15 minutes
-of inactivity and wakes on the next request (~30s cold start).
-Acceptable for a demo URL you're sending to a small list of people;
-upgrade to Starter ($7/mo) if you need always-on once you're showing
-the app to actual investors.
+**Plan change history:** initial deployment ran on Render's free tier
+(15-min idle sleep, ~30s cold starts, Postgres expiring after 30 days)
+which made the demo fragile. Upgraded to the paid plan to eliminate
+both the cold-start delay and the Postgres expiration, and to enable
+automated daily backups (referenced from `INCIDENT-RESPONSE.md` §5).
 
 ---
 
@@ -136,21 +137,14 @@ citizen login) will work as soon as ALLOWED_ORIGINS is right.
 
 ## Known limitations (call these out to investors)
 
-- **Image uploads on rep Pages don't persist.** Render's free tier
-  has an ephemeral filesystem — uploaded images survive until the
-  service restarts (typically once a day on free, plus on every
-  deploy). For the demo flow this is fine; the seeded posts already
-  carry their images and most demo paths don't involve uploads.
-  Production fix: stash uploads in S3 / R2 / Cloudinary and store
-  the URL instead of the bytes. Roughly half a day of work.
-- **Cold starts.** Free-tier Render sleeps after 15 minutes idle.
-  First-request latency is ~30s. Mitigation: a cron job that hits
-  `/` every 10 minutes (uptimerobot.com — free), or upgrade to the
-  $7/mo Starter plan for always-on.
-- **Free-tier Postgres expires after 30 days** of the original
-  database creation. Render will prompt you to upgrade or migrate.
-  $7/mo for the Starter Postgres if you decide to keep the demo
-  alive past a month.
+- **Image uploads on rep Pages don't persist across deploys.**
+  Render's paid web instances still use an ephemeral filesystem
+  unless you attach a paid persistent disk — uploaded images
+  survive until the next deploy / restart, then disappear. For
+  the demo flow this is fine; the seeded posts already carry
+  their images and most demo paths don't involve uploads.
+  Production fix: stash uploads in S3 / R2 / Cloudinary and
+  store the URL instead of the bytes. Roughly half a day of work.
 
 ## Local dev still works
 

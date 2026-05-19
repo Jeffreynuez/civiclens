@@ -233,8 +233,10 @@ active committer per month under GitHub Advanced Security.
 - Review the admin email allow-list (`ADMIN_EMAILS`). Remove anyone who shouldn't
   be there.
 - Verify Postgres backups exist and a recent one can be restored to a fresh DB
-  (see `INCIDENT-RESPONSE.md` for the procedure). Required only once you're on a
-  Render plan that includes backups.
+  (see `INCIDENT-RESPONSE.md` §5 for the procedure). Automated daily backups
+  are active on the current Render paid plan — verify they're actually being
+  retained and that a restore actually succeeds at least once per quarter so
+  you find any breakage during a calm month, not during an incident.
 
 **Quarterly:**
 - Audit env vars in Render → check no stale `RESEND_API_KEY` /

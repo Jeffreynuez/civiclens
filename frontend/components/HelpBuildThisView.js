@@ -59,14 +59,14 @@ const FUND_GOAL = 25000;
 // the whole point of going transparent.
 // ────────────────────────────────────────────────────────────────────
 
-// What's shipped — 34 items. AI integration, moderation, appeals,
+// What's shipped — 35 items. AI integration, moderation, appeals,
 // /polls feed, self-engagement, reply threading, candidate slice
 // (auth + composer + dashboard + engagement parity), bill / vote /
 // EO AI summaries, official photos, identity-model spec, plus
 // recent Phase 5 / 6 work (in-app notifications, multi-identity
 // engagement picker, events as a tab, candidate profile redesign,
-// congress photo backfill, feedback triage pipeline). Volume
-// itself is a trust signal — don't truncate.
+// congress photo backfill, feedback triage pipeline, security
+// foundation). Volume itself is a trust signal — don't truncate.
 const SHIPPED = [
   ['Interactive U.S. map', 'All 50 states + 435 congressional districts, click to drill in.'],
   ['Federal officials directory', 'President, VP, Cabinet, SCOTUS, House + Senate leadership, all 535 Congress members with profile photos.'],
@@ -102,6 +102,7 @@ const SHIPPED = [
   ['Candidate profile centered hero + collapse toggle', 'Candidates now have the same centered-hero layout + chevron-collapse treatment as reps, with their signature dark color preserved so the two profile types stay visually distinct at a glance.'],
   ['Congress photo coverage backfill', 'Wikipedia-sourced portraits added for 91 sitting members of Congress missing from the community photo mirror — entire new 119th Congress class + mid-cycle appointees (Ashley Moody, John James, Mike Lawler, Nick Begich III, and ~87 others) now render with real photos instead of initials.'],
   ['Feedback button + triage pipeline', 'Users tap Feedback from the navbar menu → embedded Google Form opens in an overlay → submission lands in a linked Sheet. From there: an Apps Script trigger sends an instant acknowledgement to submitters who included an email, and a weekly Monday digest classifies new submissions (bug / feature / correction / praise / general) + drafts personalized reply emails for review.'],
+  ['Security foundation', 'Cloudflare WAF + DDoS protection + rate-limiting on /api/admin/* sits in front of the FastAPI backend; GitHub Dependabot security updates + CodeQL static analysis + Secret Scanning with Push Protection are active on the public source repo; automated daily Postgres backups on the paid Render plan; documented incident-response runbook (docs/INCIDENT-RESPONSE.md) and security-posture doc (docs/SECURITY.md) covering setup, rotation cadences, and the playbook for compromised-admin / DB-breach / DDoS / credential-leak scenarios.'],
 ];
 
 const IN_PROGRESS = [
