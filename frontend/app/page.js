@@ -607,7 +607,61 @@ export default function Home() {
           if (cancelled) return;
         }
         if (urlPage) {
-          handleOpenPage(urlPage, null);
+          // The URL only carries the page slug, not the displayName /
+          // role / photoUrl. Without restoring those, PageView's
+          // heading falls back to 'This official' because the
+          // backend's payload.owner is null for unclaimed pages
+          // (most reps + candidates right now, since the verified-rep
+          // onboarding flow is still pre-launch).
+          //
+          // Belt-and-suspenders restoration:
+          //   1. Check sessionStorage for a matching saved pageMeta
+          //      — cheap, no network round-trip.
+          //   2. If not present (e.g. shared link, fresh tab), kick
+          //      a background registry lookup: rep first
+          //      (bioguide_id → Congress), candidate second
+          //      (candidate_id → ElectionsService). Whichever
+          //      resolves first wins.
+          //
+          // The page still mounts immediately with whatever meta we
+          // have (or null); the async lookup just upgrades the
+          // heading from the fallback once it returns.
+          const savedForReload = loadNavState();
+          const savedMeta = savedForReload?.selectedPageOfficialId === urlPage
+            ? savedForReload?.pageMeta
+            : null;
+          handleOpenPage(urlPage, savedMeta || null);
+          if (!savedMeta) {
+            (async () => {
+              try {
+                const { data: member } = await fetchMemberDetail(urlPage);
+                if (cancelled) return;
+                if (member?.name) {
+                  const role = member.role
+                    || (member.chamber && member.district
+                      ? `${member.chamber}, District ${member.district}`
+                      : member.chamber);
+                  setPageMeta({
+                    displayName: member.name,
+                    role: role || null,
+                    photoUrl: member.photoUrl || null,
+                  });
+                  return;
+                }
+              } catch { /* fall through to candidate path */ }
+              try {
+                const { data: candidate } = await fetchCandidate(urlPage);
+                if (cancelled) return;
+                if (candidate?.name) {
+                  setPageMeta({
+                    displayName: candidate.name,
+                    role: candidate.seeking_office || 'Candidate',
+                    photoUrl: candidate.photo_url || null,
+                  });
+                }
+              } catch { /* heading stays on 'This official' fallback */ }
+            })();
+          }
         }
         navStateRestoredRef.current = true;
         return;
