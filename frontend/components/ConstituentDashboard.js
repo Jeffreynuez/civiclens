@@ -297,19 +297,41 @@ function WelcomeHeader({ citizen, greeting, dateLabel }) {
         </div>
       </div>
 
-      <div style={{ textAlign: 'right' }}>
-        <Eyebrow>Today</Eyebrow>
-        <div
-          className="cl-num"
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+        justifyContent: 'space-between', gap: 12, alignSelf: 'stretch',
+      }}>
+        <div style={{ textAlign: 'right' }}>
+          <Eyebrow>Today</Eyebrow>
+          <div
+            className="cl-num"
+            style={{
+              marginTop: 2,
+              fontSize: 'var(--cl-text-md)',
+              fontWeight: 600,
+              color: 'var(--cl-text)',
+            }}
+          >
+            {dateLabel}
+          </div>
+        </div>
+        {/* Self-serve account deletion (Task #81) — bottom-right of
+            the hero card per design feedback. Subtle small link
+            rather than a button; the destructive surface is on the
+            /account/delete page itself with full warnings + email
+            confirmation. */}
+        <a
+          href="/account/delete"
           style={{
-            marginTop: 2,
-            fontSize: 'var(--cl-text-md)',
-            fontWeight: 600,
-            color: 'var(--cl-text)',
+            fontSize: 'var(--cl-text-xs)',
+            color: 'var(--cl-text-light)',
+            textDecoration: 'underline',
+            textDecorationStyle: 'dotted',
+            textUnderlineOffset: '3px',
           }}
         >
-          {dateLabel}
-        </div>
+          Delete account
+        </a>
       </div>
     </header>
   );

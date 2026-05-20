@@ -118,6 +118,35 @@ def _extract_bearer(authorization: Optional[str]) -> Optional[str]:
 
 
 # ── FastAPI dependencies ──────────────────────────────────────────────
+def _resolve_candidate_from_session(
+    cl_candidate: Optional[str],
+    x_candidate_token: Optional[str],
+    authorization: Optional[str],
+    db: Session,
+    *,
+    allow_self_deleted: bool = False,
+) -> Optional[CandidateAccount]:
+    """Shared candidate resolver — see app/auth.py _resolve_rep_from_session
+    for the rationale. allow_self_deleted=True lets /me and /recover
+    see soft-deleted accounts during the 30-day grace window."""
+    token = cl_candidate or x_candidate_token or _extract_bearer(authorization)
+    if not token:
+        return None
+    cid = read_candidate_token(token)
+    if cid is None:
+        return None
+    candidate = db.get(CandidateAccount, cid)
+    if candidate is None or not candidate.is_active:
+        return None
+    if candidate.suspended_at is not None:
+        return None
+    if candidate.claim_status != "active":
+        return None
+    if not allow_self_deleted and candidate.self_deleted_at is not None:
+        return None
+    return candidate
+
+
 def get_optional_candidate(
     cl_candidate: Optional[str] = Cookie(default=None, alias=CANDIDATE_COOKIE_NAME),
     x_candidate_token: Optional[str] = Header(default=None, alias="X-Candidate-Token"),
@@ -135,29 +164,26 @@ def get_optional_candidate(
          multiple identities.
       3. `Authorization: Bearer <token>` — last-resort fallback for
          single-identity sessions.
+
+    Refuses suspended, pending-claim, AND soft-deleted accounts (Task
+    #81). For /me + /recover paths that need to see soft-deleted
+    accounts, use get_optional_candidate_including_deleted instead.
     """
-    token = cl_candidate or x_candidate_token or _extract_bearer(authorization)
-    if not token:
-        return None
-    cid = read_candidate_token(token)
-    if cid is None:
-        return None
-    candidate = db.get(CandidateAccount, cid)
-    if candidate is None or not candidate.is_active:
-        return None
-    # Suspended accounts are treated as not-signed-in. Admins can
-    # restore via the admin moderation tab (same surface used for
-    # rep + citizen suspension).
-    if candidate.suspended_at is not None:
-        return None
-    # claim_status='pending' accounts have been provisioned but not
-    # yet approved — they exist in the DB so admins can act on
-    # claim requests, but until the status flips to 'active' they
-    # can't transact. The login endpoint also refuses these (with a
-    # clear message) so users don't get into a half-signed-in state.
-    if candidate.claim_status != "active":
-        return None
-    return candidate
+    return _resolve_candidate_from_session(
+        cl_candidate, x_candidate_token, authorization, db,
+    )
+
+
+def get_optional_candidate_including_deleted(
+    cl_candidate: Optional[str] = Cookie(default=None, alias=CANDIDATE_COOKIE_NAME),
+    x_candidate_token: Optional[str] = Header(default=None, alias="X-Candidate-Token"),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Optional[CandidateAccount]:
+    """Variant that permits soft-deleted candidates — see /me + /recover."""
+    return _resolve_candidate_from_session(
+        cl_candidate, x_candidate_token, authorization, db, allow_self_deleted=True,
+    )
 
 
 def get_current_candidate(

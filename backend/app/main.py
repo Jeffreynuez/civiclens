@@ -70,6 +70,15 @@ async def lifespan(app: FastAPI):
         # cache so the rep-profile Bills tab gets instant Summary
         # expansions on day one without Congress.gov round-trips.
         seed_bill_summaries()
+        # Task #81 — purge soft-deleted accounts whose 30-day grace
+        # window has elapsed. Runs at every backend boot; for
+        # tighter recovery-window precision a daily cron via Render
+        # Cron Jobs would also call this same helper.
+        try:
+            from app.services.account_deletion import purge_expired_accounts
+            purge_expired_accounts()
+        except Exception:
+            logger.exception("Soft-delete purge failed — non-fatal, will retry next boot.")
     except Exception:
         logger.exception("Pages DB init/seed failed — read-only endpoints will still work.")
     yield

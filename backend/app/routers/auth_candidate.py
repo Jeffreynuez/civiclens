@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
@@ -34,6 +35,7 @@ from app.auth import verify_password
 from app.auth_candidate import (
     clear_candidate_cookie,
     get_current_candidate,
+    get_optional_candidate_including_deleted,
     issue_candidate_token,
     set_candidate_cookie,
 )
@@ -43,6 +45,8 @@ from app.schemas.pages import (
     CandidateLoginRequest,
     CandidateLoginResponse,
     CandidateMeResponse,
+    DeleteAccountRequest,
+    DeleteAccountResponse,
 )
 
 
@@ -147,16 +151,66 @@ def logout(response: Response):
 
 
 @router.get("/me", response_model=CandidateMeResponse)
-def me(candidate: CandidateAccount = Depends(get_current_candidate)):
+def me(candidate: Optional[CandidateAccount] = Depends(get_optional_candidate_including_deleted)):
     """Return the logged-in candidate. 401 if no valid session.
 
-    get_current_candidate also 401s suspended and pending-claim
-    accounts (treating them as not-signed-in), so /me only ever
-    returns an active candidate."""
+    Uses the _including_deleted variant so soft-deleted candidates can
+    still see their own /me during the 30-day grace window. Suspended
+    + pending-claim accounts remain blocked at the dep level."""
+    if candidate is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     from app.services.totp_enforcement import requires_2fa_enrollment
     out = CandidateMeResponse.model_validate(candidate)
-    # 2FA Phase 4 — matches the rep path. Candidates post under a
-    # verified-by-page-claim identity so the credential-theft blast
-    # radius warrants the same second factor.
-    out.needs_2fa_enrollment = requires_2fa_enrollment("candidate", candidate)
+    if candidate.self_deleted_at is None:
+        out.needs_2fa_enrollment = requires_2fa_enrollment("candidate", candidate)
     return out
+
+
+# ── Self-serve account deletion (Task #81) ──────────────────────────
+@router.post("/delete", response_model=DeleteAccountResponse)
+def delete_account(
+    payload: DeleteAccountRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    candidate: Optional[CandidateAccount] = Depends(get_optional_candidate_including_deleted),
+):
+    """Delete the signed-in candidate account. See app/routers/auth.py
+    delete_account for the rep equivalent (same shape, same modes).
+
+    Cascade behavior: candidate-authored posts, polls, events, comments
+    are all removed via the SQLAlchemy delete-orphan cascade on the
+    candidate row."""
+    from app.services.account_deletion import (
+        hard_delete_account,
+        soft_delete_account,
+        verify_email_confirmation,
+    )
+    if candidate is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if not verify_email_confirmation(candidate, payload.confirm_email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email confirmation doesn't match the signed-in account.",
+        )
+    if payload.mode == "hard":
+        hard_delete_account(db, "candidate", candidate)
+        clear_candidate_cookie(response)
+        return DeleteAccountResponse(mode="hard", purge_after=None)
+    purge_at = soft_delete_account(db, "candidate", candidate)
+    return DeleteAccountResponse(mode="soft", purge_after=purge_at)
+
+
+@router.post("/recover", response_model=CandidateMeResponse)
+def recover_account(
+    db: Session = Depends(get_db),
+    candidate: Optional[CandidateAccount] = Depends(get_optional_candidate_including_deleted),
+):
+    """Recover a soft-deleted candidate account."""
+    from app.services.account_deletion import recover_account as _recover
+    if candidate is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if candidate.self_deleted_at is None:
+        return CandidateMeResponse.model_validate(candidate)
+    _recover(db, "candidate", candidate)
+    db.refresh(candidate)
+    return CandidateMeResponse.model_validate(candidate)

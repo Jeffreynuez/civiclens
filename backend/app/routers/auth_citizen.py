@@ -32,6 +32,7 @@ from app.auth import hash_password, verify_password
 from app.auth_citizen import (
     clear_citizen_cookie,
     get_current_citizen,
+    get_optional_citizen_including_deleted,
     issue_citizen_token,
     set_citizen_cookie,
 )
@@ -41,6 +42,8 @@ from app.schemas.pages import (
     CitizenLoginRequest,
     CitizenLoginResponse,
     CitizenMeResponse,
+    DeleteAccountRequest,
+    DeleteAccountResponse,
 )
 
 
@@ -353,9 +356,61 @@ def logout(response: Response):
 
 
 @router.get("/me", response_model=CitizenMeResponse)
-def me(citizen: CitizenAccount = Depends(get_current_citizen)):
-    # 2FA Phase 4 — citizens are NOT in the enforced set so
-    # needs_2fa_enrollment is always False on this path. The field
-    # exists on CitizenMeResponse only for shape symmetry with the
-    # rep / candidate /me responses.
+def me(citizen: Optional[CitizenAccount] = Depends(get_optional_citizen_including_deleted)):
+    # Uses the _including_deleted variant so soft-deleted citizens
+    # still see their own /me during the 30-day grace window — the
+    # frontend reads self_deleted_at + purge_after to render the
+    # recovery banner. 2FA enforcement stays disabled on this path
+    # by design (citizens are opt-in only).
+    if citizen is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return CitizenMeResponse.model_validate(citizen)
+
+
+# ── Self-serve account deletion (Task #81) ──────────────────────────
+@router.post("/delete", response_model=DeleteAccountResponse)
+def delete_account(
+    payload: DeleteAccountRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    citizen: Optional[CitizenAccount] = Depends(get_optional_citizen_including_deleted),
+):
+    """Delete the signed-in citizen account. See app/routers/auth.py
+    delete_account for the rep equivalent (same shape, same modes).
+
+    Hard delete archives the citizen's ID.me verification (preserving
+    the cost-skip on a future re-signup) before dropping the row."""
+    from app.services.account_deletion import (
+        hard_delete_account,
+        soft_delete_account,
+        verify_email_confirmation,
+    )
+    if citizen is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if not verify_email_confirmation(citizen, payload.confirm_email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email confirmation doesn't match the signed-in account.",
+        )
+    if payload.mode == "hard":
+        hard_delete_account(db, "citizen", citizen)
+        clear_citizen_cookie(response)
+        return DeleteAccountResponse(mode="hard", purge_after=None)
+    purge_at = soft_delete_account(db, "citizen", citizen)
+    return DeleteAccountResponse(mode="soft", purge_after=purge_at)
+
+
+@router.post("/recover", response_model=CitizenMeResponse)
+def recover_account(
+    db: Session = Depends(get_db),
+    citizen: Optional[CitizenAccount] = Depends(get_optional_citizen_including_deleted),
+):
+    """Recover a soft-deleted citizen account."""
+    from app.services.account_deletion import recover_account as _recover
+    if citizen is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if citizen.self_deleted_at is None:
+        return CitizenMeResponse.model_validate(citizen)
+    _recover(db, "citizen", citizen)
+    db.refresh(citizen)
     return CitizenMeResponse.model_validate(citizen)

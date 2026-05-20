@@ -65,6 +65,18 @@ export async function hydrateCitizenAuth() {
   return result;
 }
 
+/**
+ * Force-refresh — bypass the `loaded` short-circuit so the next /me
+ * call actually hits the backend. Used by the post-2FA-enroll flow
+ * AND by the account recovery flow (Task #81) so self_deleted_at
+ * flips back to null after the user clicks Recover.
+ */
+export async function refreshCitizenAuth() {
+  loaded = false;
+  hydratePromise = null;
+  return hydrateCitizenAuth();
+}
+
 export async function loginCitizen(email, password) {
   const { data, error, status } = await loginCitizenApi(email, password);
   // 2FA-required branch (Task #62 Phase 3). See lib/auth.js for the

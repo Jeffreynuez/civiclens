@@ -159,6 +159,42 @@ def _extract_bearer(authorization: Optional[str]) -> Optional[str]:
 
 
 # ── FastAPI dependencies ──────────────────────────────────────────────
+def _resolve_rep_from_session(
+    cl_session: Optional[str],
+    authorization: Optional[str],
+    db: Session,
+    *,
+    allow_self_deleted: bool = False,
+) -> Optional[RepAccount]:
+    """Shared resolver. Pulls the rep account from the session token
+    (cookie OR Bearer header) and applies the standard gating —
+    is_active, not suspended, and (by default) not self-deleted.
+
+    `allow_self_deleted=True` permits soft-deleted accounts through;
+    used by get_optional_rep_including_deleted for the /me + /recover
+    paths where the user needs to see their own account in order to
+    act on the deletion. Every other consumer should leave the
+    default."""
+    token = cl_session or _extract_bearer(authorization)
+    if not token:
+        return None
+    rep_id = read_session_token(token)
+    if rep_id is None:
+        return None
+    rep = db.get(RepAccount, rep_id)
+    if rep is None or not rep.is_active:
+        return None
+    if rep.suspended_at is not None:
+        return None
+    if not allow_self_deleted and rep.self_deleted_at is not None:
+        # Soft-deleted accounts are treated as not-signed-in for
+        # write actions (post creation, etc.). The /me + /recover
+        # paths use the _including_deleted variant so they can
+        # surface the recovery banner.
+        return None
+    return rep
+
+
 def get_optional_rep(
     cl_session: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     authorization: Optional[str] = Header(default=None),
@@ -173,21 +209,24 @@ def get_optional_rep(
     `Authorization: Bearer <token>` header. The header path is the
     fallback for browsers (mobile in particular) that block
     cross-site cookies; the cookie path stays the default everywhere
-    cookies work."""
-    token = cl_session or _extract_bearer(authorization)
-    if not token:
-        return None
-    rep_id = read_session_token(token)
-    if rep_id is None:
-        return None
-    rep = db.get(RepAccount, rep_id)
-    if rep is None or not rep.is_active:
-        return None
-    # Suspended accounts are treated as not-signed-in to every
-    # caller. Admins can list+restore via /api/admin/users/...
-    if rep.suspended_at is not None:
-        return None
-    return rep
+    cookies work.
+
+    Refuses suspended AND soft-deleted accounts (Task #81). For the
+    /me + /recover paths that need to see soft-deleted accounts, use
+    get_optional_rep_including_deleted instead."""
+    return _resolve_rep_from_session(cl_session, authorization, db)
+
+
+def get_optional_rep_including_deleted(
+    cl_session: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Optional[RepAccount]:
+    """Like get_optional_rep but permits soft-deleted accounts through.
+    Used by /api/auth/me and /api/auth/recover so the user can see
+    their own account during the 30-day grace window and decide
+    whether to recover or let the purge job finish."""
+    return _resolve_rep_from_session(cl_session, authorization, db, allow_self_deleted=True)
 
 
 def get_current_rep(

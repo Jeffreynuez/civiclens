@@ -108,6 +108,33 @@ def _extract_bearer(authorization: Optional[str]) -> Optional[str]:
 
 
 # ── FastAPI dependencies ──────────────────────────────────────────────
+def _resolve_citizen_from_session(
+    cl_citizen: Optional[str],
+    x_citizen_token: Optional[str],
+    authorization: Optional[str],
+    db: Session,
+    *,
+    allow_self_deleted: bool = False,
+) -> Optional[CitizenAccount]:
+    """Shared citizen resolver — see app/auth.py _resolve_rep_from_session
+    for the rationale. allow_self_deleted=True lets /me and /recover
+    see soft-deleted accounts during the 30-day grace window."""
+    token = cl_citizen or x_citizen_token or _extract_bearer(authorization)
+    if not token:
+        return None
+    cid = read_citizen_token(token)
+    if cid is None:
+        return None
+    citizen = db.get(CitizenAccount, cid)
+    if citizen is None or not citizen.is_active:
+        return None
+    if citizen.suspended_at is not None:
+        return None
+    if not allow_self_deleted and citizen.self_deleted_at is not None:
+        return None
+    return citizen
+
+
 def get_optional_citizen(
     cl_citizen: Optional[str] = Cookie(default=None, alias=CITIZEN_COOKIE_NAME),
     x_citizen_token: Optional[str] = Header(default=None, alias="X-Citizen-Token"),
@@ -128,21 +155,23 @@ def get_optional_citizen(
          present both tokens without collision.
       3. `Authorization: Bearer <token>` — last-resort fallback for
          single-identity sessions.
-    """
-    token = cl_citizen or x_citizen_token or _extract_bearer(authorization)
-    if not token:
-        return None
-    cid = read_citizen_token(token)
-    if cid is None:
-        return None
-    citizen = db.get(CitizenAccount, cid)
-    if citizen is None or not citizen.is_active:
-        return None
-    # Suspended accounts are treated as not-signed-in. Admins can
-    # restore via /api/admin/users/citizen/{id}/unsuspend.
-    if citizen.suspended_at is not None:
-        return None
-    return citizen
+
+    Refuses suspended AND soft-deleted accounts (Task #81). For the
+    /me + /recover paths that need to see soft-deleted accounts, use
+    get_optional_citizen_including_deleted instead."""
+    return _resolve_citizen_from_session(cl_citizen, x_citizen_token, authorization, db)
+
+
+def get_optional_citizen_including_deleted(
+    cl_citizen: Optional[str] = Cookie(default=None, alias=CITIZEN_COOKIE_NAME),
+    x_citizen_token: Optional[str] = Header(default=None, alias="X-Citizen-Token"),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Optional[CitizenAccount]:
+    """Variant that permits soft-deleted citizens — see /me + /recover."""
+    return _resolve_citizen_from_session(
+        cl_citizen, x_citizen_token, authorization, db, allow_self_deleted=True,
+    )
 
 
 def get_current_citizen(

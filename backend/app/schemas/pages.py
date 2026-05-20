@@ -22,6 +22,35 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=256)
 
 
+# ── Self-serve account deletion (Task #81) ──────────────────────────
+class DeleteAccountRequest(BaseModel):
+    """Body for /api/{identity}/delete. Used by all three identity
+    types (rep, citizen, candidate) — the route uses whichever auth
+    dep matches.
+
+    confirm_email: must match the signed-in account's email (case-
+      insensitive). Defends against accidental clicks + auto-fill
+      mistakes. The /account/delete UI populates this from a
+      'Type your email to confirm' field.
+    mode:
+      'soft' — archive the account for 30 days. Login still works
+               during the grace window so the user can recover.
+      'hard' — delete immediately, no recovery. Verification archive
+               is still preserved on citizens so they don't pay for
+               re-verification on a future signup.
+    """
+    confirm_email: EmailStr
+    mode: str = Field(default="soft", pattern="^(soft|hard)$")
+
+
+class DeleteAccountResponse(BaseModel):
+    """Response from /api/{identity}/delete.
+    mode echoes the request mode.
+    purge_after is only populated for 'soft' deletes — null for 'hard'."""
+    mode: str
+    purge_after: Optional[datetime] = None
+
+
 class MeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -37,6 +66,13 @@ class MeResponse(BaseModel):
     # overlay that blocks all other interaction until the user
     # finishes 2FA setup.
     needs_2fa_enrollment: bool = False
+    # Self-serve account deletion (Task #81). When self_deleted_at is
+    # populated the account is in the 30-day soft-delete grace window
+    # — the frontend reads these fields to render the recovery banner
+    # so the user can decide whether to recover or let the purge job
+    # finish. Both NULL on active accounts.
+    self_deleted_at: Optional[datetime] = None
+    purge_after: Optional[datetime] = None
 
 
 class LoginResponse(BaseModel):
@@ -500,6 +536,9 @@ class CitizenMeResponse(BaseModel):
     # /me responses so a generic identity-aware client can read it
     # uniformly.
     needs_2fa_enrollment: bool = False
+    # Self-serve account deletion (Task #81) — see MeResponse docs.
+    self_deleted_at: Optional[datetime] = None
+    purge_after: Optional[datetime] = None
 
 
 class CitizenLoginResponse(BaseModel):
@@ -548,6 +587,9 @@ class CandidateMeResponse(BaseModel):
     # rep's, so the credential-theft blast radius warrants the same
     # second factor.
     needs_2fa_enrollment: bool = False
+    # Self-serve account deletion (Task #81) — see MeResponse docs.
+    self_deleted_at: Optional[datetime] = None
+    purge_after: Optional[datetime] = None
 
 
 class CandidateLoginResponse(BaseModel):

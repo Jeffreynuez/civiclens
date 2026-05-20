@@ -72,6 +72,20 @@ class RepAccount(Base):
     # without backfill.
     totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(String(255), default=None)
     totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Self-serve account deletion (Task #81). Distinct from
+    # admin-driven `suspended_at` so we can tell user-initiated
+    # delete-and-archive from moderation action.
+    #   self_deleted_at — when the user clicked Delete in archive
+    #                    mode. While set, login is blocked at the
+    #                    auth dep but the row + content still exist
+    #                    so the user can recover.
+    #   purge_after    — timestamp at which the startup purge job
+    #                    hard-deletes the row + cascade content.
+    #                    Typically self_deleted_at + 30 days.
+    # Both stay NULL on active accounts. Hard delete bypasses these
+    # columns entirely (row gone immediately).
+    self_deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    purge_after: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
 
     posts: Mapped[List["Post"]] = relationship(
         back_populates="author", cascade="all, delete-orphan",
@@ -149,6 +163,9 @@ class CandidateAccount(Base):
     # be just as damaging as one on a sitting rep's page.
     totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(String(255), default=None)
     totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Self-serve account deletion (Task #81) — see RepAccount for docs.
+    self_deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    purge_after: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
 
 
 # ── Posts + Polls ─────────────────────────────────────────────────────
@@ -966,6 +983,41 @@ class CitizenAccount(Base):
     #     secret is present (partial enrollments).
     totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(String(255), default=None)
     totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Self-serve account deletion (Task #81) — see RepAccount for docs.
+    self_deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    purge_after: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+
+
+# ── Verified-identity archive (Task #81) ─────────────────────────────
+class VerifiedIdentityArchive(Base):
+    """Persists an opaque marker that a given email address was
+    previously ID.me-verified, so a returning citizen who deleted
+    their account can re-sign-up without paying the $1.50 verification
+    fee a second time.
+
+    Stores a one-way hash of the normalized email (lowercased, trimmed)
+    salted with a server-side secret so the archive isn't reversible
+    to plaintext PII even if the row table leaks. The `verified_at`
+    timestamp preserves the original verification date so we can
+    surface it on the new account ('Verified since YYYY-MM-DD') and
+    decide later whether identity-proofing too stale to honor.
+
+    Only citizens go in this archive — reps + candidates don't
+    transact through ID.me (they're admin-provisioned today and
+    will use a different verification path when verified-rep
+    onboarding ships).
+    """
+    __tablename__ = "verified_identity_archive"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # sha256(normalized_email + SESSION_SECRET salt). 64 hex chars.
+    email_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # When the user originally completed ID.me verification.
+    verified_at: Mapped[datetime] = mapped_column(DateTime)
+    # When the underlying account was deleted and the archive row
+    # written. Distinct from verified_at so we can spot abuse patterns
+    # (rapid delete-and-recreate cycles).
+    archived_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 # ── Citizen waitlist ──────────────────────────────────────────────────

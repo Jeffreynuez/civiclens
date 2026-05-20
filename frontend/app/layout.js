@@ -4,6 +4,7 @@
 
 import './globals.css';
 import Force2FAGate from '@/components/Force2FAGate';
+import RecoveryBanner from '@/components/RecoveryBanner';
 
 export const metadata = {
   title: 'CivicView - Know Your Representatives',
@@ -84,6 +85,11 @@ export default function RootLayout({ children }) {
             the FORCE_2FA_ENABLED env var on the backend; this
             component renders the overlay if and only if the backend
             opts the user in. */}
+        {/* RecoveryBanner (Task #81) sits ABOVE the Force2FAGate
+            so a soft-deleted user sees their recovery prompt first,
+            before any 2FA enrollment surface. Both render at top
+            of every route via this layout wrapping. */}
+        <RecoveryBanner />
         <Force2FAGate>
           {children}
         </Force2FAGate>

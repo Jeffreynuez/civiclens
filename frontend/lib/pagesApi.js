@@ -754,3 +754,40 @@ export async function joinWaitlist({ email, clickedFrom, state, note } = {}) {
     },
   });
 }
+
+// ── Self-serve account deletion (Task #81) ───────────────────────────
+// Identity-aware wrappers. The frontend's /account/delete page picks
+// the right one based on which session is signed in. Mode is 'soft'
+// (archive 30 days) or 'hard' (immediate). Returns { mode,
+// purge_after } on success.
+export async function deleteRepAccount({ confirmEmail, mode } = {}) {
+  return request('/api/auth/delete', {
+    method: 'POST',
+    body: { confirm_email: confirmEmail, mode },
+  });
+}
+export async function deleteCitizenAccount({ confirmEmail, mode } = {}) {
+  return request('/api/citizen-auth/delete', {
+    method: 'POST',
+    body: { confirm_email: confirmEmail, mode },
+  });
+}
+export async function deleteCandidateAccount({ confirmEmail, mode } = {}) {
+  return request('/api/candidate-auth/delete', {
+    method: 'POST',
+    body: { confirm_email: confirmEmail, mode },
+  });
+}
+
+// Recovery — called when a soft-deleted user wants to undo the
+// archive within the 30-day window. Returns the refreshed me object
+// so the auth hooks can flip self_deleted_at back to null.
+export async function recoverRepAccount() {
+  return request('/api/auth/recover', { method: 'POST' });
+}
+export async function recoverCitizenAccount() {
+  return request('/api/citizen-auth/recover', { method: 'POST' });
+}
+export async function recoverCandidateAccount() {
+  return request('/api/candidate-auth/recover', { method: 'POST' });
+}

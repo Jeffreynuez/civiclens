@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
@@ -27,6 +28,7 @@ from app.auth import (
     clear_session_cookie,
     generate_csrf_token,
     get_current_rep,
+    get_optional_rep_including_deleted,
     issue_session_token,
     set_session_cookie,
     verify_password,
@@ -34,6 +36,8 @@ from app.auth import (
 from app.db import get_db
 from app.models.pages import RepAccount
 from app.schemas.pages import (
+    DeleteAccountRequest,
+    DeleteAccountResponse,
     LoginRequest,
     LoginResponse,
     MeResponse,
@@ -123,13 +127,79 @@ def logout(response: Response):
 
 
 @router.get("/me", response_model=MeResponse)
-def me(rep: RepAccount = Depends(get_current_rep)):
-    """Return the currently-logged-in rep, or 401 if no valid session."""
+def me(rep: Optional[RepAccount] = Depends(get_optional_rep_including_deleted)):
+    """Return the currently-logged-in rep, or 401 if no valid session.
+
+    Uses the _including_deleted variant so soft-deleted accounts still
+    see /me during the 30-day grace window — the frontend reads the
+    self_deleted_at + purge_after fields to render the recovery
+    banner."""
+    if rep is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     from app.services.totp_enforcement import requires_2fa_enrollment
     out = MeResponse.model_validate(rep)
-    # 2FA Phase 4 — set the enforcement flag so the frontend can render
-    # the full-screen enrollment overlay before letting the rep reach
-    # their dashboard. Gated by FORCE_2FA_ENABLED + lack of
-    # totp_enabled_at; see services/totp_enforcement.py for the rules.
-    out.needs_2fa_enrollment = requires_2fa_enrollment("rep", rep)
+    # 2FA Phase 4 — only fire enforcement for active accounts. A
+    # soft-deleted user shouldn't be pushed through enrollment; let
+    # them recover or finalize the deletion first.
+    if rep.self_deleted_at is None:
+        out.needs_2fa_enrollment = requires_2fa_enrollment("rep", rep)
     return out
+
+
+# ── Self-serve account deletion (Task #81) ──────────────────────────
+@router.post("/delete", response_model=DeleteAccountResponse)
+def delete_account(
+    payload: DeleteAccountRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    rep: Optional[RepAccount] = Depends(get_optional_rep_including_deleted),
+):
+    """Delete the signed-in rep account.
+
+    confirm_email must match the signed-in account (case-insensitive).
+    mode='soft' archives for 30 days (recoverable via /recover);
+    mode='hard' deletes immediately and cascades dependent content.
+
+    Hard delete also clears the session cookie so the now-deleted
+    session token can't be replayed. Soft delete leaves the cookie
+    intact so the user can sign back in to recover within the grace
+    window."""
+    from app.services.account_deletion import (
+        hard_delete_account,
+        soft_delete_account,
+        verify_email_confirmation,
+    )
+    if rep is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if not verify_email_confirmation(rep, payload.confirm_email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email confirmation doesn't match the signed-in account.",
+        )
+    if payload.mode == "hard":
+        hard_delete_account(db, "rep", rep)
+        clear_session_cookie(response)
+        return DeleteAccountResponse(mode="hard", purge_after=None)
+    # Default + 'soft' path.
+    purge_at = soft_delete_account(db, "rep", rep)
+    return DeleteAccountResponse(mode="soft", purge_after=purge_at)
+
+
+@router.post("/recover", response_model=MeResponse)
+def recover_account(
+    db: Session = Depends(get_db),
+    rep: Optional[RepAccount] = Depends(get_optional_rep_including_deleted),
+):
+    """Recover a soft-deleted rep account within the 30-day grace
+    window. Clears self_deleted_at + purge_after. Returns the
+    refreshed /me payload so the frontend can drop the recovery banner
+    without an extra round-trip."""
+    from app.services.account_deletion import recover_account as _recover
+    if rep is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if rep.self_deleted_at is None:
+        # Already active — no-op return.
+        return MeResponse.model_validate(rep)
+    _recover(db, "rep", rep)
+    db.refresh(rep)
+    return MeResponse.model_validate(rep)

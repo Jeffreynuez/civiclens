@@ -583,6 +583,33 @@ export default function PageView({
                   Claim this page
                 </button>
               )}
+              {/* Delete account link — Task #81. Renders only when the
+                  signed-in user owns this page (isOwner) so non-owners
+                  never see a destructive control attached to a page
+                  that isn't theirs. Positioned bottom-right of the
+                  hero per design feedback; same subtle dotted-
+                  underline treatment as the citizen dashboard link.
+                  Routes to /account/delete which handles the full
+                  warning + email-confirmation flow for whichever
+                  identity (rep or candidate) is acting. */}
+              {claimed && isOwner && (
+                <a
+                  href="/account/delete"
+                  style={{
+                    fontSize: '0.72rem',
+                    color: 'var(--cl-text-light)',
+                    textDecoration: 'underline',
+                    textDecorationStyle: 'dotted',
+                    textUnderlineOffset: '3px',
+                    alignSelf: isCompact ? 'flex-end' : 'flex-end',
+                    marginTop: isCompact ? -4 : 'auto',
+                    marginLeft: isCompact ? 'auto' : 'auto',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Delete account
+                </a>
+              )}
             </div>
 
             {/* Contact-us line for real reps. Visible on every
