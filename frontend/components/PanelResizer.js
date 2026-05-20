@@ -48,17 +48,31 @@ export default function PanelResizer({
                         // starts (navbar height). Subtracted from clientY
                         // so the height we report = current touch Y minus
                         // wherever the map area begins.
-  // Horizontal-only: when true, the resizer behaves as a binary
-  // open/close toggle instead of a continuous slider. Drag with
-  // resistance until the gesture passes a threshold, then snap to
-  // either fully open (maxHeight) or fully closed (0). A double-tap
-  // also toggles instantly. The continuous (analog) behavior stays
-  // on desktop because precision dragging works better with a mouse.
+  // When true, the resizer behaves as a binary open/close toggle
+  // instead of a continuous slider. Drag with resistance until the
+  // gesture passes a threshold, then snap to either the open or
+  // closed target. A double-tap also toggles instantly. Works for
+  // BOTH orientations:
+  //   horizontal (portrait stacked) — snaps between 0 and maxHeight
+  //   vertical   (landscape side-by-side) — snaps between openWidth
+  //              and closedWidth (caller passes these)
+  // The continuous (analog) behavior stays on desktop because
+  // precision dragging works better with a mouse.
   binaryMode = false,
   // Required for binary mode — the current "is the map open?" boolean.
   // Drives the snap-back target when the drag doesn't exceed threshold,
   // and the double-tap action.
   isOpen = true,
+  // Vertical-binary-only: target widths the panel snaps to on release.
+  // openWidth   — the "map visible" width (smaller panel; map gets
+  //               the remaining horizontal space).
+  // closedWidth — the "map hidden" width (larger panel; covers the
+  //               map area). Caller should leave at least the
+  //               resizer's own width worth of room — typically
+  //               windowWidth - 28 — so the resizer + panel together
+  //               don't overflow the viewport.
+  openWidth = 0,
+  closedWidth = 0,
 }) {
   const [hovering, setHovering] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -106,13 +120,39 @@ export default function PanelResizer({
 
     // For binary mode we accumulate the drag distance from start so
     // the snap-on-release decision has a clean signed delta to read.
+    const startX = clientX;
     const startY = clientY;
     const startHeight = isOpen ? maxHeight : 0;
-    let lastDelta = 0; // finger Y - startY, signed (positive = downward)
+    // Vertical-binary: drag-LEFT (negative deltaX) grows the panel
+    // (i.e. closes the map). startWidth is whichever target the panel
+    // currently sits at.
+    const startWidth = isOpen ? openWidth : closedWidth;
+    let lastDelta = 0; // axis-appropriate signed delta from start
     let dragExceededTapThreshold = false;
 
     const handleMove = (moveX, moveY) => {
       if (isVertical) {
+        // ── Vertical-binary mode ────────────────────────────────
+        // fingerDelta in X: positive = right (shrink panel = open
+        // map), negative = left (grow panel = close map). Apply
+        // resistance + clamp to [openWidth, closedWidth] so the
+        // visible panel can't leak past either snap target during
+        // the gesture.
+        if (binaryMode) {
+          const fingerDelta = moveX - startX;
+          lastDelta = fingerDelta;
+          if (Math.abs(fingerDelta) > TAP_DRAG_THRESHOLD_PX) {
+            dragExceededTapThreshold = true;
+          }
+          const visualDelta = -fingerDelta / DRAG_RESISTANCE;
+          const newWidth = Math.max(
+            openWidth,
+            Math.min(closedWidth, startWidth + visualDelta),
+          );
+          onResizeRef.current?.(newWidth);
+          return;
+        }
+        // Legacy continuous vertical mode (desktop pointer).
         const maxW = Math.max(minWidth, window.innerWidth * maxFraction);
         const raw = window.innerWidth - moveX;
         const clamped = Math.min(maxW, Math.max(minWidth, raw));
@@ -163,24 +203,45 @@ export default function PanelResizer({
       window.removeEventListener('touchend', onTouchEnd);
       window.removeEventListener('touchcancel', onTouchCancel);
 
-      // Snap-on-release for binary horizontal mode.
+      // Snap-on-release for binary mode (both axes).
       // The drag direction has to match a sensible toggle:
-      //   open  → drag UP (negative delta) → close
-      //   closed → drag DOWN (positive delta) → open
-      // Threshold is a fraction of maxHeight; anything below it just
-      // snaps back to where it started so partial gestures don't
-      // commit by accident.
-      if (binaryMode && !isVertical) {
-        const threshold = maxHeight * SNAP_THRESHOLD_FRAC;
-        let target;
-        if (isOpen && lastDelta < -threshold) {
-          target = 0;       // close
-        } else if (!isOpen && lastDelta > threshold) {
-          target = maxHeight; // open
+      //   horizontal: open → drag UP (negative delta) → close
+      //               closed → drag DOWN (positive delta) → open
+      //   vertical:   open → drag LEFT (negative delta) → close
+      //               closed → drag RIGHT (positive delta) → open
+      // Threshold is a fraction of the open↔closed travel distance;
+      // partial gestures snap back to where they started.
+      if (binaryMode) {
+        if (isVertical) {
+          // openWidth < closedWidth (panel widens as map closes), so
+          // the travel distance is (closedWidth - openWidth). Scale
+          // the threshold to the same fraction the horizontal axis
+          // uses.
+          const threshold = Math.max(
+            (closedWidth - openWidth) * SNAP_THRESHOLD_FRAC,
+            20, // floor so very small travel distances still need a deliberate gesture
+          );
+          let target;
+          if (isOpen && lastDelta < -threshold) {
+            target = closedWidth; // close map
+          } else if (!isOpen && lastDelta > threshold) {
+            target = openWidth;   // open map
+          } else {
+            target = isOpen ? openWidth : closedWidth; // snap back
+          }
+          onResizeRef.current?.(target);
         } else {
-          target = isOpen ? maxHeight : 0; // snap back
+          const threshold = maxHeight * SNAP_THRESHOLD_FRAC;
+          let target;
+          if (isOpen && lastDelta < -threshold) {
+            target = 0;       // close
+          } else if (!isOpen && lastDelta > threshold) {
+            target = maxHeight; // open
+          } else {
+            target = isOpen ? maxHeight : 0; // snap back
+          }
+          onResizeRef.current?.(target);
         }
-        onResizeRef.current?.(target);
 
         // Touchend without crossing the drag threshold = tap. We
         // treat it as a double-tap candidate. Don't apply double-tap
@@ -191,7 +252,11 @@ export default function PanelResizer({
           const now = Date.now();
           if (now - lastTapTimeRef.current < DOUBLE_TAP_MS) {
             // Second tap landed inside the window — fire the toggle.
-            onResizeRef.current?.(isOpen ? 0 : maxHeight);
+            if (isVertical) {
+              onResizeRef.current?.(isOpen ? closedWidth : openWidth);
+            } else {
+              onResizeRef.current?.(isOpen ? 0 : maxHeight);
+            }
             lastTapTimeRef.current = 0; // reset so a third tap doesn't toggle
           } else {
             lastTapTimeRef.current = now;

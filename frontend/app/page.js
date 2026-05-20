@@ -90,6 +90,32 @@ export default function Home() {
   // its left edge to grow it up to 50% of the viewport. 380 is the minimum
   // (= original fixed width) and is what we start with.
   const [panelWidth, setPanelWidth] = useState(380);
+  // Tracked viewport width — drives the landscape map slider's
+  // open/closed snap targets (50% open, near-full closed). Lives as
+  // state so resize / orientation events trigger a re-render with
+  // fresh targets, and the resizer's binary-mode clamp stays in
+  // sync with the current viewport.
+  const [windowWidth, setWindowWidth] = useState(1024);
+  useEffect(() => {
+    const apply = () => {
+      if (typeof window === 'undefined') return;
+      const w = window.visualViewport?.width || window.innerWidth;
+      setWindowWidth(w);
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', apply);
+    }
+    return () => {
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', apply);
+      }
+    };
+  }, []);
   // Mobile-only: pixel height of the map at the top of the screen.
   // Defaults to 0 — the layout effect below recomputes it on mount
   // based on the actual *visible* viewport height (visualViewport when
@@ -1082,24 +1108,53 @@ export default function Home() {
             isOpen={mapHeightPx > 0}
           />
         ) : (
-          <PanelResizer
-            orientation="vertical"
-            onResize={setPanelWidth}
-            // On mobile-landscape: let the panel cover the map entirely
-            // (symmetric with mobile-portrait, where the slider can
-            // collapse the map to 0). Min drops to 280 so the user has
-            // room to shrink as well as grow. On desktop the original
-            // 380 / 50% range still applies — pointer precision makes
-            // the smaller range comfortable, and a panel can't usefully
-            // exceed half the desktop viewport.
-            minWidth={isMobile ? 280 : 380}
-            maxFraction={isMobile ? 1 : 0.5}
-            label="Map"
-            // Pass isMobile (touch viewport, not just stacked-layout)
-            // so landscape phones still get the chunky thumb-friendly
-            // chrome on the vertical resizer.
-            isMobile={isMobile}
-          />
+          (() => {
+            // Landscape (or any touch viewport on the side-by-side
+            // layout) gets the same binary-snap UX as portrait:
+            // drag with tension, snap to open/closed on release,
+            // double-tap toggles. Snap targets:
+            //   open   = 50% of viewport (map visible + panel
+            //            visible, roughly equal real estate). Floored
+            //            at 280px so very narrow landscape phones
+            //            still get a usable panel.
+            //   closed = viewport width - 28 (the resizer's own
+            //            width). Leaves the resizer visible so the
+            //            user can re-open the map; without this
+            //            margin the resizer + panel would overflow
+            //            the viewport and clip the panel's right-
+            //            edge content.
+            // Desktop pointer keeps the legacy continuous slider —
+            // precision dragging is fine with a mouse.
+            const landscapeOpen = Math.max(280, Math.floor(windowWidth * 0.5));
+            const landscapeClosed = Math.max(landscapeOpen + 80, windowWidth - 28);
+            // Treat "near open width" as open. Past the midpoint
+            // between open and closed → consider closed. This gives
+            // the binary-mode snap-back logic a clean isOpen signal
+            // even when panelWidth is mid-transition.
+            const landscapeMidpoint = (landscapeOpen + landscapeClosed) / 2;
+            const landscapeIsOpen = panelWidth < landscapeMidpoint;
+            return (
+              <PanelResizer
+                orientation="vertical"
+                onResize={setPanelWidth}
+                // Continuous-mode bounds — only used on desktop, where
+                // binaryMode is false. Mobile binary mode ignores these.
+                minWidth={isMobile ? 280 : 380}
+                maxFraction={0.5}
+                label="Map"
+                // Pass isMobile (touch viewport, not just stacked-layout)
+                // so landscape phones still get the chunky thumb-friendly
+                // chrome on the vertical resizer.
+                isMobile={isMobile}
+                // Binary mode on touch viewports only. Matches the
+                // portrait stacked resizer's UX.
+                binaryMode={isMobile}
+                isOpen={landscapeIsOpen}
+                openWidth={landscapeOpen}
+                closedWidth={landscapeClosed}
+              />
+            );
+          })()
         )}
         {/* SidePanel is ALWAYS mounted so its scroll container survives
             the candidate-profile detour. When a candidate is open, we
@@ -1129,14 +1184,15 @@ export default function Home() {
             isTouch={isCompact}
             // True when the user has dragged the mobile horizontal
             // resizer all the way down (mapHeightPx === 0) OR
-            // (in landscape) when the panel has been widened to
-            // fully cover the map (panelWidth ≥ window.innerWidth -
-            // ~30px). Either way the user has chosen to give the
+            // (in landscape) when the panel has snapped to its
+            // 'closed' target — the resizer's own width away from
+            // the viewport edge, which is the binary-mode close
+            // position. Either way the user has chosen to give the
             // panel the entire visible area — hide the header to
             // honor that.
             mapCollapsed={
               (useStackedLayout && mapHeightPx === 0) ||
-              (isMobile && !useStackedLayout && typeof window !== 'undefined' && panelWidth >= window.innerWidth - 30)
+              (isMobile && !useStackedLayout && panelWidth >= windowWidth - 40)
             }
             onMemberSelect={handleMemberSelect}
             onBack={handleBack}
