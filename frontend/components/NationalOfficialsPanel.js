@@ -2383,15 +2383,19 @@ function Footer({
               { label: 'Subscribe', onClick: onSubscribe || null },
             ]}
           />
-          {/* About column — placeholders for static pages we haven't built
-              yet. Rendered as inactive (no cursor, muted color). */}
+          {/* About column — links to the five legal/info pages under
+              app/. All routes use the LegalPageLayout shared chrome
+              (navbar + back button + content container). Task #85
+              added these — before that the column was placeholder
+              labels with onClick=null that rendered as muted text. */}
           <FooterColumn
             heading="About"
             links={[
-              { label: 'Methodology', onClick: null },
-              { label: 'Editorial standards', onClick: null },
-              { label: 'Privacy', onClick: null },
-              { label: 'Contact', onClick: null },
+              { label: 'Methodology',         href: '/methodology' },
+              { label: 'Editorial standards', href: '/editorial-standards' },
+              { label: 'Privacy',             href: '/privacy' },
+              { label: 'Terms of service',    href: '/terms' },
+              { label: 'Contact',             href: '/contact' },
             ]}
           />
         </div>
@@ -2416,41 +2420,60 @@ function Footer({
 }
 
 function FooterColumn({ heading, links }) {
+  // Each link supports three shapes (in priority order):
+  //   { label, href }     → real route link via <a href>. Used by the
+  //                         About column for /methodology, /privacy,
+  //                         /terms, /contact, /editorial-standards.
+  //   { label, onClick }  → in-page action. Used by Browse + Citizen
+  //                         columns (scroll-to-section, open modal).
+  //   { label }           → muted placeholder. Reserved for future
+  //                         columns where the destination doesn't yet
+  //                         exist.
+  const linkStyle = {
+    background: 'transparent',
+    border: 'none',
+    padding: 0,
+    fontSize: 'var(--cl-text-sm)',
+    color: 'var(--cl-text)',
+    fontFamily: 'var(--cl-font-sans)',
+    cursor: 'pointer',
+    textAlign: 'left',
+    textDecoration: 'none',
+  };
   return (
     <div>
       <Eyebrow style={{ marginBottom: 10 }}>{heading}</Eyebrow>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {links.map((l) => {
-          const active = typeof l.onClick === 'function';
+          const onHoverEnter = (e) => { e.currentTarget.style.color = 'var(--cl-accent)'; };
+          const onHoverLeave = (e) => { e.currentTarget.style.color = 'var(--cl-text)'; };
           return (
             <li key={l.label}>
-              {active ? (
+              {l.href ? (
+                <a
+                  href={l.href}
+                  style={linkStyle}
+                  onMouseOver={onHoverEnter}
+                  onMouseOut={onHoverLeave}
+                >
+                  {l.label}
+                </a>
+              ) : typeof l.onClick === 'function' ? (
                 <button
                   type="button"
                   onClick={l.onClick}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                    fontSize: 'var(--cl-text-sm)',
-                    color: 'var(--cl-text)',
-                    fontFamily: 'var(--cl-font-sans)',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.color = 'var(--cl-accent)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.color = 'var(--cl-text)';
-                  }}
+                  style={linkStyle}
+                  onMouseOver={onHoverEnter}
+                  onMouseOut={onHoverLeave}
                 >
                   {l.label}
                 </button>
               ) : (
-                // Inactive link — rendered as muted text so users don't
-                // try to click placeholders for pages that don't exist
-                // yet (Methodology, Editorial standards, etc.).
+                // Inactive placeholder — rendered as muted text so
+                // users don't try to click destinations that don't
+                // exist yet. None of the current columns use this
+                // path after Task #85 wired the About column to real
+                // routes, but the shape stays for future use.
                 <span
                   aria-disabled="true"
                   style={{
