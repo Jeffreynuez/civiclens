@@ -145,78 +145,22 @@ export default function IdentitySwitcher({
     else if (entry.kind === 'candidate') onCandidateLogout?.();
   };
 
-  // ── Single-identity mode ────────────────────────────────────────
-  if (entries.length === 1) {
-    const e = entries[0];
-    const c = COLORS[e.kind].onDark;
-    return (
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} ref={wrapRef}>
-        <button
-          type="button"
-          onClick={() => openDashboardFor(e)}
-          title={`Open dashboard — ${e.label}${e.sublabel ? ' · ' + e.sublabel : ''}`}
-          style={
-            isCompact
-              ? {
-                  width: 36, height: 36, padding: 0,
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
-                  borderRadius: 999, fontSize: '0.78rem', fontWeight: 800,
-                  cursor: 'pointer', flexShrink: 0,
-                }
-              : {
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '6px 10px',
-                  background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
-                  borderRadius: 8, fontSize: '0.78rem', fontWeight: 700,
-                  cursor: 'pointer', fontFamily: 'var(--cl-font-sans)',
-                }
-          }
-        >
-          {isCompact ? (
-            <span aria-hidden="true">{(e.label || '?').trim().charAt(0).toUpperCase()}</span>
-          ) : (
-            <>
-              <span style={{
-                fontSize: '0.62rem', fontWeight: 800,
-                padding: '1px 5px', borderRadius: 9,
-                background: c.badgeBg, color: c.fg,
-                letterSpacing: '0.04em', textTransform: 'uppercase',
-              }}>
-                {KIND_LABEL[e.kind]}
-              </span>
-              {e.label}
-            </>
-          )}
-        </button>
-        {/* Sign out — visible inline on desktop, hidden on compact to
-            save space (compact viewports surface sign-out via the
-            hamburger / the per-row Sign out inside the dropdown). */}
-        {!isCompact && (
-          <button
-            type="button"
-            onClick={() => logoutFor(e)}
-            title={`Sign out (${KIND_LABEL[e.kind].toLowerCase()})`}
-            style={{
-              padding: '6px 10px', background: 'rgba(255,255,255,0.05)',
-              color: 'white', border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: 8, cursor: 'pointer',
-              fontSize: '0.78rem', fontWeight: 600,
-            }}
-            onMouseOver={(ev) => (ev.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
-            onMouseOut={(ev) => (ev.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-          >
-            Sign out
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  // ── Multi-identity mode (2+) ────────────────────────────────────
-  // 'Signed in (N)' trigger that pops a dropdown with one row per
-  // identity, each carrying its own Open + Sign out actions. No
-  // global sign-out — too easy to nuke the wrong session by accident.
+  // ── Unified dropdown mode (any non-zero identity count) ─────────
+  // Always render the dropdown pattern, whether the user has 1
+  // identity signed in or 3. The previous code had a separate
+  // single-identity pill with an inline Sign out button — but the
+  // inline Sign out was hidden on compact viewports to save navbar
+  // width, leaving mobile users with no way to sign out (the
+  // hamburger Sign out was also removed earlier so per-identity
+  // sign-out always lives near the identity). Unifying on the
+  // dropdown fixes that AND removes the surface-area inconsistency
+  // between '1 signed in' and '2+ signed in' modes.
+  //
+  // Trigger button shows: user icon + 'Signed in' label + count
+  // badge + chevron on desktop; user icon + count number on compact.
+  // Dropdown rows always carry Open + × actions so the user can
+  // jump to their dashboard or sign out without leaving the navbar
+  // context.
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <button
@@ -297,10 +241,18 @@ export default function IdentitySwitcher({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontSize: '0.78rem', fontWeight: 700, color: 'var(--cl-text)',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     display: 'flex', alignItems: 'center', gap: 6,
+                    /* The outer overflow:hidden + the name span's
+                       flex:1 / min-width:0 below are what actually
+                       engage ellipsis truncation. Flex children
+                       default to min-width:auto which prevents
+                       shrinking; the explicit min-width:0 lets the
+                       name span shrink and clip with the ellipsis
+                       glyph instead of overflowing the dropdown. */
+                    overflow: 'hidden',
                   }}>
                     <span style={{
+                      flexShrink: 0,
                       fontSize: '0.6rem', fontWeight: 800,
                       padding: '1px 5px', borderRadius: 9,
                       background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
@@ -308,7 +260,14 @@ export default function IdentitySwitcher({
                     }}>
                       {KIND_LABEL[e.kind]}
                     </span>
-                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{
+                      // flex:1 + min-width:0 is the standard CSS recipe
+                      // for ellipsis on flex children — without these
+                      // the name span tries to expand to its content
+                      // width and overflows the dropdown on long names.
+                      flex: 1, minWidth: 0,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
                       {e.label}
                     </span>
                   </div>
