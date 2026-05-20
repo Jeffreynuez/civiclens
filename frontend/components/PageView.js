@@ -479,10 +479,23 @@ export default function PageView({
         >
           {/* Main column */}
           <main style={{ minWidth: 0 }}>
-            {/* Owner header card */}
+            {/* Owner header card.
+                Compact viewports stack vertically: the photo+name+role
+                row sits on top, then the 'Claim this page' button
+                spans full width below. On desktop the Claim button
+                stays inline to the right of the info column so the
+                hero stays a single row at comfortable widths.
+
+                Without this restructure on mobile, the Claim button
+                stole horizontal space from the name column and
+                squeezed long titles like 'Byron Donalds' down to
+                'Byron …'. */}
             <div
               style={{
-                display: 'flex', alignItems: 'center', gap: '14px',
+                display: 'flex',
+                flexDirection: isCompact ? 'column' : 'row',
+                alignItems: isCompact ? 'stretch' : 'center',
+                gap: '14px',
                 padding: '18px',
                 background: 'white',
                 border: '1px solid var(--cl-border)',
@@ -490,6 +503,10 @@ export default function PageView({
                 marginBottom: '16px',
               }}
             >
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '14px',
+                minWidth: 0, flex: isCompact ? '0 0 auto' : 1,
+              }}>
               {photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -547,6 +564,7 @@ export default function PageView({
                   )}
                 </div>
               </div>
+              </div>{/* /photo + info row */}
               {!claimed && (
                 <button
                   type="button"
@@ -555,6 +573,11 @@ export default function PageView({
                     padding: '8px 14px', borderRadius: '8px',
                     border: '1px solid var(--cl-accent)', background: 'var(--cl-accent)',
                     color: 'white', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
+                    /* Full-width below the info row on mobile; auto
+                       width inline to the right of the info row on
+                       desktop (default flex-item sizing). */
+                    width: isCompact ? '100%' : 'auto',
+                    flexShrink: 0,
                   }}
                 >
                   Claim this page

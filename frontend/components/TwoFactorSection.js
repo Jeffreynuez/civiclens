@@ -105,6 +105,14 @@ export default function TwoFactorSection({ onClose }) {
   const [statusLoading, setStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState(null);
 
+  // Collapsible card — collapsed by default to keep the Dashboard tab
+  // visually quiet on first paint. Header (eyebrow + title + badge)
+  // stays visible at all times; expanding reveals the subtitle copy +
+  // status panel + all enrollment / disable / regenerate flows. Any
+  // active flow (mode !== IDLE) forces the card open so the user
+  // can finish what they started even if they previously collapsed.
+  const [collapsed, setCollapsed] = useState(true);
+
   // Flow-local state. Cleared whenever mode flips back to IDLE.
   const [mode, setMode] = useState(MODE_IDLE);
   const [pendingSecret, setPendingSecret] = useState(null);     // base32 string
@@ -326,15 +334,57 @@ export default function TwoFactorSection({ onClose }) {
     );
   }
 
+  // An in-flight flow forces the card open so the user can complete
+  // it (collapsing mid-enrollment would be confusing and orphan the
+  // pending_token TTL on the backend).
+  const expanded = !collapsed || mode !== MODE_IDLE;
+
   return (
     <div style={STYLES.card}>
-      <div style={STYLES.eyebrow}>Account security</div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-        <h2 style={{ ...STYLES.title, margin: 0 }}>Two-factor authentication</h2>
-        <span style={STYLES.badge(status?.enabled ? 'green' : 'red')}>
-          {status?.enabled ? 'Enabled' : 'Disabled'}
-        </span>
-      </div>
+      {/* Clickable header — toggles collapse. The whole row is the
+          hit target (eyebrow + title + badge + chevron) so the user
+          can tap anywhere in the header to expand on mobile without
+          having to hit a small chevron. */}
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        aria-expanded={expanded}
+        aria-controls="two-factor-body"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          width: '100%', padding: 0, background: 'transparent',
+          border: 'none', cursor: 'pointer', textAlign: 'left',
+          fontFamily: 'inherit', color: 'inherit',
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={STYLES.eyebrow}>Account security</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <h2 style={{ ...STYLES.title, margin: 0 }}>Two-factor authentication</h2>
+            <span style={STYLES.badge(status?.enabled ? 'green' : 'red')}>
+              {status?.enabled ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+        </div>
+        <svg
+          width="20" height="20" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" strokeWidth="2.4"
+          strokeLinecap="round" strokeLinejoin="round"
+          aria-hidden="true"
+          style={{
+            color: 'var(--cl-text-light)',
+            transition: 'transform 0.15s ease',
+            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            flexShrink: 0,
+          }}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {!expanded && null}
+      {expanded && (
+      <div id="two-factor-body" style={{ marginTop: 14 }}>
       <p style={STYLES.subtitle}>
         Adds a 6-digit code from an authenticator app (Google Authenticator,
         Authy, 1Password, Microsoft Authenticator) on top of your password.
@@ -422,6 +472,8 @@ export default function TwoFactorSection({ onClose }) {
           onDone={cancelFlow}
         />
       )}
+      </div>
+      )}{/* /expanded */}
     </div>
   );
 }
