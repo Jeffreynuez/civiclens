@@ -30,6 +30,13 @@ class MeResponse(BaseModel):
     display_name: str
     role: Optional[str] = None
     is_active: bool
+    # 2FA Phase 4 — true when FORCE_2FA_ENABLED is set, this account
+    # has no totp_enabled_at, AND the account kind is in the enforced
+    # set (rep / candidate / admin — citizens stay opt-in). The
+    # frontend uses this flag to render a full-screen enrollment
+    # overlay that blocks all other interaction until the user
+    # finishes 2FA setup.
+    needs_2fa_enrollment: bool = False
 
 
 class LoginResponse(BaseModel):
@@ -488,6 +495,11 @@ class CitizenMeResponse(BaseModel):
     zip_code: Optional[str] = None
     congressional_district: Optional[str] = None
     verified: bool = False
+    # 2FA Phase 4 — citizens are opt-in for 2FA, so this is always
+    # False. Field kept for shape symmetry with the rep / candidate
+    # /me responses so a generic identity-aware client can read it
+    # uniformly.
+    needs_2fa_enrollment: bool = False
 
 
 class CitizenLoginResponse(BaseModel):
@@ -530,6 +542,12 @@ class CandidateMeResponse(BaseModel):
     owner_district: Optional[str] = None
     owner_city: Optional[str] = None
     claim_status: str = "active"
+    # 2FA Phase 4 — see MeResponse for the field-level docs. Candidates
+    # are in the enforced set alongside reps + admins; a campaign-page
+    # owner's posting and engagement reach is the same as a sitting
+    # rep's, so the credential-theft blast radius warrants the same
+    # second factor.
+    needs_2fa_enrollment: bool = False
 
 
 class CandidateLoginResponse(BaseModel):

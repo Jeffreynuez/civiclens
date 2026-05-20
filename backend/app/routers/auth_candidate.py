@@ -153,4 +153,10 @@ def me(candidate: CandidateAccount = Depends(get_current_candidate)):
     get_current_candidate also 401s suspended and pending-claim
     accounts (treating them as not-signed-in), so /me only ever
     returns an active candidate."""
-    return CandidateMeResponse.model_validate(candidate)
+    from app.services.totp_enforcement import requires_2fa_enrollment
+    out = CandidateMeResponse.model_validate(candidate)
+    # 2FA Phase 4 — matches the rep path. Candidates post under a
+    # verified-by-page-claim identity so the credential-theft blast
+    # radius warrants the same second factor.
+    out.needs_2fa_enrollment = requires_2fa_enrollment("candidate", candidate)
+    return out

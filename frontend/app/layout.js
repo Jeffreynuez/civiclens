@@ -3,6 +3,7 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 import './globals.css';
+import Force2FAGate from '@/components/Force2FAGate';
 
 export const metadata = {
   title: 'CivicView - Know Your Representatives',
@@ -75,7 +76,17 @@ export default function RootLayout({ children }) {
         className="cl-h-screen-visible flex flex-col"
         style={{ overflowX: 'hidden' }}
       >
-        {children}
+        {/* Force2FAGate (2FA Phase 4) — wraps every route so the
+            enforcement overlay can mount above any page when an
+            active rep / candidate / admin session carries
+            needs_2fa_enrollment=true. Citizens are never enforced
+            (their /me always returns False for the flag). Gated by
+            the FORCE_2FA_ENABLED env var on the backend; this
+            component renders the overlay if and only if the backend
+            opts the user in. */}
+        <Force2FAGate>
+          {children}
+        </Force2FAGate>
       </body>
     </html>
   );

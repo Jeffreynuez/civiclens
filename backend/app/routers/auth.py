@@ -125,4 +125,11 @@ def logout(response: Response):
 @router.get("/me", response_model=MeResponse)
 def me(rep: RepAccount = Depends(get_current_rep)):
     """Return the currently-logged-in rep, or 401 if no valid session."""
-    return MeResponse.model_validate(rep)
+    from app.services.totp_enforcement import requires_2fa_enrollment
+    out = MeResponse.model_validate(rep)
+    # 2FA Phase 4 — set the enforcement flag so the frontend can render
+    # the full-screen enrollment overlay before letting the rep reach
+    # their dashboard. Gated by FORCE_2FA_ENABLED + lack of
+    # totp_enabled_at; see services/totp_enforcement.py for the rules.
+    out.needs_2fa_enrollment = requires_2fa_enrollment("rep", rep)
+    return out

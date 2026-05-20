@@ -66,6 +66,18 @@ export async function hydrateCandidateAuth() {
   return result;
 }
 
+/**
+ * Force-refresh — bypass the `loaded` short-circuit so the next /me
+ * call actually hits the backend. Used by Force2FAGate after a
+ * candidate completes 2FA enrollment so needs_2fa_enrollment flips
+ * to false and the overlay drops.
+ */
+export async function refreshCandidateAuth() {
+  loaded = false;
+  hydratePromise = null;
+  return hydrateCandidateAuth();
+}
+
 export async function loginCandidate(email, password) {
   const { data, error, status } = await loginCandidateApi(email, password);
   // 2FA-required branch (Task #62 Phase 3). See lib/auth.js for

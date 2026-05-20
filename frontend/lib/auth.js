@@ -56,6 +56,18 @@ export async function hydrateAuth() {
   return result;
 }
 
+/**
+ * Force-refresh the cached /me — bypasses the `loaded` short-circuit
+ * in hydrateAuth(). Used by 2FA Phase 4's Force2FAGate after enrollment
+ * completes, so `needs_2fa_enrollment` flips from true → false on the
+ * next render. Returns the fresh me (or null on 401).
+ */
+export async function refreshAuth() {
+  loaded = false;
+  hydratePromise = null;
+  return hydrateAuth();
+}
+
 export async function loginRep(email, password) {
   const { data, error, status } = await apiLogin(email, password);
   // 2FA-required branch (Task #62 Phase 3). Backend returned a

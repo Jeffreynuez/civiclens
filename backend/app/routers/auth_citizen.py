@@ -354,4 +354,8 @@ def logout(response: Response):
 
 @router.get("/me", response_model=CitizenMeResponse)
 def me(citizen: CitizenAccount = Depends(get_current_citizen)):
+    # 2FA Phase 4 — citizens are NOT in the enforced set so
+    # needs_2fa_enrollment is always False on this path. The field
+    # exists on CitizenMeResponse only for shape symmetry with the
+    # rep / candidate /me responses.
     return CitizenMeResponse.model_validate(citizen)
