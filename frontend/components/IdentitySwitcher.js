@@ -213,77 +213,56 @@ export default function IdentitySwitcher({
           role="menu"
           style={{
             position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-            minWidth: 260, background: 'white',
+            // Minimal width — just enough for the compact row (avatar
+            // + Open + ×). Down from minWidth:260 because the rows
+            // now skip the kind badge + name + sublabel.
+            minWidth: 160,
+            // Hard safety against any future row content pushing the
+            // dropdown past the right-aligned viewport edge on phones.
+            maxWidth: 'calc(100vw - 16px)',
+            background: 'white',
             border: '1px solid var(--cl-border)', borderRadius: 10,
             boxShadow: '0 12px 36px rgba(0,0,0,0.18)',
             padding: 6, zIndex: 80,
           }}
         >
+          {/* Compact row design — colour uniquely identifies the
+              identity type (citizen slate, rep navy, candidate purple)
+              and since only ONE of each type can be signed in at a
+              time, the colour + first letter pair uniquely tags every
+              row. Title tooltip on the avatar carries the full name
+              + type for desktop hover + screen readers. */}
           {entries.map((e, idx) => {
             const c = COLORS[e.kind].onLight;
+            const tooltip = `${KIND_LABEL[e.kind]} — ${e.label}${e.sublabel ? ' · ' + e.sublabel : ''}`;
             return (
               <div
                 key={e.kind}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 10px',
+                  padding: '6px 8px',
                   borderBottom: idx < entries.length - 1 ? '1px solid var(--cl-border)' : 'none',
                 }}
               >
-                <span style={{
-                  width: 32, height: 32, borderRadius: 999,
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
-                  fontSize: '0.85rem', fontWeight: 800, flexShrink: 0,
-                }}>
+                <span
+                  title={tooltip}
+                  aria-label={tooltip}
+                  style={{
+                    width: 32, height: 32, borderRadius: 999,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
+                    fontSize: '0.9rem', fontWeight: 800, flexShrink: 0,
+                  }}
+                >
                   {(e.label || '?').trim().charAt(0).toUpperCase()}
                 </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: '0.78rem', fontWeight: 700, color: 'var(--cl-text)',
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    /* The outer overflow:hidden + the name span's
-                       flex:1 / min-width:0 below are what actually
-                       engage ellipsis truncation. Flex children
-                       default to min-width:auto which prevents
-                       shrinking; the explicit min-width:0 lets the
-                       name span shrink and clip with the ellipsis
-                       glyph instead of overflowing the dropdown. */
-                    overflow: 'hidden',
-                  }}>
-                    <span style={{
-                      flexShrink: 0,
-                      fontSize: '0.6rem', fontWeight: 800,
-                      padding: '1px 5px', borderRadius: 9,
-                      background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
-                      letterSpacing: '0.04em', textTransform: 'uppercase',
-                    }}>
-                      {KIND_LABEL[e.kind]}
-                    </span>
-                    <span style={{
-                      // flex:1 + min-width:0 is the standard CSS recipe
-                      // for ellipsis on flex children — without these
-                      // the name span tries to expand to its content
-                      // width and overflows the dropdown on long names.
-                      flex: 1, minWidth: 0,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {e.label}
-                    </span>
-                  </div>
-                  {e.sublabel && (
-                    <div style={{
-                      fontSize: '0.72rem', color: 'var(--cl-text-light)',
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {e.sublabel}
-                    </div>
-                  )}
-                </div>
+                {/* Spacer keeps Open + × pushed to the right edge
+                    without depending on a name column for that space. */}
+                <span style={{ flex: 1, minWidth: 0 }} aria-hidden="true" />
                 <button
                   type="button"
                   onClick={() => openDashboardFor(e)}
-                  title="Open this dashboard"
+                  title={`Open ${KIND_LABEL[e.kind].toLowerCase()} dashboard — ${e.label}`}
                   style={{
                     padding: '6px 10px', background: 'var(--cl-bg)',
                     color: 'var(--cl-text)', border: '1px solid var(--cl-border)',
@@ -296,14 +275,15 @@ export default function IdentitySwitcher({
                 <button
                   type="button"
                   onClick={() => logoutFor(e)}
-                  title={`Sign out (${KIND_LABEL[e.kind].toLowerCase()})`}
+                  title={`Sign out (${KIND_LABEL[e.kind].toLowerCase()}) — ${e.label}`}
                   style={{
                     padding: '6px 8px', background: 'white',
                     color: 'var(--cl-text-light)', border: '1px solid var(--cl-border)',
                     borderRadius: 6, cursor: 'pointer',
-                    fontSize: '0.72rem', fontWeight: 600, flexShrink: 0,
+                    fontSize: '0.85rem', fontWeight: 700, flexShrink: 0,
+                    lineHeight: 1, minWidth: 28,
                   }}
-                  aria-label={`Sign out ${KIND_LABEL[e.kind]}`}
+                  aria-label={`Sign out ${KIND_LABEL[e.kind]} — ${e.label}`}
                 >
                   ×
                 </button>
