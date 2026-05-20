@@ -31,7 +31,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -1936,13 +1936,10 @@ _ALLOWED_IMAGE_TYPES = {
     "image/webp": "webp",
 }
 _MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB per image
-_UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads" / "posts"
-
-
-def _ensure_uploads_dir() -> Path:
-    """Create the uploads directory the first time an image lands."""
-    _UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    return _UPLOADS_DIR
+# Storage backend is picked by the get_storage() factory based on env
+# vars — R2 in prod (durable), LocalDisk in dev (ephemeral on Render
+# but fine for sandbox testing). See app/services/image_storage.py
+# for the full env var docs.
 
 
 @router.post("/images/upload", response_model=PostImageRead)
@@ -1994,11 +1991,14 @@ async def upload_post_image(
 
     ext = _ALLOWED_IMAGE_TYPES[ct]
     fname = f"{uuid.uuid4().hex}.{ext}"
-    target = _ensure_uploads_dir() / fname
+    # Storage backend is the factory's choice — R2 in prod, LocalDisk
+    # in dev. Either way the row stores just the filename; the storage
+    # layer knows how to resolve it back to bytes / URL later.
+    from app.services.image_storage import get_storage
     try:
-        target.write_bytes(data)
-    except OSError as e:
-        logger.exception("Failed to write uploaded image to disk")
+        get_storage().write(fname, data, ct)
+    except Exception as e:
+        logger.exception("Failed to write uploaded image via storage backend")
         raise HTTPException(status_code=500, detail="Could not save image.") from e
 
     img = PostImage(
@@ -2022,16 +2022,39 @@ async def upload_post_image(
 
 @router.get("/images/{image_id}")
 def get_post_image(image_id: int, db: Session = Depends(get_db)):
-    """Stream an uploaded image's bytes. Public — once a post is
+    """Resolve an uploaded image by id. Public — once a post is
     published anyone viewing the page should see its images. Orphan
-    images (still unclaimed by a post) are also fetchable by id, which
-    lets the composer render thumbnails straight after upload."""
+    images (still unclaimed by a post) are also fetchable by id so
+    the composer can render thumbnails straight after upload.
+
+    Two response paths depending on the storage backend:
+      • LocalDisk → FileResponse streams the bytes through the
+        backend (fine in dev, eats Render bandwidth in prod).
+      • R2 → 302 RedirectResponse to a presigned R2 URL (or a
+        direct public URL if R2_PUBLIC_BASE_URL is set). Browser
+        fetches from R2 directly — no backend bandwidth used.
+
+    The router doesn't need to know which backend is active; the
+    storage layer's url() vs path() return values are the signal.
+    """
     img = db.get(PostImage, image_id)
     if img is None:
         raise HTTPException(status_code=404, detail="Image not found")
-    fpath = _UPLOADS_DIR / img.filename
-    if not fpath.exists():
-        raise HTTPException(status_code=404, detail="Image file missing on disk")
+
+    from app.services.image_storage import get_storage
+    storage = get_storage()
+
+    # Prefer a URL (R2 path) — single 302 redirect, no backend bytes.
+    url = storage.url(img.filename, img.content_type)
+    if url:
+        return RedirectResponse(url, status_code=302)
+
+    # Fall through to local-file path. None means the backend doesn't
+    # store on local disk either (shouldn't happen with current
+    # implementations) — return 404 in that case.
+    fpath = storage.path(img.filename)
+    if fpath is None or not fpath.exists():
+        raise HTTPException(status_code=404, detail="Image file missing")
     return FileResponse(fpath, media_type=img.content_type)
 
 

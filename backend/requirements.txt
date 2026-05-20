@@ -42,3 +42,12 @@ anthropic>=0.40,<1
 # bcrypt-hashed (no new dep — bcrypt already above for passwords).
 pyotp>=2.9,<3
 cryptography>=43,<46
+
+# Task #83 — Cloudflare R2 object storage for post images (replaces
+# the ephemeral local disk path on Render). boto3 talks to R2 via
+# R2's S3-compatible API; the storage abstraction in
+# services/image_storage.py imports it lazily, so dev environments
+# without R2 credentials don't crash on missing creds — they fall
+# back to LocalDiskStorage. Floor 1.34 is the first release with
+# native support for the SigV4 auth R2 expects.
+boto3>=1.34,<2
