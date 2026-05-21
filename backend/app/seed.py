@@ -353,6 +353,79 @@ def seed_demo_citizens(db: Optional[Session] = None) -> int:
     return created
 
 
+# ── Demo subscription backfill (Task #88 hotfix) ─────────────────────
+# Demo citizens created BEFORE the is_subscribed column existed have
+# is_subscribed=false (auto-migrate's default backfill). Real billing
+# isn't live yet, so the intent is for every demo account to have the
+# same "full engagement features" grant the post-Task-#88 demo signups
+# get. This pass flips the flag for existing demo rows so a citizen
+# who created an account two days ago has the same experience as one
+# who signs up today.
+#
+# Scope is narrow on purpose: only rows whose email ends with
+# "@demo-citizens.civicview.app" (the synthetic domain the demo-signup
+# endpoint mints) AND whose stripe_subscription_id is NULL (so we
+# never overwrite a real paid subscription if one ever lands on that
+# domain). The is_subscribed flip is also gated on "not already True"
+# so the function is a true no-op on stable state — safe to call
+# every boot.
+#
+# REMOVE this function once real Stripe billing goes live + the
+# demo-grant in auth_citizen.demo_signup is removed.
+def backfill_demo_citizen_subscriptions(db: Optional[Session] = None) -> int:
+    """Flip is_subscribed=True + subscription_status='demo' on any
+    existing demo citizen rows that don't yet have the grant.
+    Returns the number of rows updated."""
+    from app.models.pages import CitizenAccount
+
+    owns_session = db is None
+    db = db or SessionLocal()
+    try:
+        # Pre-filter in SQL so we don't pull every demo row into Python
+        # memory. The trailing-LIKE on the synthetic domain is the
+        # narrowest filter we can write without parsing emails.
+        rows = (
+            db.query(CitizenAccount)
+            .filter(
+                CitizenAccount.email.like("%@demo-citizens.civicview.app"),
+                CitizenAccount.stripe_subscription_id.is_(None),
+            )
+            .filter(
+                # OR — touch any row that doesn't already have the
+                # demo-grant state, so a partial backfill resumes
+                # cleanly if a previous boot got interrupted mid-pass.
+                (CitizenAccount.is_subscribed.is_(False))
+                | (CitizenAccount.subscription_status != "demo"),
+            )
+            .all()
+        )
+        if not rows:
+            logger.info(
+                "Demo subscription backfill: no existing rows need updating.",
+            )
+            return 0
+        for row in rows:
+            row.is_subscribed = True
+            row.subscription_status = "demo"
+        db.commit()
+        logger.info(
+            "Demo subscription backfill: flipped is_subscribed=True + "
+            "subscription_status='demo' on %d existing demo citizen row(s).",
+            len(rows),
+        )
+        return len(rows)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Demo subscription backfill failed — rolled back. Non-fatal; "
+            "next boot will retry.",
+        )
+        return 0
+    finally:
+        if owns_session:
+            db.close()
+
+
 # ── Candidate seed ────────────────────────────────────────────────────
 def _load_candidate_seed_payload() -> Optional[Dict[str, Any]]:
     """Parallel to _load_seed_payload but for the candidate-accounts seed.

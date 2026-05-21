@@ -39,6 +39,7 @@ from app.routers import (
 )
 from app.db import init_db
 from app.seed import (
+    backfill_demo_citizen_subscriptions,
     maybe_run_fresh_start_wipe,
     seed_bill_summaries,
     seed_demo_accounts,
@@ -67,6 +68,13 @@ async def lifespan(app: FastAPI):
         seed_demo_accounts()
         seed_demo_citizens()
         seed_demo_candidates()
+        # Task #88 hotfix — flip is_subscribed=True + status='demo' on
+        # any existing demo-citizen row that pre-dates the
+        # subscription columns. New signups already get the grant at
+        # creation time (auth_citizen.demo_signup); this catches the
+        # rows the auto-migrate backfilled with False. Idempotent —
+        # only touches rows that still need updating.
+        backfill_demo_citizen_subscriptions()
         # Pre-fetched CRS bill summaries — populates the bill_summaries
         # cache so the rep-profile Bills tab gets instant Summary
         # expansions on day one without Congress.gov round-trips.
