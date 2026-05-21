@@ -28,6 +28,7 @@ from sqlalchemy import (
     String, Integer, DateTime, ForeignKey, Boolean, Text, Index,
     func,
 )
+from sqlalchemy.sql import expression as sa_expression
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -1030,7 +1031,19 @@ class CitizenAccount(Base):
     #   • Demo citizen signup (temporary; remove the demo-grant once
     #     real billing goes live).
     # Set to False when a webhook reports a non-active status.
-    is_subscribed: Mapped[bool] = mapped_column(Boolean, default=False)
+    #
+    # Uses server_default=expression.false() (not the Python-side
+    # default=False alone) so the auto-migrate's ALTER TABLE ADD
+    # COLUMN renders a dialect-correct DEFAULT clause. Postgres
+    # rejects `DEFAULT 0` on a BOOLEAN column (literal int won't
+    # cast); SQLite accepts both. The sa_expression.false() helper
+    # compiles to `false` on Postgres and `0` on SQLite.
+    is_subscribed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=sa_expression.false(),
+        nullable=False,
+    )
 
     @property
     def has_billing_account(self) -> bool:

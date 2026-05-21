@@ -28,6 +28,7 @@ from typing import Generator, Optional
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from sqlalchemy.sql.elements import ClauseElement
+from sqlalchemy.sql.expression import false as sa_false, true as sa_true
 
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -146,6 +147,28 @@ def _render_server_default(col) -> Optional[str]:
     if col.default is not None and getattr(col.default, "is_scalar", False):
         val = col.default.arg
         if isinstance(val, bool):
+            # Dialect-aware boolean literal. Postgres' BOOLEAN type
+            # rejects `DEFAULT 0` / `DEFAULT 1` as a syntax error in
+            # ALTER TABLE ADD COLUMN — it wants `false` / `true`.
+            # SQLite stores Boolean as INTEGER under the hood so both
+            # forms work there, but to keep the rendering uniform we
+            # use the SQLAlchemy `false()` / `true()` expressions
+            # which compile correctly for every backend.
+            try:
+                expr = sa_true() if val else sa_false()
+                compiled = str(expr.compile(
+                    dialect=engine.dialect,
+                    compile_kwargs={"literal_binds": True},
+                ))
+                stripped = compiled.strip()
+                if stripped:
+                    return stripped
+            except Exception:
+                logger.warning(
+                    "Auto-migrate: dialect-aware boolean default rendering "
+                    "failed for column %r; falling back to legacy 0/1.",
+                    getattr(col, "name", "?"),
+                )
             return "1" if val else "0"
         if isinstance(val, (int, float)):
             return str(val)
@@ -374,8 +397,24 @@ def _auto_migrate_new_columns() -> None:
 
             ddl = f'ALTER TABLE "{table.name}" ADD COLUMN ' + " ".join(parts)
             logger.info("Auto-migrate: %s", ddl)
-            with engine.begin() as conn:
-                conn.execute(text(ddl))
+            # Per-column try/except so a single failed ADD doesn't
+            # abort the rest of the migration. Before this guard, a
+            # bad DEFAULT clause on column N would leak the exception
+            # to the caller (main.py's lifespan) and silently skip
+            # columns N+1..end — leaving the schema in a partial
+            # state that broke every query touching the table.
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
+            except Exception:
+                logger.exception(
+                    "Auto-migrate: ADD COLUMN failed for %s.%s — continuing "
+                    "with the rest of the migration. Inspect the model "
+                    "column type/default and fix; subsequent boots will "
+                    "retry this column.",
+                    table.name, col.name,
+                )
+                continue
 
 
 def _auto_migrate_nullability_changes() -> None:
