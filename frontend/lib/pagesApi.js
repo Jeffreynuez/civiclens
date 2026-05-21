@@ -829,3 +829,40 @@ export async function confirmPasswordReset({ identityKind, token, newPassword } 
     body: { token, new_password: newPassword },
   });
 }
+
+// ── Billing / subscription (Task #88) ────────────────────────────────
+// Stripe Checkout + Customer Portal wrappers. Only citizens subscribe
+// in the current product — these endpoints sit behind the citizen
+// auth dep on the backend, so they 401 if no citizen session is
+// active.
+//
+// Usage pattern:
+//   const { data, error } = await startCheckoutSession();
+//   if (error) return showError(error);
+//   if (!data.configured) return showComingSoonMessage();
+//   window.location.assign(data.url);
+//
+// The `configured` flag distinguishes "real Stripe" from "dev
+// backend placeholder" — when it's false the URL is an `about:blank`
+// placeholder and the frontend should render "billing isn't
+// activated yet" instead of redirecting.
+export async function fetchBillingStatus() {
+  return request('/api/billing/status');
+}
+
+export async function startCheckoutSession({ successUrl, cancelUrl } = {}) {
+  return request('/api/billing/checkout-session', {
+    method: 'POST',
+    body: {
+      success_url: successUrl || null,
+      cancel_url: cancelUrl || null,
+    },
+  });
+}
+
+export async function startPortalSession({ returnUrl } = {}) {
+  return request('/api/billing/portal-session', {
+    method: 'POST',
+    body: { return_url: returnUrl || null },
+  });
+}

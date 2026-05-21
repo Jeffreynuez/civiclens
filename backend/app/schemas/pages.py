@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 # ── Auth ──────────────────────────────────────────────────────────────
@@ -574,6 +574,33 @@ class CitizenMeResponse(BaseModel):
     # Self-serve account deletion (Task #81) — see MeResponse docs.
     self_deleted_at: Optional[datetime] = None
     purge_after: Optional[datetime] = None
+    # Subscription (Task #88). Only citizens carry these — reps +
+    # candidates remain free in the current product. The frontend
+    # reads is_subscribed to gate premium features (creating polls,
+    # commenting). The rest are surfaced in the Account → Billing
+    # tab so the user can see when the next renewal hits and what
+    # state Stripe thinks they're in. Demo citizens have
+    # is_subscribed=True with stripe_subscription_id=None — the
+    # presence of the Stripe id distinguishes "real paid" from
+    # "demo grant" when we audit later.
+    is_subscribed: bool = False
+    subscription_status: Optional[str] = None
+    current_period_end: Optional[datetime] = None
+    # Boolean derived from stripe_customer_id so the UI can show
+    # "Manage billing" only when the Customer Portal has something
+    # to manage. Stripped of the actual ID (no need to leak it to
+    # the client).
+    has_billing_account: bool = False
+
+    @field_validator("is_subscribed", "has_billing_account", mode="before")
+    @classmethod
+    def _none_to_false(cls, v):
+        """Defensive: ORM rows from before the subscription columns
+        existed (and unsaved in-memory CitizenAccount instances)
+        may surface None for these boolean fields. Coerce to False
+        so the response shape stays valid + the frontend can rely
+        on these being booleans without extra null checks."""
+        return False if v is None else v
 
 
 class CitizenLoginResponse(BaseModel):

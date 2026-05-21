@@ -328,6 +328,17 @@ def demo_signup(
         congressional_district=district,
         verified=False,  # Always false for demo. ID.me flips this in v2.
         is_active=True,
+        # ── Temporary demo-grant for subscription (Task #88) ──
+        # Real billing isn't live yet (Stripe + ID.me both pending).
+        # Demo citizens get is_subscribed=True so the engagement
+        # features (creating polls on poll page / unclaimed pages,
+        # commenting on posts + polls) work end-to-end during
+        # preview. stripe_subscription_id stays NULL, which
+        # distinguishes these rows from real paid subscribers when
+        # we cut over post-launch. REMOVE THIS LINE once real
+        # billing goes live.
+        is_subscribed=True,
+        subscription_status="demo",
     )
     db.add(citizen)
     db.commit()

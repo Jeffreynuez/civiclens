@@ -987,6 +987,59 @@ class CitizenAccount(Base):
     self_deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
     purge_after: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
 
+    # ── Subscription (Task #88) ─────────────────────────────────────
+    # Only citizens subscribe ($5/mo consumer tier). Reps + candidates
+    # remain free. These columns hold the link between this account
+    # and the Stripe Customer + Subscription objects so we can:
+    #   • render account state ("Renewing on 2026-06-21" / "Past due")
+    #   • route the user into the Stripe Customer Portal for cancel/
+    #     update-payment without a custom UI
+    #   • idempotently process the same webhook event twice (look up
+    #     by stripe_subscription_id, no-op if already applied)
+    #
+    # is_subscribed is the BOOLEAN GATE the rest of the app reads.
+    # It's derived from the Stripe state (status in {active, trialing})
+    # but cached on the row so feature checks are a single column
+    # read with no join.
+    #
+    # While ID.me + real account creation aren't live yet, demo
+    # citizens get is_subscribed=True at signup time so engagement
+    # features work end-to-end. The stripe_subscription_id stays NULL
+    # for those rows, so an audit / cleanup script can later
+    # distinguish "real paid subscriber" from "demo grant".
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(
+        String(64), default=None, index=True,
+    )
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(
+        String(64), default=None, index=True,
+    )
+    # Mirrors Stripe's subscription status enum so we can show the
+    # exact label in the UI: 'active', 'trialing', 'past_due',
+    # 'canceled', 'incomplete', 'incomplete_expired', 'unpaid',
+    # 'paused'. Reflect Stripe values verbatim rather than collapsing
+    # into our own enum — saves a translation table when we read
+    # webhooks back.
+    subscription_status: Mapped[Optional[str]] = mapped_column(
+        String(32), default=None,
+    )
+    current_period_end: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, default=None,
+    )
+    # The cached gate. Set to True when:
+    #   • Stripe webhook reports status in {active, trialing}, OR
+    #   • Demo citizen signup (temporary; remove the demo-grant once
+    #     real billing goes live).
+    # Set to False when a webhook reports a non-active status.
+    is_subscribed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    @property
+    def has_billing_account(self) -> bool:
+        """Surfaced on CitizenMeResponse so the UI knows whether to
+        render 'Manage billing' (opens Stripe Customer Portal) or
+        'Subscribe' (opens Stripe Checkout). True iff there's a
+        Stripe Customer object backing this row."""
+        return self.stripe_customer_id is not None
+
 
 # ── Password reset tokens (Task #87) ─────────────────────────────────
 class PasswordResetToken(Base):

@@ -60,3 +60,12 @@ boto3>=1.34,<2
 # DevEmailService which logs to stdout. Floor 1.0 is the stable
 # release; ceiling at 2 catches breaking-API rewrites.
 postmarker>=1.0,<2
+
+# Task #88 — Stripe subscriptions ($5/mo citizen tier). Lazy-imported
+# inside StripeBillingService.__init__ so dev environments without
+# STRIPE_API_KEY don't crash on import — they fall back to
+# DevBillingService which simulates the checkout/webhook flow without
+# touching Stripe. Floor 7.0 is the first release with the stable
+# Customer Portal API surface; ceiling at 13 leaves room for the
+# in-progress 12.x line.
+stripe>=7.0,<13

@@ -35,6 +35,7 @@ from app.routers import (
     eos as eos_router,
     notifications as notifications_router,
     two_factor as two_factor_router,
+    billing as billing_router,
 )
 from app.db import init_db
 from app.seed import (
@@ -171,6 +172,11 @@ app.include_router(notifications_router.router, prefix="/api/notifications", tag
 # itself, so we mount it with no prefix. Same pattern the appeals
 # router uses with its admin-side endpoints.
 app.include_router(two_factor_router.router, tags=["2FA"])
+
+# Billing (Task #88) — Stripe Checkout + Customer Portal + webhook
+# under /api/billing/*. Webhook endpoint is unauthenticated by design
+# (Stripe authenticates itself via the Stripe-Signature header).
+app.include_router(billing_router.router, prefix="/api/billing", tags=["Billing"])
 
 
 @app.get("/")

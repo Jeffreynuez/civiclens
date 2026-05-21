@@ -25,6 +25,7 @@ import { fetchMyCitizenPolls, closeCitizenPoll, fetchMyHiddenContent } from '../
 import AppealModal from './AppealModal';
 import Navbar from './Navbar';
 import TwoFactorSection from './TwoFactorSection';
+import BillingSection from './BillingSection';
 
 /**
  * ConstituentDashboard — the personal civic command center for a verified
@@ -192,10 +193,13 @@ export default function ConstituentDashboard({
           dateLabel={dateLabel}
         />
 
-        {/* Mobile: TwoFactorSection sits between the greeting and the
-            grid (i.e. before MY REPRESENTATIVES) per design feedback.
-            Desktop renders it inside the right rail below. */}
+        {/* Mobile: TwoFactorSection + BillingSection sit between the
+            greeting and the grid (i.e. before MY REPRESENTATIVES) per
+            design feedback. Desktop renders both inside the right rail
+            below. BillingSection (Task #88) sits BELOW TwoFactor so the
+            security-first hierarchy stays intact. */}
         {isCompact && <TwoFactorSection />}
+        {isCompact && <BillingSection citizen={citizen} />}
 
         {/* Two-column layout: left = My Reps + Upcoming + Recent, right
             = TwoFactor + Ballot + Activity stats. Desktop keeps the
@@ -221,9 +225,12 @@ export default function ConstituentDashboard({
 
           {/* RIGHT RAIL — desktop only. TwoFactorSection sits at the
               top per design feedback ("to the right above the Your
-              activity stats section"). */}
+              activity stats section"). BillingSection (Task #88) sits
+              directly below it — same security/account-management
+              cluster, kept above the activity/quick-links readouts. */}
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {!isCompact && <TwoFactorSection />}
+            {!isCompact && <BillingSection citizen={citizen} />}
             {ballot && <YourBallotCard ballot={ballot} onView={ballot.onView || onNavigate.ballot} />}
             <YourActivityCard reps={reps} />
             <QuickLinksCard onNavigate={onNavigate} />

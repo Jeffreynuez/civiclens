@@ -1382,6 +1382,15 @@ export default function Home() {
               district: citizen.congressional_district,
               state: citizen.state,
               city: citizen.city,
+              // Subscription state (Task #88) — BillingSection in the
+              // dashboard reads these to pick the right render branch.
+              // Defaults match the backend's default for legacy
+              // sessions that haven't been refreshed since the
+              // schema add.
+              is_subscribed: !!citizen.is_subscribed,
+              subscription_status: citizen.subscription_status || null,
+              current_period_end: citizen.current_period_end || null,
+              has_billing_account: !!citizen.has_billing_account,
             }}
             onClose={() => setDashboardOpen(false)}
             onNavigate={{
