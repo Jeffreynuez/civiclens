@@ -366,9 +366,10 @@ categories:
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| 58 | Add financial-model link to help-build page | pending (deferred) | Surface the `docs/civicview_financial_model.xlsx` from /help-build so visitors can audit the math directly |
 | 84 | Wrap web app into iOS + Android native via Capacitor | pending | Apple Dev $99/yr + Google Play $25 one-time; ~2-4 weeks for first submission; revenue share considerations covered in financial model |
 | 90 | File Articles of Amendment for Benefit Corp status | pending | Sunbiz; waiting for initial Profit Corp filing (#800474911808) to process. Language is in `docs/civicview_benefit_corp_filing.pdf` |
+
+**Closed:** Task #58 (Add financial-model link to /help-build) — won't ship as a public link. The `docs/civicview_financial_model.xlsx` is already in the public GitHub repo for anyone who wants to audit the math; shared on request rather than surfaced as a download on the campaign or app surfaces.
 
 ---
 
@@ -532,7 +533,4 @@ CivicView is **proprietary software**. All source code, designs,
 content, and assets are © 2026 Jeffrey De La Nuez. All rights reserved.
 
 No part of this repository may be copied, modified, distributed, or
-otherwise used without the express written permission of the copyright
-holder. See [`LICENSE`](./LICENSE) for full terms.
-
-For licensing inquiries: jeffreynuez1@gmail.com
+otherwise used without the express written permissio

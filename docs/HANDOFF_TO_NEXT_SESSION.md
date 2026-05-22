@@ -65,10 +65,11 @@ read this file + the README + the financial model + the codebase as needed.
 >   to apply for the Relying Party contract, and that money comes from
 >   the GoFundMe. Until ID.me is funded, the demo grants stand in.
 >
-> **Open tasks** (#58 deferred, #84 + #90 pending):
-> - **#58** — Add a `docs/civicview_financial_model.xlsx` link to the
->   /help-build page so visitors can audit the math directly. Deferred,
->   not blocking.
+> **Open tasks** (#84 + #90 pending; #58 closed):
+> - **#58 — CLOSED.** Won't ship as a public link. The xlsx is already in
+>   the public GitHub repo at `docs/civicview_financial_model.xlsx`;
+>   shared on request rather than surfaced as a download on the campaign
+>   or app surfaces.
 > - **#84** — Wrap the web app into iOS + Android native via Capacitor.
 >   Apple Dev $99/yr + Google Play $25 one-time; ~2-4 weeks for first
 >   submission. Revenue-share math is already in the financial model
@@ -234,8 +235,8 @@ For the new session to come up to speed efficiently:
   R2 are all done. The work is in the dashboards (sign up, get keys, set
   env vars), not in code.
 - **Don't propose new features.** The project is feature-complete for
-  launch. Focus is on launch sequencing + the three pending tasks (#58,
-  #84, #90).
+  launch. Focus is on launch sequencing + the two remaining pending
+  tasks (#84, #90). Task #58 was closed — see the open-tasks list above.
 - **Don't strip credit.** The README's "Built by" section credits Claude
   Cowork + Claude Code + Claude Design alongside the founder. Keep that
   language in any future README updates.
@@ -262,5 +263,4 @@ For continuity of working style:
   Co-author trailer: `Co-Authored-By: Claude Opus 4.7 (1M context)
   <noreply@anthropic.com>`.
 - **The user wants honesty about uncertainty.** When something hinges
-  on third-party behavior (Stripe's exact pricing, ID.me's RP contract
-  terms), say so + flag it for verification rather than assuming.
+  on
