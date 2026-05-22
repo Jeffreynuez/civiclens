@@ -2,71 +2,64 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 /**
- * Tracked Officials Store
+ * Tracked Officials Store — server-backed, per-identity.
  *
- * Browser-only persistence for the user's followed representatives &
- * officials (Congress, federal exec/SCOTUS, state gov/cabinet/legislators/
- * judges, local mayors/council, etc.).
+ * Replaces the prior localStorage-singleton implementation (which
+ * survived logout/login). Mirrors trackedBills.js: in-memory cache,
+ * fire-and-forget mutations with optimistic UI, bootstrapped from
+ * /api/tracked on login via trackedSync.js.
  *
- * Mirrors trackedBills.js: localStorage + tiny pub/sub + cross-tab sync.
- *
- * Stored shape: { [key]: snapshot } where snapshot is:
- *   { key, id, bioguide_id, name, party, title, role, role_type,
- *     chamber, state, district, photoUrl,
- *     followed_at }
- *
- * Key format: bioguide_id if present, else the backend id (e.g. "fl-sen-1",
- * "us-pres-trump"). We lowercase for stability.
+ * Key format: bioguide_id when present, else the backend id
+ * (e.g. "fl-sen-1", "us-pres-trump"), lowercased.
  */
 import { useEffect, useState } from 'react';
 import { defaultPrefsFor, mergePrefs, PREF_TYPES } from './notificationPrefs';
+import {
+  postTrackOfficial as apiPostTrackOfficial,
+  deleteTrackedOfficial as apiDeleteTrackedOfficial,
+  patchTrackedOfficialPrefs as apiPatchTrackedOfficialPrefs,
+} from './pagesApi';
 
-const STORAGE_KEY = 'civiclens.trackedOfficials';
-
-/**
- * Map a member's role_type to the correct prefs schema key. Candidates use
- * the candidate schema; everyone else (Congress, state legislators, mayors,
- * judges, executive officials) uses the representative schema.
- */
 export function prefsTypeForMember(member) {
   return member && member.role_type === 'candidate'
     ? PREF_TYPES.candidate
     : PREF_TYPES.representative;
 }
 
+let cache = {};
 const listeners = new Set();
 function notify() {
   for (const fn of listeners) {
-    try { fn(); } catch (e) { /* swallow */ }
+    try { fn(); } catch (_) { /* swallow */ }
   }
 }
 
-function safeRead() {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch (e) {
-    console.warn('trackedOfficials: failed to read localStorage', e);
-    return {};
+export function _bootstrapOfficials(rows) {
+  cache = {};
+  if (!Array.isArray(rows)) {
+    notify();
+    return;
   }
+  for (const row of rows) {
+    if (!row || !row.official_key) continue;
+    const snap = (row.snapshot && typeof row.snapshot === 'object') ? row.snapshot : {};
+    cache[row.official_key] = {
+      key: row.official_key,
+      ...snap,
+      followed_at: row.followed_at || snap.followed_at || new Date().toISOString(),
+      prefs: (row.prefs && typeof row.prefs === 'object')
+        ? row.prefs
+        : defaultPrefsFor(prefsTypeForMember(snap)),
+    };
+  }
+  notify();
 }
 
-function safeWrite(map) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-  } catch (e) {
-    console.warn('trackedOfficials: failed to write localStorage', e);
-  }
+export function _clearOfficials() {
+  cache = {};
+  notify();
 }
 
-/**
- * Canonical key for a member/official. Prefers bioguide_id (Congress),
- * falls back to the backend id.
- */
 export function officialKey(member) {
   if (!member) return null;
   const raw = member.bioguide_id || member.id;
@@ -75,27 +68,22 @@ export function officialKey(member) {
 }
 
 export function getAllTrackedOfficials() {
-  return safeRead();
+  return cache;
 }
 
 export function isOfficialTracked(member) {
   const key = officialKey(member);
   if (!key) return false;
-  return Boolean(safeRead()[key]);
+  return Boolean(cache[key]);
 }
 
-/**
- * Persist a member snapshot. Pass the same shape you'd render in a card —
- * we only keep the identity + display fields, not live bills/votes.
- */
 export function trackOfficial(member) {
   const key = officialKey(member);
   if (!key) return;
-  const map = safeRead();
-  // Preserve existing prefs if this is a re-track (user toggled off then on)
-  const existing = map[key];
+  const existing = cache[key];
   const prefsType = prefsTypeForMember(member);
-  map[key] = {
+  const prefs = (existing && existing.prefs) || defaultPrefsFor(prefsType);
+  const snapshot = {
     key,
     id: member.id || null,
     bioguide_id: member.bioguide_id || null,
@@ -109,20 +97,20 @@ export function trackOfficial(member) {
     district: member.district || null,
     photoUrl: member.photoUrl || member.image || null,
     followed_at: new Date().toISOString(),
-    prefs: (existing && existing.prefs) || defaultPrefsFor(prefsType),
+    prefs,
   };
-  safeWrite(map);
+  cache[key] = snapshot;
   notify();
+  apiPostTrackOfficial({ official_key: key, snapshot, prefs }).catch(() => {});
 }
 
 export function untrackOfficial(member) {
   const key = officialKey(member);
   if (!key) return;
-  const map = safeRead();
-  if (key in map) {
-    delete map[key];
-    safeWrite(map);
+  if (key in cache) {
+    delete cache[key];
     notify();
+    apiDeleteTrackedOfficial(key).catch(() => {});
   }
 }
 
@@ -132,70 +120,40 @@ export function toggleOfficial(member) {
     : (trackOfficial(member), true);
 }
 
-/**
- * Return the merged notification prefs for a tracked member. Any new keys
- * introduced since this entry was first stored fill in from defaults.
- * Returns the full default prefs for the member's type if not tracked, so
- * UIs can still render the checkboxes.
- */
 export function getOfficialPrefs(member) {
   const key = officialKey(member);
   const type = prefsTypeForMember(member);
   if (!key) return defaultPrefsFor(type);
-  const entry = safeRead()[key];
+  const entry = cache[key];
   if (!entry) return defaultPrefsFor(type);
   return mergePrefs(type, entry.prefs || {});
 }
 
-/**
- * Patch one or more pref keys on the tracked entry. Silently no-ops if the
- * member isn't tracked yet (callers should track first). Returns the merged
- * prefs after the patch.
- */
 export function setOfficialPrefs(member, patch) {
   const key = officialKey(member);
   if (!key) return null;
-  const map = safeRead();
-  const entry = map[key];
+  const entry = cache[key];
   if (!entry) return null;
   const type = prefsTypeForMember(member);
   const merged = { ...mergePrefs(type, entry.prefs || {}), ...(patch || {}) };
-  map[key] = { ...entry, prefs: merged };
-  safeWrite(map);
+  cache[key] = { ...entry, prefs: merged };
   notify();
+  apiPatchTrackedOfficialPrefs(key, patch || {}).catch(() => {});
   return merged;
 }
 
-/**
- * React hook returning a live `{ map, list }` view of tracked officials.
- * `list` is sorted by followed_at desc (most recent first).
- */
 export function useTrackedOfficials() {
   const [tick, setTick] = useState(0);
-  // See useTrackedBills for the mounted-gate rationale — prevents SSR
-  // hydration mismatches when a navbar badge or list counts tracked items.
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     const fn = () => setTick((t) => t + 1);
     listeners.add(fn);
-
-    const onStorage = (e) => {
-      if (e.key === STORAGE_KEY) fn();
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('storage', onStorage);
-    }
-    return () => {
-      listeners.delete(fn);
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('storage', onStorage);
-      }
-    };
+    return () => { listeners.delete(fn); };
   }, []);
 
-  const map = mounted ? safeRead() : {};
+  const map = mounted ? cache : {};
   const list = Object.values(map).sort((a, b) => {
     const at = a.followed_at || '';
     const bt = b.followed_at || '';

@@ -2,53 +2,80 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 /**
- * Tracked Bills Store
+ * Tracked Bills Store — server-backed, per-identity.
  *
- * Browser-only persistence for the user's tracked bills.
- * Backed by localStorage; exposes a tiny pub/sub so any component using
- * useTrackedBills() stays in sync when another component mutates the list.
+ * Replaces the prior localStorage-singleton implementation (which
+ * survived logout/login and leaked one citizen's tracked bills into
+ * another's session). The cache now lives in module-level memory and
+ * gets bootstrapped from /api/tracked on login + cleared on logout
+ * via the helpers in trackedSync.js.
  *
- * Stored shape: { [key]: snapshot } where snapshot is:
- *   { key, congress, type, number, title, citation,
- *     latest_action, latest_action_date, introduced_date,
- *     policy_area, url,
- *     sponsor_bioguide, sponsor_name,
- *     tracked_at }
+ * Exported surface is unchanged so existing components keep working:
  *
- * Bill key format: "{congress}-{type}-{number}" (lowercased), e.g. "119-hr-1234".
+ *   billKey(congress, type, number)        canonical key
+ *   getAllTrackedBills()                    snapshot of the cache
+ *   isTracked(key)                          boolean
+ *   trackBill(snapshot)                     fire-and-forget; optimistic
+ *   untrackBill(key)                        fire-and-forget; optimistic
+ *   updateTrackedBill(key, patch)           patch snapshot + sync to server
+ *   getBillPrefs(key)                       merged prefs for a tracked bill
+ *   setBillPrefs(key, patch)                merge-patch; fire-and-forget
+ *   useTrackedBills()                       React hook { map, list, tick }
+ *
+ * Plus two internal helpers used by trackedSync.js:
+ *   _bootstrapBills(rows)                   replace the cache
+ *   _clearBills()                           empty the cache
+ *
+ * Cache shape is the same as the prior localStorage shape, so the
+ * existing call sites (TrackedBillsModal, ProfileView, MyTrackedModal,
+ * the navbar badge) don't need adjustments beyond the import surface.
+ *
+ * Bill key format: "{congress}-{type}-{number}" (lowercased),
+ * e.g. "119-hr-1234".
  */
 import { useEffect, useState } from 'react';
 import { defaultPrefsFor, mergePrefs, PREF_TYPES } from './notificationPrefs';
+import {
+  postTrackBill as apiPostTrackBill,
+  deleteTrackedBill as apiDeleteTrackedBill,
+  patchTrackedBillPrefs as apiPatchTrackedBillPrefs,
+} from './pagesApi';
 
-const STORAGE_KEY = 'civiclens.trackedBills';
-
+let cache = {};
 const listeners = new Set();
 function notify() {
   for (const fn of listeners) {
-    try { fn(); } catch (e) { /* swallow */ }
+    try { fn(); } catch (_) { /* swallow */ }
   }
 }
 
-function safeRead() {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch (e) {
-    console.warn('trackedBills: failed to read localStorage', e);
-    return {};
+// Internal — used by trackedSync.loadAllTracked() to seed the cache
+// from the server response on login.
+export function _bootstrapBills(rows) {
+  cache = {};
+  if (!Array.isArray(rows)) {
+    notify();
+    return;
   }
+  for (const row of rows) {
+    if (!row || !row.bill_key) continue;
+    const snap = (row.snapshot && typeof row.snapshot === 'object') ? row.snapshot : {};
+    cache[row.bill_key] = {
+      ...snap,
+      key: row.bill_key,
+      tracked_at: row.tracked_at || snap.tracked_at || new Date().toISOString(),
+      prefs: (row.prefs && typeof row.prefs === 'object')
+        ? row.prefs
+        : defaultPrefsFor(PREF_TYPES.bill),
+    };
+  }
+  notify();
 }
 
-function safeWrite(map) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-  } catch (e) {
-    console.warn('trackedBills: failed to write localStorage', e);
-  }
+// Internal — used by trackedSync.clearAllTracked() on logout.
+export function _clearBills() {
+  cache = {};
+  notify();
 }
 
 export function billKey(congress, type, number) {
@@ -57,117 +84,93 @@ export function billKey(congress, type, number) {
 }
 
 export function getAllTrackedBills() {
-  return safeRead();
+  return cache;
 }
 
 export function isTracked(key) {
   if (!key) return false;
-  return Boolean(safeRead()[key]);
+  return Boolean(cache[key]);
 }
 
 export function trackBill(snapshot) {
   if (!snapshot) return;
   const key = snapshot.key || billKey(snapshot.congress, snapshot.type, snapshot.number);
   if (!key) return;
-  const map = safeRead();
-  const existing = map[key];
-  map[key] = {
+  const existing = cache[key];
+  const prefs = (existing && existing.prefs) || defaultPrefsFor(PREF_TYPES.bill);
+  const next = {
     ...snapshot,
     key,
     tracked_at: snapshot.tracked_at || new Date().toISOString(),
-    // Preserve prefs on re-track; seed defaults on first track.
-    prefs: (existing && existing.prefs) || defaultPrefsFor(PREF_TYPES.bill),
+    prefs,
   };
-  safeWrite(map);
+  cache[key] = next;
   notify();
+  // Fire-and-forget — UI already optimistic.
+  apiPostTrackBill({ bill_key: key, snapshot: next, prefs }).catch(() => { /* swallow */ });
 }
 
 export function untrackBill(key) {
   if (!key) return;
-  const map = safeRead();
-  if (key in map) {
-    delete map[key];
-    safeWrite(map);
+  if (key in cache) {
+    delete cache[key];
     notify();
+    apiDeleteTrackedBill(key).catch(() => { /* swallow */ });
   }
 }
 
 export function updateTrackedBill(key, patch) {
   if (!key) return;
-  const map = safeRead();
-  if (!(key in map)) return;
-  map[key] = { ...map[key], ...patch };
-  safeWrite(map);
+  if (!(key in cache)) return;
+  const next = { ...cache[key], ...patch };
+  cache[key] = next;
   notify();
+  // Server doesn't expose an "update snapshot" endpoint distinct from
+  // POST — POST is idempotent and refreshes the snapshot in place, so
+  // we re-POST to keep the server in sync.
+  apiPostTrackBill({ bill_key: key, snapshot: next, prefs: next.prefs }).catch(() => {});
 }
 
-/**
- * Return the merged notification prefs for a tracked bill key. Falls back
- * to bill defaults if the bill isn't tracked, so UIs can still render the
- * checkboxes.
- */
 export function getBillPrefs(key) {
   if (!key) return defaultPrefsFor(PREF_TYPES.bill);
-  const entry = safeRead()[key];
+  const entry = cache[key];
   if (!entry) return defaultPrefsFor(PREF_TYPES.bill);
   return mergePrefs(PREF_TYPES.bill, entry.prefs || {});
 }
 
-/**
- * Patch one or more pref keys on the tracked bill entry. No-ops when the
- * bill isn't tracked. Returns the merged prefs after the patch.
- */
 export function setBillPrefs(key, patch) {
   if (!key) return null;
-  const map = safeRead();
-  const entry = map[key];
+  const entry = cache[key];
   if (!entry) return null;
   const merged = {
     ...mergePrefs(PREF_TYPES.bill, entry.prefs || {}),
     ...(patch || {}),
   };
-  map[key] = { ...entry, prefs: merged };
-  safeWrite(map);
+  cache[key] = { ...entry, prefs: merged };
   notify();
+  apiPatchTrackedBillPrefs(key, patch || {}).catch(() => { /* swallow */ });
   return merged;
 }
 
 /**
- * React hook returning a live `{ map, list }` view of tracked bills.
- *
- * `map`  — the underlying object keyed by bill key
- * `list` — array of snapshots sorted by tracked_at desc
+ * React hook returning a live `{ map, list, tick }` view of tracked
+ * bills. The `mounted` gate matches the prior implementation so any
+ * SSR'd component (navbar badge) keeps its hydration semantics — we
+ * stay empty until after the first client render, then surface the
+ * cache.
  */
 export function useTrackedBills() {
   const [tick, setTick] = useState(0);
-  // `mounted` stays false on the server and during the first client render
-  // so SSR output matches the first client render — only after hydration do
-  // we surface localStorage values. Prevents hydration mismatches on any
-  // UI that counts or lists tracked items (e.g. navbar badge).
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     const fn = () => setTick((t) => t + 1);
     listeners.add(fn);
-
-    // Sync across tabs
-    const onStorage = (e) => {
-      if (e.key === STORAGE_KEY) fn();
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('storage', onStorage);
-    }
-    return () => {
-      listeners.delete(fn);
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('storage', onStorage);
-      }
-    };
+    return () => { listeners.delete(fn); };
   }, []);
 
-  // Re-read on every tick, but stay empty until after hydration
-  const map = mounted ? safeRead() : {};
+  const map = mounted ? cache : {};
   const list = Object.values(map).sort((a, b) => {
     const at = a.tracked_at || '';
     const bt = b.tracked_at || '';

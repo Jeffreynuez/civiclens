@@ -897,3 +897,78 @@ class CitizenPollListMineResponse(BaseModel):
     """
     active: List[CitizenPollRead] = Field(default_factory=list)
     archived: List[CitizenPollRead] = Field(default_factory=list)
+
+
+# ── Tracked items (per-identity, server-side) ────────────────────────
+#
+# Wire format mirrors what the frontend store builds today — a tiny
+# snapshot of display fields + a free-form prefs dict. Snapshot is
+# kept as a dict in Python land (and stored as JSON text in the DB)
+# so callers don't have to maintain parallel column lists per type.
+#
+# Shapes are intentionally permissive: the frontend has already shipped
+# variants of these snapshots and we don't want a schema bump to break
+# in-flight UI. The router enforces just the must-haves (the key).
+
+
+class TrackedBillCreate(BaseModel):
+    """Body for POST /api/tracked/bills.
+
+    `bill_key` is the canonical "{congress}-{type}-{number}" string
+    the frontend constructs in trackedBills.js. The snapshot mirrors
+    the display fields rendered in the My Tracked list. Prefs are
+    optional on first track — the router seeds defaults from the
+    frontend schema if omitted.
+    """
+    bill_key: str = Field(..., min_length=1, max_length=64)
+    snapshot: dict = Field(default_factory=dict)
+    prefs: Optional[dict] = None
+
+
+class TrackedBillRead(BaseModel):
+    bill_key: str
+    snapshot: dict
+    prefs: dict
+    tracked_at: datetime
+
+
+class TrackedOfficialCreate(BaseModel):
+    official_key: str = Field(..., min_length=1, max_length=64)
+    snapshot: dict = Field(default_factory=dict)
+    prefs: Optional[dict] = None
+
+
+class TrackedOfficialRead(BaseModel):
+    official_key: str
+    snapshot: dict
+    prefs: dict
+    followed_at: datetime
+
+
+class TrackedElectionCreate(BaseModel):
+    election_key: str = Field(..., min_length=1, max_length=128)
+    snapshot: dict = Field(default_factory=dict)
+    prefs: Optional[dict] = None
+
+
+class TrackedElectionRead(BaseModel):
+    election_key: str
+    snapshot: dict
+    prefs: dict
+    tracked_at: datetime
+
+
+class TrackedPrefsPatch(BaseModel):
+    """Body for PATCH /api/tracked/<type>/<key>/prefs.
+    Permissive merge — any keys you pass overwrite, others stay.
+    """
+    prefs: dict = Field(default_factory=dict)
+
+
+class TrackedListResponse(BaseModel):
+    """Wrapper returned from GET /api/tracked. Lets the frontend
+    bootstrap all three lists in one round-trip on login.
+    """
+    bills: List[TrackedBillRead] = Field(default_factory=list)
+    officials: List[TrackedOfficialRead] = Field(default_factory=list)
+    elections: List[TrackedElectionRead] = Field(default_factory=list)

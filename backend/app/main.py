@@ -34,6 +34,7 @@ from app.routers import (
     votes as votes_router,
     eos as eos_router,
     notifications as notifications_router,
+    tracked as tracked_router,
     two_factor as two_factor_router,
     billing as billing_router,
     identity_verification as idme_router,
@@ -174,6 +175,10 @@ app.include_router(bills_router.router, prefix="/api/bills", tags=["Bills"])
 app.include_router(votes_router.router, prefix="/api/votes", tags=["Votes"])
 # Executive orders router — per-EO Haiku plain-English summary cache.
 app.include_router(eos_router.router, prefix="/api/eos", tags=["Executive Orders"])
+# Tracked items — per-identity tracked bills / officials / elections.
+# Replaces the prior localStorage-singleton store that survived logout.
+app.include_router(tracked_router.router, prefix="/api/tracked", tags=["Tracked"])
+
 # In-app notifications — bell badge + dropdown feed.
 app.include_router(notifications_router.router, prefix="/api/notifications", tags=["Notifications"])
 

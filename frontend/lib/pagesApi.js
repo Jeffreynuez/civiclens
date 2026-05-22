@@ -894,3 +894,90 @@ export async function fetchVerificationStatus() {
 export async function startVerification() {
   return request('/api/identity-verification/start', { method: 'POST' });
 }
+
+// ── Tracked items (server-side per-identity) ────────────────────────
+//
+// Replaces the prior localStorage-singleton store. Each frontend store
+// (trackedBills, trackedOfficials, trackedElections) calls these
+// wrappers and keeps an in-memory cache of the response. Login/logout
+// hooks bootstrap and clear that cache.
+//
+// All endpoints share the standard auth path (cookie + bearer token);
+// when no identity is signed in, GETs return empty payloads (200) and
+// writes return 401 — matches the notifications router's convention.
+
+export async function fetchAllTracked() {
+  return request('/api/tracked');
+}
+
+export async function fetchTrackedBills() {
+  return request('/api/tracked/bills');
+}
+
+export async function postTrackBill({ bill_key, snapshot, prefs }) {
+  return request('/api/tracked/bills', {
+    method: 'POST',
+    body: { bill_key, snapshot: snapshot || {}, prefs: prefs ?? undefined },
+  });
+}
+
+export async function deleteTrackedBill(billKey) {
+  return request(`/api/tracked/bills/${encodeURIComponent(billKey)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function patchTrackedBillPrefs(billKey, prefs) {
+  return request(`/api/tracked/bills/${encodeURIComponent(billKey)}/prefs`, {
+    method: 'PATCH',
+    body: { prefs: prefs || {} },
+  });
+}
+
+export async function fetchTrackedOfficials() {
+  return request('/api/tracked/officials');
+}
+
+export async function postTrackOfficial({ official_key, snapshot, prefs }) {
+  return request('/api/tracked/officials', {
+    method: 'POST',
+    body: { official_key, snapshot: snapshot || {}, prefs: prefs ?? undefined },
+  });
+}
+
+export async function deleteTrackedOfficial(officialKey) {
+  return request(`/api/tracked/officials/${encodeURIComponent(officialKey)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function patchTrackedOfficialPrefs(officialKey, prefs) {
+  return request(`/api/tracked/officials/${encodeURIComponent(officialKey)}/prefs`, {
+    method: 'PATCH',
+    body: { prefs: prefs || {} },
+  });
+}
+
+export async function fetchTrackedElections() {
+  return request('/api/tracked/elections');
+}
+
+export async function postTrackElection({ election_key, snapshot, prefs }) {
+  return request('/api/tracked/elections', {
+    method: 'POST',
+    body: { election_key, snapshot: snapshot || {}, prefs: prefs ?? undefined },
+  });
+}
+
+export async function deleteTrackedElection(electionKey) {
+  return request(`/api/tracked/elections/${encodeURIComponent(electionKey)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function patchTrackedElectionPrefs(electionKey, prefs) {
+  return request(`/api/tracked/elections/${encodeURIComponent(electionKey)}/prefs`, {
+    method: 'PATCH',
+    body: { prefs: prefs || {} },
+  });
+}
