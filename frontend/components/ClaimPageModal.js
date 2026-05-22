@@ -6,7 +6,8 @@
 import { useEffect, useState } from 'react';
 import { joinWaitlist, fetchCitizenPolls } from '../lib/pagesApi';
 import CivicViewLogo from './brand/CivicViewLogo';
-import { ModalShell, Button, EmptyState, CheckCircle } from './ui';
+import { ModalShell, Button, EmptyState } from './ui';
+import { CircleCheck as CheckCircle } from 'lucide-react';
 
 /**
  * Claim-this-page modal.
@@ -147,7 +148,7 @@ export default function ClaimPageModal({
 
       {done ? (
         <EmptyState
-          icon={<CheckCircle size={36} active color="accent" />}
+          icon={<CircleCheck size={36} active color="accent" />}
           headline="Request received"
           body={
             <>

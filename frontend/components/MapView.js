@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { STATE_NAME_TO_CODE, STATE_CODE_TO_FIPS } from '@/lib/constants';
 import { fetchDistrictGeometry, fetchDistrictsForState } from '@/lib/api';
 import { useIsMobile } from '@/lib/useViewport';
-import { ArrowLeft } from './ui';
+import { ArrowLeft } from 'lucide-react';
 
 // Zoom bounds for the map — the slider maps linearly between these.
 const MIN_ZOOM = 2;

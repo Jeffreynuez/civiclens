@@ -29,6 +29,12 @@
 import { useEffect, useState } from 'react';
 import Navbar from './Navbar';
 import './HelpBuildThisView.css';
+// Lucide icons (Phase 2 of the migration). The illustrative roadmap
+// icons (VideoIcon / LiveIcon / DebateIcon / NicknameIcon) and the
+// stylized InfoIcon (yellow translucent fill matches the 'money'
+// section accent) stay as inline-SVG helpers below — they're more
+// design illustrations than icons.
+import { ArrowLeft, ChevronDown, Check, Cog, Heart } from 'lucide-react';
 
 // Crowdfund link — flip CROWDFUND_LIVE to true once the campaign is up.
 // CTA copy + progress meter + per-line "Fund this line" buttons all
@@ -280,7 +286,7 @@ export default function HelpBuildThisView({ onClose, compactNavbarProps = {} }) 
         {/* Page top bar — back to map, page title, spacer. */}
         <div className="hb-topbar">
           <button type="button" className="hb-topbar__back" onClick={onClose}>
-            <ArrowLeftIcon size={14} />
+            <ArrowLeft size={14} strokeWidth={2} />
             <span>Back</span>
           </button>
           <div className="hb-topbar__title">Help build CivicView</div>
@@ -407,7 +413,7 @@ function Hero() {
         <div className="hb-hero__cta-row">
           {CROWDFUND_LIVE ? (
             <a href={CROWDFUND_URL} target="_blank" rel="noopener noreferrer" className="hb-cta hb-cta--primary">
-              <HeartIcon size={16} />
+              <Heart size={16} fill="currentColor" />
               <span>Back the crowdfund</span>
             </a>
           ) : (
@@ -538,7 +544,7 @@ function Section({ eyebrow, title, count, sub, isOpen, onToggle, modifier = '', 
           {sub && <p className="hb-section__sub">{sub}</p>}
         </div>
         <span className="hb-section__chev" aria-hidden>
-          <ChevronDownIcon size={18} />
+          <ChevronDown size={18} strokeWidth={2} />
         </span>
       </button>
       <div id={panelId} role="region" aria-labelledby={headerId} className="hb-section__body">
@@ -552,7 +558,7 @@ function Section({ eyebrow, title, count, sub, isOpen, onToggle, modifier = '', 
 // CHECKLIST (shipped + in-progress)
 // ─────────────────────────────────────────────────────────────────────
 function Checklist({ items, kind }) {
-  const Icon = kind === 'shipped' ? CheckIcon : GearIcon;
+  const Icon = kind === 'shipped' ? Check : Cog;
   return (
     <ul className="hb-checklist">
       {items.map(([title, detail], i) => (
@@ -600,7 +606,7 @@ function MoneyCluster({ title, sub, items, total }) {
                 rel="noopener noreferrer"
                 className="hb-money__fund"
               >
-                <HeartIcon size={12} />
+                <Heart size={12} fill="currentColor" />
                 <span>Fund this line</span>
               </a>
             ) : (
@@ -649,7 +655,7 @@ function Footer() {
     <div className="hb-footer">
       {CROWDFUND_LIVE ? (
         <a href={CROWDFUND_URL} target="_blank" rel="noopener noreferrer" className="hb-cta hb-cta--primary">
-          <HeartIcon size={16} />
+          <Heart size={16} fill="currentColor" />
           <span>Back the crowdfund</span>
         </a>
       ) : (
@@ -672,7 +678,7 @@ function StickyMobileCTA() {
       <div className="hb-sticky-cta__inner">
         {CROWDFUND_LIVE ? (
           <a href={CROWDFUND_URL} target="_blank" rel="noopener noreferrer" className="hb-cta hb-cta--primary">
-            <HeartIcon size={14} />
+            <Heart size={14} fill="currentColor" />
             <span>Back the crowdfund</span>
           </a>
         ) : (
@@ -690,42 +696,6 @@ function StickyMobileCTA() {
 // project/help-build/Icons.jsx. Inlined here so the file is
 // self-contained.
 // ─────────────────────────────────────────────────────────────────────
-function ArrowLeftIcon({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <path d="M14 6 L8 12 L14 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function ChevronDownIcon({ size = 18 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function CheckIcon({ size = 12 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <path d="M5 12 l5 5 l9 -10" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function GearIcon({ size = 12 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="2" />
-      <path d="M12 2.5 V5.5 M12 18.5 V21.5 M2.5 12 H5.5 M18.5 12 H21.5 M5.4 5.4 L7.5 7.5 M16.5 16.5 L18.6 18.6 M5.4 18.6 L7.5 16.5 M16.5 7.5 L18.6 5.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-function HeartIcon({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-      <path d="M12 21s-7-4.5-9.5-9C.5 8 3 4 7 4c2 0 3.5 1 5 3 1.5-2 3-3 5-3 4 0 6.5 4 4.5 8C19 16.5 12 21 12 21Z" />
-    </svg>
-  );
-}
 function InfoIcon({ size = 16 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">

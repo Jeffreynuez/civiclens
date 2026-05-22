@@ -6,7 +6,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchBillSnapshot } from '@/lib/api';
 import { untrackBill, updateTrackedBill, useTrackedBills } from '@/lib/trackedBills';
-import { EmptyState as UIEmptyState, BookmarkSimple } from './ui';
+import { EmptyState as UIEmptyState } from './ui';
+import { Bookmark as BookmarkSimple } from 'lucide-react';
 
 /**
  * Full-screen modal showing every bill the user is currently tracking,
@@ -312,7 +313,7 @@ function TrackedBillRow({ bill, changed, onUntrack, onSponsorClick }) {
 function EmptyState() {
   return (
     <UIEmptyState
-      icon={<BookmarkSimple size={36} active color="muted" />}
+      icon={<Bookmark size={36} active color="muted" />}
       headline="No tracked bills yet"
       body={
         <>
