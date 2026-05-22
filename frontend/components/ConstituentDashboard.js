@@ -912,7 +912,7 @@ function QuickLinksCard({ onNavigate }) {
   const links = [
     { label: 'Compare candidates',   onClick: onNavigate.compareCandidates,  Icon: Newspaper },
     { label: 'Find your polling place', onClick: onNavigate.pollingPlace,    Icon: MapPin    },
-    { label: 'Account settings',     onClick: onNavigate.accountSettings,    Icon: CheckCircle },
+    { label: 'Account settings',     onClick: onNavigate.accountSettings,    Icon: CircleCheck },
   ].filter((l) => l.onClick);
   if (!links.length) return null;
   return (
