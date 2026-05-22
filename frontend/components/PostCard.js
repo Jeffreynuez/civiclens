@@ -20,7 +20,7 @@ import {
   reportPost,
   reportComment,
 } from '../lib/pagesApi';
-import { MessageSquareText as ChatText, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { MessageSquareText, ThumbsDown, ThumbsUp } from 'lucide-react';
 import IdentityPicker, { PostingAsPicker } from './IdentityPicker';
 import { useActiveIdentities, pickEngagementIdentity } from '../lib/activeIdentities';
 

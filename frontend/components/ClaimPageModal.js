@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { joinWaitlist, fetchCitizenPolls } from '../lib/pagesApi';
 import CivicViewLogo from './brand/CivicViewLogo';
 import { ModalShell, Button, EmptyState } from './ui';
-import { CircleCheck as CheckCircle } from 'lucide-react';
+import { CircleCheck } from 'lucide-react';
 
 /**
  * Claim-this-page modal.

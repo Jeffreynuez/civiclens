@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchOwnerDashboard } from '../lib/pagesApi';
-import { MessageSquareText as ChatText, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { MessageSquareText, ThumbsDown, ThumbsUp } from 'lucide-react';
 
 /**
  * Constituent Dashboard — owner-only engagement rollup across every

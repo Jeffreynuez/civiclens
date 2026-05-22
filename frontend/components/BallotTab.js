@@ -12,7 +12,7 @@ import FollowButton from './FollowButton';
 import CompareButton from './CompareButton';
 import TrackElectionButton from './TrackElectionButton';
 import { EmptyState as UIEmptyState, Skeleton } from './ui';
-import { CalendarCheck, CircleAlert as WarningCircle, CircleCheck as CheckCircle, MapPin } from 'lucide-react';
+import { CalendarCheck, CircleAlert, CircleCheck, MapPin } from 'lucide-react';
 
 // Phase 4C: party colors resolve through canonical --cl-* tokens. NP
 // (non-partisan races, common at the local level) keeps a neutral grey
