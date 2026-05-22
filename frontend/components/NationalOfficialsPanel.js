@@ -11,8 +11,16 @@ import SelectionBadge from './SelectionBadge';
 import FollowButton from './FollowButton';
 import CompareButton from './CompareButton';
 import PageButton from './PageButton';
-import { Avatar, PartyChip, Eyebrow, Skeleton, EmptyState } from './ui';
-import { ArrowRight, Building, CircleCheck } from 'lucide-react';
+import {
+  Avatar,
+  PartyChip,
+  Eyebrow,
+  Skeleton,
+  EmptyState,
+  ArrowRight,
+  Building,
+  CheckCircle,
+} from './ui';
 import CivicViewLogo from './brand/CivicViewLogo';
 
 // ─────────────────────────────────────────────────────────────────
@@ -1749,7 +1757,7 @@ function PollsEmptyState({ error }) {
         }}
         aria-hidden
       >
-        <CircleCheck size={22} active color="accent" />
+        <CheckCircle size={22} active color="accent" />
       </div>
       <div
         style={{

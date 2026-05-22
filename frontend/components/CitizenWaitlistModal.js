@@ -6,8 +6,7 @@
 import { useEffect, useState } from 'react';
 import { joinWaitlist } from '../lib/pagesApi';
 import CivicViewLogo from './brand/CivicViewLogo';
-import { ModalShell, Button, EmptyState } from './ui';
-import { CircleCheck } from 'lucide-react';
+import { ModalShell, Button, EmptyState, CheckCircle } from './ui';
 
 /**
  * Citizen waitlist modal.
@@ -118,7 +117,7 @@ export default function CitizenWaitlistModal({
 
       {done ? (
         <EmptyState
-          icon={<CircleCheck size={36} active color="accent" />}
+          icon={<CheckCircle size={36} active color="accent" />}
           headline="You're on the list"
           body={
             <>

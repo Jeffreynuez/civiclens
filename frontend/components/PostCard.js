@@ -20,7 +20,7 @@ import {
   reportPost,
   reportComment,
 } from '../lib/pagesApi';
-import { MessageSquareText, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, ChatText } from './ui';
 import IdentityPicker, { PostingAsPicker } from './IdentityPicker';
 import { useActiveIdentities, pickEngagementIdentity } from '../lib/activeIdentities';
 
@@ -822,7 +822,7 @@ export default function PostCard({
             gap: 6,
           }}
         >
-          <MessageSquareText size={14} />
+          <ChatText size={14} />
           {commentsOpen ? 'Hide' : 'Comments'}{' '}
           (<span className="cl-num">{post.comment_count || 0}</span>)
         </button>

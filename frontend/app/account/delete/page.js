@@ -24,7 +24,6 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Check, ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import Navbar from '@/components/Navbar';
@@ -164,7 +163,9 @@ export default function AccountDeletePage() {
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               margin: '0 auto 14px',
             }}>
-<Check size={24} strokeWidth={2.4} />
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
             </div>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--cl-text)', marginBottom: 8 }}>
               {result.mode === 'hard'
@@ -203,7 +204,9 @@ export default function AccountDeletePage() {
             fontFamily: 'var(--cl-font-sans)',
           }}
         >
-<ChevronLeft size={14} strokeWidth={2.5} />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
           Back
         </button>
       </div>
