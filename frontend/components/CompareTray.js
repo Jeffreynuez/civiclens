@@ -4,7 +4,6 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 import { useState } from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
 import { useIsMobile } from '@/lib/useViewport';
 
 const PARTY_COLORS = { R: '#e63946', D: '#457b9d', I: '#6c3ec1', NP: '#666' };
@@ -69,7 +68,10 @@ export default function CompareTray({ items, onRemove, onClear, onOpen }) {
             {items.length}
           </span>
           <span>Compare</span>
-<ChevronUp size={12} strokeWidth={1.6} aria-hidden="true" />
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            {/* Chevron up — expand back to full tray */}
+            <path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
         </button>
         <button
           type="button"
@@ -235,7 +237,10 @@ export default function CompareTray({ items, onRemove, onClear, onOpen }) {
               borderRadius: 8, color: 'var(--cl-text-light)', cursor: 'pointer',
             }}
           >
-<ChevronDown size={14} strokeWidth={1.6} aria-hidden="true" />
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              {/* Chevron down — collapse back to mini pill */}
+              <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            </svg>
           </button>
         )}
       </div>

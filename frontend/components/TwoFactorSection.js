@@ -30,7 +30,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
 import QRCode from 'qrcode';
 
 import {
@@ -367,7 +366,20 @@ export default function TwoFactorSection({ onClose }) {
             </span>
           </div>
         </div>
-        <ChevronDown size={14} strokeWidth={2.4} />
+        <svg
+          width="20" height="20" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" strokeWidth="2.4"
+          strokeLinecap="round" strokeLinejoin="round"
+          aria-hidden="true"
+          style={{
+            color: 'var(--cl-text-light)',
+            transition: 'transform 0.15s ease',
+            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            flexShrink: 0,
+          }}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </button>
 
       {!expanded && null}

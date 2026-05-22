@@ -4,7 +4,6 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronDown, Heart, ArrowLeftRight, Landmark, FileText } from 'lucide-react';
 import { fetchCandidate } from '@/lib/api';
 import {
   isOfficialTracked,
@@ -228,7 +227,9 @@ export default function CandidateProfile({
           onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.10)')}
           onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
         >
-          <ChevronLeft size={isMobile ? 18 : 16} strokeWidth={2} />
+          <svg width={isMobile ? 18 : 16} height={isMobile ? 18 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
           {backLabel || 'Back'}
         </div>
         {/* Hero collapse toggle — chevron in a translucent-white pill
@@ -261,7 +262,18 @@ export default function CandidateProfile({
           onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.30)')}
           onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.18)')}
         >
-          <ChevronDown size={14} strokeWidth={1.8} />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+            style={{
+              transform: heroCollapsed ? 'rotate(0deg)' : 'rotate(180deg)',
+              transition: 'transform 0.18s ease',
+            }}
+          >
+            <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
         </button>
         {onClose && (
           <button
@@ -335,7 +347,15 @@ export default function CandidateProfile({
               onClick={toggleFollow}
               active={isFollowing}
             >
-              <Heart size={14} strokeWidth={1.5} fill={isFollowing ? 'currentColor' : 'none'} />
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M8 13.5s-4.5-3-4.5-7a2.5 2.5 0 0 1 4.5-1.5A2.5 2.5 0 0 1 12.5 6.5c0 4-4.5 7-4.5 7z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                  fill={isFollowing ? 'currentColor' : 'none'}
+                />
+              </svg>
             </CompactIconButton>
             {onCompareToggle && (
               <CompactIconButton
@@ -344,7 +364,11 @@ export default function CandidateProfile({
                 onClick={() => onCompareToggle(c)}
                 active={isComparing}
               >
-                <ArrowLeftRight size={14} strokeWidth={1.4} />
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M2.5 6h9M9 3.5L11.5 6 9 8.5M13.5 10h-9M6 7.5L3.5 10 6 12.5"
+                    stroke="currentColor" strokeWidth="1.4" fill="none"
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </CompactIconButton>
             )}
             {hasRepCrossNav && (
@@ -354,7 +378,16 @@ export default function CandidateProfile({
                 onClick={goToRep}
               >
                 {/* Capitol-dome silhouette stand-in: outlined building. */}
-                <Landmark size={14} strokeWidth={1.3} />
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M2.5 13.5h11M3.5 13.5V8M6.5 13.5V8M9.5 13.5V8M12.5 13.5V8M2.5 8h11L8 4z"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </CompactIconButton>
             )}
             {onOpenPage && (
@@ -367,7 +400,15 @@ export default function CandidateProfile({
                   photoUrl: c.photo_url,
                 })}
               >
-                <FileText size={14} strokeWidth={1.4} />
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M3.5 1.5h6L13 5v9.5h-9.5zM9.5 1.5V5H13"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    fill="none"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </CompactIconButton>
             )}
           </div>

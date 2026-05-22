@@ -5,7 +5,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 /**
  * TabStrip — horizontally-scrollable row of tab buttons with fade
  * indicators on the left/right edges when more content is hidden in
@@ -170,7 +169,9 @@ export default function TabStrip({
           color: 'var(--cl-text-light)',
         }}
       >
-        <ChevronLeft size={12} strokeWidth={1.6} />
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M8 1.5L3 6l5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </svg>
       </button>
 
       {/* Right-edge fade. */}
@@ -198,7 +199,9 @@ export default function TabStrip({
           color: 'var(--cl-text-light)',
         }}
       >
-        <ChevronRight size={12} strokeWidth={1.6} />
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M4 1.5L9 6l-5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </svg>
       </button>
     </div>
   );

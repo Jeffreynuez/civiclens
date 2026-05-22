@@ -30,7 +30,6 @@
  */
 
 import { useEffect } from 'react';
-import { Shield } from 'lucide-react';
 import TwoFactorSection from './TwoFactorSection';
 
 const KIND_LABEL = {
@@ -97,7 +96,9 @@ export default function Force2FAOverlay({
               color: 'var(--cl-accent, #2e7d32)',
             }}
           >
-            <Shield size={32} strokeWidth={2} />
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
