@@ -18,7 +18,7 @@
 | **Tagline (subhead)** | Verified citizens, verified reps, transparent civic data — built in public, owned by nobody |
 | **Category** | Community & Neighborhood (or "Volunteer & Service" — both work; see launch checklist) |
 | **Goal** | $25,000 |
-| **Beneficiary** | CivicView Inc. (Florida Benefit Corporation — Amendment pending; initial filing tracking #600474907136) |
+| **Beneficiary** | CivicView Inc. (Florida Benefit Corporation — Amendment pending; initial filing tracking #800474911808) |
 | **Location** | Florida, USA |
 | **Cover image** | TBD — recommend a clean screenshot of the interactive U.S. map with the rep-page sidebar open (most distinctive surface). Mobile crop matters; verify on the GoFundMe preview. |
 | **Cover video** | Optional. If included: 60-90 seconds, founder voiceover over screen recording. Script below. |
@@ -35,11 +35,13 @@
 >
 > ### The problem we're solving
 >
-> Most Americans don't know who their state senator is. Most don't know how their U.S. representative voted on the last major bill. Most can't name the bills currently in committee that will affect their city. That isn't apathy — it's an information problem. The data exists, but it's scattered across hundreds of government websites, lobbyist databases, and paid news terminals.
+> **You can't find out what your government is actually doing.** Most Americans don't know who their state senator is. Most don't know how their U.S. representative voted on the last major bill. Most can't name the bills currently in committee that will affect their city. That isn't apathy — it's an information problem. The data exists, but it's scattered across hundreds of government websites, lobbyist databases, and paid news terminals. Representatives don't fear voters who can't see what they're doing, and voters can't hold representatives accountable when the cost of finding out is half a day of research per question.
 >
-> The result is predictable: representatives don't fear voters who can't see what they're doing, and voters can't hold representatives accountable when the cost of finding out is half a day of research per question.
+> **You can't talk to your reps in a way that counts, either.** The channels representatives use today to gauge what their constituents actually think are all broken in some way. Town halls self-select — only the loudest 50 people in a 750,000-person district show up. Phone-and-letter campaigns get astroturfed by lobbying groups with autodialers and paid mail mills. Social-media replies are anonymous, often automated, and full of out-of-district noise. Office surveys go only to people already on the mailing list. There is no district-scoped, identity-verified channel where a representative can see what their actual constituents — verified to live in their district — think about a specific bill or vote. Reps end up listening to whoever shouts loudest. Voters end up feeling unheard.
 >
-> CivicView lowers that cost to zero.
+> **And the polling we rely on to understand each other doesn't hold up to scrutiny.** A headline says "90% of voters agree on X" — and never mentions, in the same breath, that the sample was 300 self-selected respondents, or that the question was leading, or that the demographic mix was nothing like the country it claims to represent. Trust in polling has collapsed, and for good reason: methodology is hidden, sample sizes are small, and topline numbers get repeated as fact by influencers and news shows that never read past the chart. That's how citizens end up walking into a voting booth confident in a "consensus" that was never real.
+>
+> CivicView attacks all three. Every elected official's record — their votes, their sponsored bills, their public statements, their committee assignments — is in one place, free and searchable. The engagement layer is gated to verified citizens at real addresses in real districts, so when a rep sees "62% of your district opposes this vote," that number is built from verified constituents, not bots and not a 300-person panel. And every poll on the platform shows its sample size, its scope, and its participant verification status up front. Methodology *is* the headline.
 >
 > ### What's already built
 >
@@ -50,12 +52,16 @@
 > - **The President, Vice President, Cabinet, Supreme Court** — full executive + judicial branch coverage
 > - **Florida full coverage** — state senate + house + statewide execs + 2026 candidates + election dates (other 49 states ramping)
 > - **Address-to-rep lookup** — paste your street address, get the people who represent you at every level
-> - **AI-powered bill + vote explainers** that translate Congressional Research Service summaries into plain English
+> - **AI integration powered by Anthropic Claude** — plain-English translation for every federal bill (alongside the official Congressional Research Service summary), a "What was this vote?" explainer on every roll-call, a generated abstract on every executive order, semantic poll filter chips, and sentiment + tone classification on user comments. All cached per-bill / per-vote / per-EO so cost stays predictable as traffic grows.
 > - **Three-identity engagement system** — citizens, verified representatives, and declared candidates can all hold accounts with appropriate features for each role
 > - **Polls, comments, and "Verified citizen" labels** that let reps filter for their actual constituents instead of drowning in out-of-district noise
 > - **Modern security foundation** — Cloudflare WAF + DDoS protection, automated dependency scanning, static analysis, daily Postgres backups, two-factor authentication for sensitive accounts, documented incident-response runbook
 >
 > You can use it right now at **civicview.app**. There's no waitlist for browsing; you can start exploring your district immediately.
+>
+> ### Where CivicView fits among the civic tools that already exist
+>
+> Civic tech isn't a blank field. GovTrack, Ballotpedia, and USAFacts have catalogued legislators, bills, and government statistics for years. BallotReady covers ballot races at scale. Each does part of what civic-information work needs, and you can use any of them today for free. CivicView's specific contribution is the engagement layer on top — verified, district-scoped constituents responding directly to the people who represent them, weighing in on bills and votes, asking questions on rep pages, all editorially neutral and structured to keep the conversation local to the district it actually affects. Browsing legislative data is table stakes. Bringing the conversation between citizens and the officials who represent them into one verified, district-scoped place is what's missing — and what CivicView is here to fill.
 >
 > ### What the $25,000 covers
 >
@@ -67,12 +73,36 @@
 > - **~$6,000/year** — ProPublica Congress API Pro tier (real-time bill text, sponsor lists, roll-call votes across all 535 members)
 > - **~$1,200/year** — OpenStates API Pro tier (state legislature data for all 50 states; right now Florida is the only state with deep coverage)
 > - **$2,400–$6,000/year** — Google Civic Information API at scale (polling-place lookup, sample-ballot data, contact info that stays current automatically)
-> - **~$180/year** — Render hosting + Postgres on the paid tier (no cold-start delay, warm database)
+> - **~$300/year** — Render hosting + Postgres on the Pro tier (no cold-start delay, warm database — currently funded out of pocket; the campaign moves this onto the project so it doesn't depend on the founder absorbing it)
 > - **$15/year** — Domain renewal for civicview.app
 > - **$2,700** — Benefit Corp formation costs, attorney review of Terms of Service + Privacy Policy, modest civic-tech launch outreach
 > - **$7,000** — Year-2 operating buffer so we don't have to run an emergency campaign while the subscription revenue is still ramping toward break-even
 >
 > Every line item above has a published source — you can audit the math at **civicview.app/help-build**.
+>
+> ### What unlocks at what dollar amount
+>
+> Backers can see exactly where their contribution lands as the bar fills. The ladder runs:
+>
+> | When the campaign reaches… | What unlocks |
+> | --- | --- |
+> | **$2,400** | ID.me Relying Party application filed — real verified-citizen badges become possible |
+> | **$3,450** | Federal trademark filing + DMCA agent registered (every one-time legal item done) |
+> | **$6,450** | Attorney review of Terms of Service + Privacy Policy commissioned |
+> | **~$15,400** | Full Year-1 of recurring infrastructure (all data APIs + hosting + domain) funded |
+> | **$25,000** | Year-2 six-month operating buffer secured — no emergency Year-3 campaign needed |
+>
+> Each milestone gets a public announcement on the campaign page as it's crossed. Donors love seeing exactly where their money went; we'd rather show it than hint at it.
+>
+> ### Where the money is *not* going
+>
+> Just as important as the line items above is the absence of these:
+>
+> - **No salaries.** Including the founder's. The fundraise pays for infrastructure; it doesn't pay anyone a wage. If the project ever justifies salaried staff, that decision goes through a future fundraise with its own explicit budget disclosure — not this one.
+> - **No marketing agencies, growth hackers, or paid acquisition.** Outreach happens through honest channels — the share copy below, the GitHub repo, civic-tech community word-of-mouth. If $25K is going to get used on Facebook ads, we don't deserve $25K.
+> - **No equity carve-outs, investor relations, or board observer seats.** Crowdfunding isn't a priced round. Backers get founding-supporter recognition and subscription credits — not stock.
+> - **No contracted developers.** Engineering is one person. Adding more hands later happens out of subscription revenue, not crowdfunding proceeds.
+> - **No executive comp, no offsites, no SaaS sprawl.** The five paid SaaS lines above (Render, ProPublica, OpenStates, Google Civic, Vercel) are it. No company credit card funding miscellaneous "we'll figure it out" expenses.
 >
 > ### Why this isn't ads-supported or venture-backed
 >
@@ -82,15 +112,37 @@
 >
 > No venture capital, either. VC-backed civic-tech has a track record of pivoting toward whatever pays — political ad-tech, data brokerage, partisan tools — once the runway runs out. Crowdfunding lets us stay accountable to citizens instead.
 >
+> ### What CivicView is *not*
+>
+> Civic tech is a crowded label, so it's worth being explicit about what CivicView is *not* doing:
+>
+> - **Not a voter-registration drive.** We don't sign anyone up to vote, don't collect voter-registration data, don't push registration as a CTA. There are organizations that do that work well — go support them.
+> - **Not a candidate-endorsement tool.** We don't endorse candidates, don't run ads for candidates, don't rank candidates by preference. Every candidate gets the same surface treatment regardless of party, platform, or fundraising tier.
+> - **Not a campaign-donation platform.** We don't process political contributions, don't link to PACs or donor portals, don't surface fundraising totals.
+> - **Not a news site.** We don't generate editorial commentary on legislators or policies. The AI summaries translate official text into plain English; they don't argue about whether a vote was good or bad.
+> - **Not a data broker.** We don't sell user data. We don't sell aggregated anonymized engagement data either. The Privacy Policy commits to this in writing.
+>
 > ### What you're getting
 >
 > See the "Perks" section below — supporters at every tier get founding-supporter recognition + free-or-discounted subscriptions once verified accounts open.
 >
-> Even if a perk isn't useful to you, every dollar above goal goes into the operating buffer that protects against an emergency Year-3 fundraise. Anything past goal makes the platform more durable, not more expensive.
+> Even if a perk isn't useful to you, every dollar above goal makes the platform more durable, not more expensive — more cushion against unexpected expenses, more headroom to add roadmap features as their costs come in, and less time spent fundraising instead of shipping.
+>
+> Beyond donating, the two things that genuinely help the project survive are these. **First, subscribe** at $5 a month once verified accounts go live. The financial model says the project breaks even at a 3% subscription rate among regular visitors; anything above 3% funds expansion to the rest of the country and the roadmap features further down. **Second, share the campaign and the platform** with anyone who cares about civic infrastructure. The more citizens and reps who join, the more useful the project becomes for everyone already on it. If you can't donate, those two still move the needle.
 >
 > ### About the builder
 >
-> CivicView is built and maintained by Jeffrey Nuez, an independent developer based in Florida. The full source code is public on GitHub. There's no team yet — the design, the engineering, the moderation, the documentation, the financial model, all of it has been one-person work for months. The fundraise pays for the infrastructure that lets one person ship and maintain national-scale civic data; it doesn't pay anybody a salary.
+> CivicView is built by **Jeffrey Nuez**, an independent developer based in Florida.
+>
+> The idea for this app started years ago. I'd been listening — to representatives, to reporters, to social-media influencers — and at first I was genuinely enamored by the talk of change. But after years of it, I noticed something: nobody actually had a good way to connect with each other or surface real solutions to any of the problems that kept getting raised. Even people who followed political news closely couldn't name their own representatives, didn't know which bills were moving, and didn't really understand how the governing system worked.
+>
+> I also kept getting fooled by polling. I'd see a headline — "90% of voters agree on this" — and only later realize the poll never disclosed how many people they actually asked. Sometimes it was 300. That kind of misleading framing led me astray more than once when I walked into a voting booth thinking I knew where the country stood.
+>
+> And I kept watching newcomer candidates run into the same wall. Most races come down to whoever has the most money and the deepest connections, and that keeps good people with real ideas from ever running, because they know they can't compete on either axis.
+>
+> About two months ago all of this finally clicked into one project. CivicView is my attempt to take all three problems on at once — informational, conversational, electoral. I'm building it because I have a solution-oriented mindset, because I take the integrity of the system seriously, and because I love this country and would rather build than complain. My hope is that this app helps American citizens come together with a clearer, more coherent picture of their own government — and that it pushes the polling and governing systems we rely on toward more transparency along the way.
+>
+> The full source is on GitHub. There's no team yet — the design, the engineering, the moderation, the documentation, the financial model, all of it has been one-person work. The fundraise pays for the infrastructure that lets one person ship and maintain national-scale civic data; it doesn't pay anybody a salary.
 >
 > ### One last thing
 >
@@ -122,6 +174,9 @@ A: Every dollar goes into operating CivicView. No salaries, no profit distributi
 **Q: Is CivicView affiliated with any political party, campaign, PAC, or government agency?**
 A: No. CivicView is independent, filed as a Florida Benefit Corporation, and our editorial standards explicitly forbid endorsements of candidates, parties, or political positions. Read the standards at civicview.app/editorial-standards.
 
+**Q: Who decides what counts as "non-partisan" on the platform?**
+A: The neutrality is enforced structurally rather than editorially. We don't write opinion pieces on legislators or policies. We don't endorse candidates. The AI summaries (powered by Anthropic Claude Haiku) translate official text — Congressional Research Service bill summaries, vote records, executive order text — into plain English without commentary on whether the underlying action was good or bad. Every elected official gets the same page treatment regardless of party. Every candidate gets the same composer regardless of party. The full editorial standards are published at civicview.app/editorial-standards. If you spot a violation, the Feedback button on the site goes straight to the moderation queue and corrections are logged publicly.
+
 **Q: What's a Benefit Corporation, and why does it matter here?**
 A: A Benefit Corporation is a for-profit company with a legal obligation, written into its Articles of Incorporation, to consider the public-benefit purpose alongside shareholder interests. For CivicView, that public benefit is informed civic engagement and access to government information. The structure means a future buyer can't gut the mission without changing the corporate charter — a much higher bar than ordinary corporate governance.
 
@@ -129,7 +184,7 @@ A: A Benefit Corporation is a for-profit company with a legal obligation, writte
 A: GoFundMe is "keep what you raise" — we get every dollar contributed regardless of whether we hit $25K. If we fall short, we prioritize keeping the existing platform running (hosting + domain + security) and defer the discretionary line items (trademark, premium APIs) until subscription revenue catches up.
 
 **Q: What if you overfund?**
-A: Surplus goes into the Year-2 + Year-3 operating buffer. That gives the project runway to focus on shipping instead of fundraising. We won't take more than 50% over goal without coming back to supporters with an updated plan for what the additional funds enable.
+A: There aren't named stretch goals on this campaign, because I'd rather not promise specific dollar amounts that aren't tied to real costs. What overfunding *does* is make launch and ongoing operation more durable: a bigger cushion against unexpected expenses, more headroom to ship the roadmap features as their real costs come in, and less time spent fundraising instead of building. If you want to make sure CivicView launches successfully, donate more. If you want to make sure it stays alive past launch, **subscribe** at $5/month once verified accounts open — the project breaks even at a 3% subscription rate among regular visitors, and anything above 3% funds expansion and the roadmap. And whether or not you donate, **share the campaign and the platform**. The more citizens and reps who join, the more useful CivicView becomes for everyone already on it.
 
 **Q: How do I redeem my subscription perk?**
 A: Subscription perks activate once we ship the verified-account system + Stripe billing (target Q3-Q4 2026). When that lands, every supporter will receive an email walking through verification + how to claim your subscription credit. Until then you can use the platform's demo / preview environment with no subscription required.
@@ -179,7 +234,7 @@ campaign, then use the proceeds to onboard ID.me + Stripe live mode.
 
 **Phase 2 — Corporate + banking (1–2 weeks):**
 - [ ] Wait for Sunbiz to process the initial Profit Corp filing
-      (tracking #600474907136). Standard processing is ~5–7 business days.
+      (tracking #800474911808). Standard processing is ~5–7 business days.
 - [ ] File the Benefit Corporation Amendment (Task #90) with Sunbiz once
       the initial filing is on the books. Articles language is in
       `docs/civicview_benefit_corp_filing.pdf`.
