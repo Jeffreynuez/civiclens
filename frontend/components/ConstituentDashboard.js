@@ -5,21 +5,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useIsCompact } from '@/lib/useViewport';
-import {
-  Avatar,
-  PartyChip,
-  Eyebrow,
-  Button,
-  EmptyState,
-  CheckCircle,
-  CalendarCheck,
-  Calendar,
-  ChatCircleDots,
-  Newspaper,
-  MapPin,
-  ArrowLeft,
-  ArrowRight,
-} from './ui';
+import { Avatar, PartyChip, Eyebrow, Button, EmptyState } from './ui';
+import { ArrowLeft, ArrowRight, Calendar, CalendarCheck, CircleCheck as CheckCircle, MapPin, MessageCircleMore as ChatCircleDots, Newspaper } from 'lucide-react';
 import { getAllTrackedOfficials } from '../lib/trackedOfficials';
 import { fetchMyCitizenPolls, closeCitizenPoll, fetchMyHiddenContent } from '../lib/pagesApi';
 import AppealModal from './AppealModal';
@@ -364,7 +351,7 @@ function VerifiedCitizenBadge() {
         fontWeight: 700,
       }}
     >
-      <CheckCircle size={12} active color="up" />
+      <CircleCheck size={12} active color="up" />
       Verified citizen
     </span>
   );
@@ -647,7 +634,7 @@ function RecentActivity({ items, onSeeAll }) {
         </>
       ) : (
         <EmptyState
-          icon={<ChatCircleDots size={36} color="default" />}
+          icon={<MessageCircleMore size={36} color="default" />}
           headline="No recent activity yet"
           body="When your tracked reps post, when polls you voted on close, or when someone replies to your comments — it'll show up here."
           dense
@@ -701,9 +688,9 @@ function ActivityRow({ item }) {
         }}
       >
         {item.kind === 'reply' ? (
-          <ChatCircleDots size={18} active color="accent" />
+          <MessageCircleMore size={18} active color="accent" />
         ) : item.kind === 'voted' ? (
-          <CheckCircle size={18} active color="warning" />
+          <CircleCheck size={18} active color="warning" />
         ) : (
           <Newspaper size={18} active color="accent" />
         )}
@@ -874,7 +861,7 @@ function YourActivityCard({ reps }) {
   return (
     <Card
       title={`Your activity · ${currentMonth()}`}
-      icon={<CheckCircle size={16} color="muted" />}
+      icon={<CircleCheck size={16} color="muted" />}
     >
       <div
         style={{
@@ -1410,7 +1397,7 @@ function MyPollsSection({ citizen, onOpenPage }) {
       )}
       {!loading && !error && visible.length === 0 && (
         <EmptyState
-          icon={<ChatCircleDots size={36} color="default" />}
+          icon={<MessageCircleMore size={36} color="default" />}
           headline={
             filter === 'active'
               ? "You haven't started a poll yet"

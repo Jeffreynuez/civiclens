@@ -3,7 +3,7 @@
 // CivicView — Copyright (c) 2026 Jeffrey De La Nuez. All rights reserved.
 // Proprietary and confidential. See LICENSE at the repository root.
 
-import { ScopeCountry, ScopeState, ScopeDistrict, ScopeCity } from './ui';
+import { Building2 as ScopeCity, Flag as ScopeState, Globe as ScopeCountry, Hexagon as ScopeDistrict } from 'lucide-react';
 
 /**
  * Owner-only filter rail. Lets a logged-in rep who owns this page slice

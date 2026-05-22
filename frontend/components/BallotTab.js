@@ -11,14 +11,8 @@ import { useIsMobile } from '@/lib/useViewport';
 import FollowButton from './FollowButton';
 import CompareButton from './CompareButton';
 import TrackElectionButton from './TrackElectionButton';
-import {
-  EmptyState as UIEmptyState,
-  Skeleton,
-  CalendarCheck,
-  CheckCircle,
-  WarningCircle,
-  MapPin,
-} from './ui';
+import { EmptyState as UIEmptyState, Skeleton } from './ui';
+import { CalendarCheck, CircleAlert as WarningCircle, CircleCheck as CheckCircle, MapPin } from 'lucide-react';
 
 // Phase 4C: party colors resolve through canonical --cl-* tokens. NP
 // (non-partisan races, common at the local level) keeps a neutral grey
@@ -464,7 +458,7 @@ function ElectionCard({
               }}
             >
               <span style={{ flexShrink: 0, color: 'var(--cl-up-text)', display: 'inline-flex' }}>
-                <CheckCircle size={16} active color="up" />
+                <CircleCheck size={16} active color="up" />
               </span>
               <div
                 style={{
@@ -1099,7 +1093,7 @@ function VoterStatusBanner({ status }) {
         }}
       >
         <span style={{ flexShrink: 0, color: 'var(--cl-warning-text)', display: 'inline-flex' }}>
-          <WarningCircle size={20} active color="warning" />
+          <CircleAlert size={20} active color="warning" />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
@@ -1141,7 +1135,7 @@ function VoterStatusBanner({ status }) {
       }}
     >
       <span style={{ flexShrink: 0, color: 'var(--cl-accent)', display: 'inline-flex' }}>
-        <CheckCircle size={20} active color="accent" />
+        <CircleCheck size={20} active color="accent" />
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div

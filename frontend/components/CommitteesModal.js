@@ -4,13 +4,8 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Skeleton,
-  EmptyState,
-  ErrorState,
-  MagnifyingGlass,
-  Building,
-} from './ui';
+import { Skeleton, EmptyState, ErrorState } from './ui';
+import { Building, Search as MagnifyingGlass } from 'lucide-react';
 import { fetchCommittees, fetchCommitteeDetail } from '@/lib/api';
 import { useIsMobile } from '@/lib/useViewport';
 
@@ -205,7 +200,7 @@ export default function CommitteesModal({ open, onClose, onMemberPick }) {
               )}
               {!loading && filtered.length === 0 && (
                 <EmptyState
-                  icon={<MagnifyingGlass size={32} active color="muted" />}
+                  icon={<Search size={32} active color="muted" />}
                   headline={`No matches for "${query}"`}
                   body="Try a committee name, a subcommittee, or a chamber filter (House / Senate / Joint)."
                   tone="muted"

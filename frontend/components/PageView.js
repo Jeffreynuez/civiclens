@@ -17,7 +17,8 @@ import Dashboard from './Dashboard';
 import CitizenPollsSection from './CitizenPollsSection';
 import Navbar from './Navbar';
 import TwoFactorSection from './TwoFactorSection';
-import { Skeleton, EmptyState, ErrorState, Newspaper } from './ui';
+import { Skeleton, EmptyState, ErrorState } from './ui';
+import { Newspaper } from 'lucide-react';
 import { useIsCompact } from '@/lib/useViewport';
 
 /**
