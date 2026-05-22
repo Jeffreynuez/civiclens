@@ -4,7 +4,6 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
 import {
   fetchLocalCities,
   fetchLocalOfficials,
@@ -992,7 +991,13 @@ function BackButton({ children, onClick }) {
 function SearchInput({ value, onChange, placeholder }) {
   return (
     <div style={{ position: 'relative', marginBottom: '8px' }}>
-      <Search size={14} strokeWidth={2} />
+      <svg
+        aria-hidden
+        width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+        style={{ position: 'absolute', top: '10px', left: '12px', color: 'var(--cl-text-light)' }}
+      >
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
       <input
         type="text"
         value={value}

@@ -1,7 +1,5 @@
 'use client';
 
-
-import { Bookmark } from 'lucide-react';
 // CivicView — Copyright (c) 2026 Jeffrey De La Nuez. All rights reserved.
 // Proprietary and confidential. See LICENSE at the repository root.
 
@@ -68,7 +66,15 @@ export default function FollowButton({ member, size = 'md', onNotify }) {
         }
       }}
     >
-      <Bookmark size={14} strokeWidth={2} />
+      <svg
+        width={icon} height={icon} viewBox="0 0 24 24"
+        fill={followed ? 'currentColor' : 'none'}
+        stroke="currentColor" strokeWidth="2.2"
+        strokeLinecap="round" strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+      </svg>
     </button>
   );
 }

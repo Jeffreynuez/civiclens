@@ -1,7 +1,5 @@
 'use client';
 
-
-import { Bell } from 'lucide-react';
 // CivicView — Copyright (c) 2026 Jeffrey De La Nuez. All rights reserved.
 // Proprietary and confidential. See LICENSE at the repository root.
 
@@ -81,7 +79,16 @@ export default function TrackElectionButton({ election, size = 'md', onNotify })
       }}
     >
       {/* Bell icon — filled when tracked, outline otherwise */}
-      <Bell size={14} strokeWidth={2} />
+      <svg
+        width={icon} height={icon} viewBox="0 0 24 24"
+        fill={tracked ? 'currentColor' : 'none'}
+        stroke="currentColor" strokeWidth="2.2"
+        strokeLinecap="round" strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2z" />
+        <path d="M10 20a2 2 0 0 0 4 0" />
+      </svg>
     </button>
   );
 }
