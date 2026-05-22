@@ -26,7 +26,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     String, Integer, DateTime, ForeignKey, Boolean, Text, Index,
-    func,
+    UniqueConstraint, func,
 )
 from sqlalchemy.sql import expression as sa_expression
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -1560,4 +1560,96 @@ class RecoveryCode(Base):
     candidate_account_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
         default=None, index=True,
+    )
+
+
+# ── Tracked items (per-identity, server-side) ────────────────────────
+#
+# Previously the user's tracked bills / officials / elections lived in
+# localStorage under singleton keys (`civiclens.trackedBills` etc.), so
+# logging out of citizen A and into citizen B kept A's tracked items
+# visible on B's navbar. That cross-account leak was also a privacy
+# red flag for the eventual App Store review. Moving to server-side
+# storage keyed per-identity fixes both problems and gives us cross-
+# device sync once the native app ships.
+#
+# Owner is polymorphic — same shape as Notification above — so a
+# citizen tracking a bill and a rep tracking a bill share one table.
+# Today only citizens use this surface, but the schema doesn't paint
+# us into a corner if rep / candidate tracking ever lands.
+#
+# snapshot_json carries the denormalized display fields the My Tracked
+# list renders (bill title, sponsor name, election date, etc.) so we
+# don't have to re-fetch from Congress.gov or the curated state JSON
+# on every page load. The frontend store rewrite reads from this.
+#
+# prefs_json carries the per-subject notification preferences — same
+# schema as frontend/lib/notificationPrefs.js. Defaults seed at first
+# track; user toggles patch via PATCH /api/tracked/<type>/<key>/prefs.
+
+
+class TrackedBill(Base):
+    __tablename__ = "tracked_bills"
+    __table_args__ = (
+        UniqueConstraint(
+            "tracker_kind", "tracker_id", "bill_key",
+            name="uq_tracked_bills_owner_key",
+        ),
+        Index("ix_tracked_bills_owner", "tracker_kind", "tracker_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 'citizen' | 'rep' | 'candidate' — application-level FK pair.
+    tracker_kind: Mapped[str] = mapped_column(String(16))
+    tracker_id: Mapped[int] = mapped_column(Integer)
+    # Canonical "{congress}-{type}-{number}" string, lowercased.
+    bill_key: Mapped[str] = mapped_column(String(64))
+    snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
+    prefs_json: Mapped[str] = mapped_column(Text, default="{}")
+    tracked_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class TrackedOfficial(Base):
+    __tablename__ = "tracked_officials"
+    __table_args__ = (
+        UniqueConstraint(
+            "tracker_kind", "tracker_id", "official_key",
+            name="uq_tracked_officials_owner_key",
+        ),
+        Index("ix_tracked_officials_owner", "tracker_kind", "tracker_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tracker_kind: Mapped[str] = mapped_column(String(16))
+    tracker_id: Mapped[int] = mapped_column(Integer)
+    # bioguide_id when present, else backend official id (e.g. "fl-sen-1").
+    official_key: Mapped[str] = mapped_column(String(64))
+    snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
+    prefs_json: Mapped[str] = mapped_column(Text, default="{}")
+    followed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class TrackedElection(Base):
+    __tablename__ = "tracked_elections"
+    __table_args__ = (
+        UniqueConstraint(
+            "tracker_kind", "tracker_id", "election_key",
+            name="uq_tracked_elections_owner_key",
+        ),
+        Index("ix_tracked_elections_owner", "tracker_kind", "tracker_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tracker_kind: Mapped[str] = mapped_column(String(16))
+    tracker_id: Mapped[int] = mapped_column(Integer)
+    # Election backend id when present, else "state|office|date" composite.
+    election_key: Mapped[str] = mapped_column(String(128))
+    snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
+    prefs_json: Mapped[str] = mapped_column(Text, default="{}")
+    tracked_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
     )
