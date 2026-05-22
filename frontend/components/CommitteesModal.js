@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Skeleton, EmptyState, ErrorState } from './ui';
-import { Building, Search as MagnifyingGlass } from 'lucide-react';
+import { Building, Search } from 'lucide-react';
 import { fetchCommittees, fetchCommitteeDetail } from '@/lib/api';
 import { useIsMobile } from '@/lib/useViewport';
 

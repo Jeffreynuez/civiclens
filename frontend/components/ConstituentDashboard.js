@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useIsCompact } from '@/lib/useViewport';
 import { Avatar, PartyChip, Eyebrow, Button, EmptyState } from './ui';
-import { ArrowLeft, ArrowRight, Calendar, CalendarCheck, CircleCheck as CheckCircle, MapPin, MessageCircleMore as ChatCircleDots, Newspaper } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Calendar, CalendarCheck, CircleCheck, MapPin, MessageCircleMore, Newspaper } from 'lucide-react';
 import { getAllTrackedOfficials } from '../lib/trackedOfficials';
 import { fetchMyCitizenPolls, closeCitizenPoll, fetchMyHiddenContent } from '../lib/pagesApi';
 import AppealModal from './AppealModal';

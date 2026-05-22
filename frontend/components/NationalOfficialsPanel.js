@@ -12,7 +12,7 @@ import FollowButton from './FollowButton';
 import CompareButton from './CompareButton';
 import PageButton from './PageButton';
 import { Avatar, PartyChip, Eyebrow, Skeleton, EmptyState } from './ui';
-import { ArrowRight, Building, CircleCheck as CheckCircle } from 'lucide-react';
+import { ArrowRight, Building, CircleCheck } from 'lucide-react';
 import CivicViewLogo from './brand/CivicViewLogo';
 
 // ─────────────────────────────────────────────────────────────────

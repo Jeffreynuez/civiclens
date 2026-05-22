@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchBillSnapshot } from '@/lib/api';
 import { untrackBill, updateTrackedBill, useTrackedBills } from '@/lib/trackedBills';
 import { EmptyState as UIEmptyState } from './ui';
-import { Bookmark as BookmarkSimple } from 'lucide-react';
+import { Bookmark } from 'lucide-react';
 
 /**
  * Full-screen modal showing every bill the user is currently tracking,
