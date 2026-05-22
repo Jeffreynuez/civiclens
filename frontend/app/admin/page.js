@@ -35,6 +35,9 @@
  * ./admin.css.
  */
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  RefreshCw, Search, ExternalLink, EyeOff, Eye, CircleCheck, Ban,
+} from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   adminWhoami,
@@ -1844,58 +1847,23 @@ function TypePollCommentIcon({ size = 14 }) {
   );
 }
 function RefreshIcon({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <path d="M20 12a8 8 0 1 1-2.3-5.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
-      <path d="M20 4v4h-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
-  );
+  return <RefreshCw size={size} strokeWidth={1.8} />;
 }
 function SearchIcon({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" fill="none" />
-      <path d="M16.5 16.5 21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
+  return <Search size={size} strokeWidth={2} />;
 }
 function ExternalIcon({ size = 12 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <path d="M14 4h6v6M20 4l-8 8M11 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
-  );
+  return <ExternalLink size={size} strokeWidth={1.8} />;
 }
 function HideIcon({ size = 13 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <path d="M3 12s3.5-6 9-6c2 0 3.7.7 5.1 1.7M21 12s-3.5 6-9 6c-2 0-3.7-.7-5.1-1.7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
-      <path d="M3 3l18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" fill="none" />
-    </svg>
-  );
+  return <EyeOff size={size} strokeWidth={1.8} />;
 }
 function UnhideIcon({ size = 13 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" stroke="currentColor" strokeWidth="1.8" fill="none" />
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" fill="rgba(45,106,79,0.18)" />
-    </svg>
-  );
+  return <Eye size={size} strokeWidth={1.8} />;
 }
 function DismissIcon({ size = 13 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" fill="none" />
-      <path d="M8 12l3 3 5-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <CircleCheck size={size} strokeWidth={1.8} />;
 }
 function SuspendIcon({ size = 13 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" fill="none" />
-      <path d="M5.5 5.5l13 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
+  return <Ban size={size} strokeWidth={1.8} />;
 }

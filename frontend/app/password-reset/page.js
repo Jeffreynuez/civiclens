@@ -31,6 +31,7 @@
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import Navbar from '@/components/Navbar';
@@ -196,9 +197,7 @@ function PasswordResetInner() {
             fontFamily: 'var(--cl-font-sans)',
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
+<ChevronLeft size={14} strokeWidth={2.5} />
           Back
         </button>
       </div>
