@@ -37,6 +37,7 @@
  * /Design Exports/civicview-polls-page/. Styles live in ./polls.css.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   fetchPollsFeed,
@@ -328,9 +329,7 @@ export default function PollsPage() {
           onClick={handleHome}
           aria-label="Back to CivicView home"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M14 6 L8 12 L14 18" />
-          </svg>
+<ChevronLeft size={14} strokeWidth={2} aria-hidden="true" />
           <span>Back to map</span>
         </button>
       </div>
