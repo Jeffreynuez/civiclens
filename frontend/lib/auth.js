@@ -16,6 +16,7 @@
  */
 import { useEffect, useState } from 'react';
 import { fetchMe, login as apiLogin, logout as apiLogout } from './pagesApi';
+import { loadAllTracked, clearAllTracked } from './trackedSync';
 
 let currentMe = null;
 let loaded = false;
@@ -49,6 +50,11 @@ export async function hydrateAuth() {
     currentMe = status === 200 ? data : null;
     loaded = true;
     notify();
+    // Re-bootstrap the tracked-item cache against whichever identity
+    // the backend now picks (citizen > rep > candidate). Fire-and-
+    // forget so a slow round-trip doesn't block the auth hydrate.
+    if (currentMe) loadAllTracked().catch(() => {});
+    else clearAllTracked();
     return currentMe;
   })();
   const result = await hydratePromise;
@@ -84,6 +90,7 @@ export async function loginRep(email, password) {
     currentMe = data.rep;
     loaded = true;
     notify();
+    loadAllTracked().catch(() => {});
     return { ok: true };
   }
   return { ok: false, error: error || 'Login failed', status };
@@ -115,6 +122,10 @@ export async function logoutRep() {
   await apiLogout();
   currentMe = null;
   loaded = true;
+  // Clear the cache instantly for UI; refetch so the remaining
+  // active identity (if any) sees its own tracked items.
+  clearAllTracked();
+  loadAllTracked().catch(() => {});
   notify();
 }
 

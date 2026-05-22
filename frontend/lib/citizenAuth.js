@@ -29,6 +29,11 @@ import {
   logoutCitizenApi,
   signupDemoCitizen as signupDemoCitizenApi,
 } from './pagesApi';
+// Tracked-items sync — bootstrap the in-memory caches on login /
+// hydrate, clear them on logout. Without this, the navbar "My Tracked"
+// badge would persist across identity changes in the same browser
+// (the cross-account bug we shipped this fix for).
+import { loadAllTracked, clearAllTracked } from './trackedSync';
 
 let currentCitizen = null;
 let loaded = false;
@@ -58,6 +63,14 @@ export async function hydrateCitizenAuth() {
     currentCitizen = status === 200 ? data : null;
     loaded = true;
     notify();
+    // Bootstrap tracked-item caches from the server. Fire-and-forget
+    // so a slow /api/tracked round-trip doesn't block the auth
+    // hydrate; the caches just stay empty for a moment longer.
+    if (currentCitizen) {
+      loadAllTracked().catch(() => { /* swallow */ });
+    } else {
+      clearAllTracked();
+    }
     return currentCitizen;
   })();
   const result = await hydratePromise;
@@ -92,6 +105,8 @@ export async function loginCitizen(email, password) {
     currentCitizen = data.citizen;
     loaded = true;
     notify();
+    // Bootstrap tracked caches for the freshly-signed-in citizen.
+    loadAllTracked().catch(() => {});
     return { ok: true };
   }
   return { ok: false, error: error || 'Login failed', status };
@@ -109,6 +124,7 @@ export async function completeLoginCitizen(challengeToken, code) {
     currentCitizen = data.citizen;
     loaded = true;
     notify();
+    loadAllTracked().catch(() => {});
     return { ok: true };
   }
   return { ok: false, error: error || 'Code verification failed', status };
@@ -118,6 +134,9 @@ export async function logoutCitizen() {
   await logoutCitizenApi();
   currentCitizen = null;
   loaded = true;
+  // Clear the in-memory tracked caches so the next identity (or the
+  // signed-out navbar) doesn't see the previous user's items.
+  clearAllTracked();
   notify();
 }
 
@@ -134,6 +153,7 @@ export async function signupDemoCitizen(payload) {
     currentCitizen = data.citizen;
     loaded = true;
     notify();
+    loadAllTracked().catch(() => {});
     return { ok: true, email: data.email, password: data.password, citizen: data.citizen };
   }
   return { ok: false, error: error || 'Demo signup failed', status };

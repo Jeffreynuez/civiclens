@@ -29,6 +29,7 @@ import {
   loginCandidateApi,
   logoutCandidateApi,
 } from './pagesApi';
+import { loadAllTracked, clearAllTracked } from './trackedSync';
 
 let currentCandidate = null;
 let loaded = false;
@@ -59,6 +60,8 @@ export async function hydrateCandidateAuth() {
     currentCandidate = status === 200 ? data : null;
     loaded = true;
     notify();
+    if (currentCandidate) loadAllTracked().catch(() => {});
+    else clearAllTracked();
     return currentCandidate;
   })();
   const result = await hydratePromise;
@@ -93,6 +96,7 @@ export async function loginCandidate(email, password) {
     currentCandidate = data.candidate;
     loaded = true;
     notify();
+    loadAllTracked().catch(() => {});
     return { ok: true };
   }
   // Surface the backend message verbatim so suspended / pending
@@ -121,6 +125,8 @@ export async function logoutCandidate() {
   await logoutCandidateApi();
   currentCandidate = null;
   loaded = true;
+  clearAllTracked();
+  loadAllTracked().catch(() => {});
   notify();
 }
 
