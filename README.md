@@ -533,4 +533,7 @@ CivicView is **proprietary software**. All source code, designs,
 content, and assets are © 2026 Jeffrey De La Nuez. All rights reserved.
 
 No part of this repository may be copied, modified, distributed, or
-otherwise used without the express written permissio
+otherwise used without the express written permission of the copyright
+holder. See [`LICENSE`](./LICENSE) for full terms.
+
+For licensing inquiries: jeffreynuez1@gmail.com

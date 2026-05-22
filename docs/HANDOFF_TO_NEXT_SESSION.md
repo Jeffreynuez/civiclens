@@ -263,4 +263,5 @@ For continuity of working style:
   Co-author trailer: `Co-Authored-By: Claude Opus 4.7 (1M context)
   <noreply@anthropic.com>`.
 - **The user wants honesty about uncertainty.** When something hinges
-  on
+  on third-party behavior (Stripe's exact pricing, ID.me's RP contract
+  terms), say so + flag it for verification rather than assuming.
