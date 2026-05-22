@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchOwnerDashboard } from '../lib/pagesApi';
-import { MessageSquareText, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, ChatText } from './ui';
 
 /**
  * Constituent Dashboard — owner-only engagement rollup across every
@@ -201,7 +201,7 @@ export default function Dashboard({ officialId, scope, onJumpToPost }) {
                         <ThumbsDown size={11} active color="down" /> {p.down_count}
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <MessageSquareText size={11} /> {p.comment_count}
+                        <ChatText size={11} /> {p.comment_count}
                       </span>
                       <span>🗳 {p.poll_vote_count}</span>
                       <span style={{ marginLeft: 'auto', fontWeight: 700, color: 'var(--cl-text)' }}>

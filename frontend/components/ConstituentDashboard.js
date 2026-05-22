@@ -5,8 +5,21 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useIsCompact } from '@/lib/useViewport';
-import { Avatar, PartyChip, Eyebrow, Button, EmptyState } from './ui';
-import { ArrowLeft, ArrowRight, Calendar, CalendarCheck, CircleCheck, MapPin, MessageCircleMore, Newspaper } from 'lucide-react';
+import {
+  Avatar,
+  PartyChip,
+  Eyebrow,
+  Button,
+  EmptyState,
+  CheckCircle,
+  CalendarCheck,
+  Calendar,
+  ChatCircleDots,
+  Newspaper,
+  MapPin,
+  ArrowLeft,
+  ArrowRight,
+} from './ui';
 import { getAllTrackedOfficials } from '../lib/trackedOfficials';
 import { fetchMyCitizenPolls, closeCitizenPoll, fetchMyHiddenContent } from '../lib/pagesApi';
 import AppealModal from './AppealModal';
@@ -351,7 +364,7 @@ function VerifiedCitizenBadge() {
         fontWeight: 700,
       }}
     >
-      <CircleCheck size={12} active color="up" />
+      <CheckCircle size={12} active color="up" />
       Verified citizen
     </span>
   );
@@ -634,7 +647,7 @@ function RecentActivity({ items, onSeeAll }) {
         </>
       ) : (
         <EmptyState
-          icon={<MessageCircleMore size={36} color="default" />}
+          icon={<ChatCircleDots size={36} color="default" />}
           headline="No recent activity yet"
           body="When your tracked reps post, when polls you voted on close, or when someone replies to your comments — it'll show up here."
           dense
@@ -688,9 +701,9 @@ function ActivityRow({ item }) {
         }}
       >
         {item.kind === 'reply' ? (
-          <MessageCircleMore size={18} active color="accent" />
+          <ChatCircleDots size={18} active color="accent" />
         ) : item.kind === 'voted' ? (
-          <CircleCheck size={18} active color="warning" />
+          <CheckCircle size={18} active color="warning" />
         ) : (
           <Newspaper size={18} active color="accent" />
         )}
@@ -861,7 +874,7 @@ function YourActivityCard({ reps }) {
   return (
     <Card
       title={`Your activity · ${currentMonth()}`}
-      icon={<CircleCheck size={16} color="muted" />}
+      icon={<CheckCircle size={16} color="muted" />}
     >
       <div
         style={{
@@ -912,7 +925,7 @@ function QuickLinksCard({ onNavigate }) {
   const links = [
     { label: 'Compare candidates',   onClick: onNavigate.compareCandidates,  Icon: Newspaper },
     { label: 'Find your polling place', onClick: onNavigate.pollingPlace,    Icon: MapPin    },
-    { label: 'Account settings',     onClick: onNavigate.accountSettings,    Icon: CircleCheck },
+    { label: 'Account settings',     onClick: onNavigate.accountSettings,    Icon: CheckCircle },
   ].filter((l) => l.onClick);
   if (!links.length) return null;
   return (
@@ -1397,7 +1410,7 @@ function MyPollsSection({ citizen, onOpenPage }) {
       )}
       {!loading && !error && visible.length === 0 && (
         <EmptyState
-          icon={<MessageCircleMore size={36} color="default" />}
+          icon={<ChatCircleDots size={36} color="default" />}
           headline={
             filter === 'active'
               ? "You haven't started a poll yet"
