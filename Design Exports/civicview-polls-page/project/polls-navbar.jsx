@@ -1,39 +1,32 @@
 /* PollsNavbar — production-matching navbar for CivicView.
 
-   Structure (desktop ≥1024px):
-     [US flag glyph] [CivicView]      ...     [identity pill] [Sign out]
-                                              [Subscribe] [Polls] [My Tracked]
-                                              [Bell] [Hamburger]
+   Layout (from production screenshot):
+     [Logo glyph] [CivicView]                 ...
+                     [Signed in (2) ▾]   ← identity picker pill
+                     [✨ Help build this]   ← green pill, sparkle
+                     [Subscribe]            ← yellow primary
+                     [My Tracked (4)]
+                     [🔔 with dot]
+                     [☰]
 
-   Below 1024px: keep flag + wordmark + Subscribe (smaller) + Bell + Hamburger.
-   Collapse Polls / My Tracked / identity / Sign out into the hamburger drawer.
-
-   Logged-out state: identity + Sign out → "Log in" + "Sign up".
+   Compact mode (≤1023px container) hides the inner cluster — kept by CSS
+   container queries on .polls-page.
 */
 
 const NavGlyph = {
-  Flag: ({ size = 18 }) => (
-    <svg width={size} height={size * 0.72} viewBox="0 0 25 18" aria-hidden="true">
-      {/* canton */}
-      <rect x="0" y="0" width="11" height="9.5" fill="#1B263B" />
-      {/* star dots in canton */}
-      <circle cx="2.3" cy="2.4" r="0.55" fill="white" />
-      <circle cx="5.3" cy="2.4" r="0.55" fill="white" />
-      <circle cx="8.3" cy="2.4" r="0.55" fill="white" />
-      <circle cx="3.8" cy="4.4" r="0.55" fill="white" />
-      <circle cx="6.8" cy="4.4" r="0.55" fill="white" />
-      <circle cx="2.3" cy="6.4" r="0.55" fill="white" />
-      <circle cx="5.3" cy="6.4" r="0.55" fill="white" />
-      <circle cx="8.3" cy="6.4" r="0.55" fill="white" />
-      {/* stripes — right of canton */}
-      <rect x="11" y="0"    width="14" height="1.4" fill="#D63031" />
-      <rect x="11" y="2.8"  width="14" height="1.4" fill="#D63031" />
-      <rect x="11" y="5.6"  width="14" height="1.4" fill="#D63031" />
-      <rect x="11" y="8.4"  width="14" height="1.4" fill="#D63031" />
-      {/* stripes — full width below canton */}
-      <rect x="0" y="9.5"  width="25" height="1.4" fill="#D63031" />
-      <rect x="0" y="12.3" width="25" height="1.4" fill="#D63031" />
-      <rect x="0" y="15.1" width="25" height="1.4" fill="#D63031" />
+  // CivicView wordmark glyph — lens + flag corner
+  Lens: ({ size = 24 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2" y="2" width="11" height="7.5" rx="1" fill="#FFFFFF" opacity="0.95" />
+      <rect x="13" y="2"   width="17" height="1.5" fill="#FFFFFF" opacity="0.8" />
+      <rect x="13" y="5"   width="17" height="1.5" fill="#FFFFFF" opacity="0.8" />
+      <rect x="13" y="8"   width="17" height="1.5" fill="#FFFFFF" opacity="0.8" />
+      <circle cx="5"  cy="5.7" r="0.7" fill="#1B263B" />
+      <circle cx="8"  cy="5.7" r="0.7" fill="#1B263B" />
+      <circle cx="11" cy="5.7" r="0.7" fill="#1B263B" />
+      <circle cx="14" cy="19" r="9" fill="none" stroke="#FFFFFF" strokeWidth="2.2" />
+      <circle cx="14" cy="19" r="5.5" fill="#FFFFFF" opacity="0.18" />
+      <line x1="21" y1="25.5" x2="27" y2="30" stroke="#8A2929" strokeWidth="2.6" strokeLinecap="round" />
     </svg>
   ),
   Person: ({ size = 14, color = 'currentColor' }) => (
@@ -44,9 +37,9 @@ const NavGlyph = {
   ),
   Spark: ({ size = 14, color = 'currentColor' }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 14 L9 11 L11 6 L13 11 L18 14 L13 17 L11 22 L9 17 Z"
-            fill={color} opacity="0.28" stroke={color} strokeWidth="1.7" strokeLinejoin="miter" />
-      <circle cx="19" cy="5" r="1.4" fill={color} />
+      <path d="M12 3 L13.8 9.6 L20.4 11.4 L13.8 13.2 L12 19.8 L10.2 13.2 L3.6 11.4 L10.2 9.6 Z"
+            fill={color} opacity="0.28" stroke={color} strokeWidth="1.6" strokeLinejoin="miter" />
+      <path d="M19 4 L19.6 6 L21.6 6.6 L19.6 7.2 L19 9.2 L18.4 7.2 L16.4 6.6 L18.4 6 Z" fill={color} />
     </svg>
   ),
   Bookmark: ({ size = 14, color = 'currentColor' }) => (
@@ -65,29 +58,29 @@ const NavGlyph = {
       <path d="M4 7 L20 7 M4 12 L20 12 M4 17 L20 17" stroke={color} strokeWidth="2" strokeLinecap="butt" />
     </svg>
   ),
+  Chev: ({ size = 10, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9 L12 15 L18 9" stroke={color} strokeWidth="2.2" strokeLinecap="butt" strokeLinejoin="miter" fill="none" />
+    </svg>
+  ),
 };
 
-function PollsNavbar({ signedIn = true, isAdmin = false, identityName = 'Maria H.', identityScope = 'FL-19' }) {
-  // All elements always render; CSS container queries on .polls-page
-  // hide the collapsed cluster (identity / Sign out / Polls / My Tracked)
-  // below 1024px to match production. The hamburger drawer carries
-  // those items at compact widths.
+function PollsNavbar({ signedIn = true, identityCount = 1, identityName = 'Maria H.', trackedCount = 4, unread = true }) {
   return (
     <header className="cv-nav2">
       <div className="cv-nav2__brand">
-        <NavGlyph.Flag size={20} />
+        <NavGlyph.Lens size={22} />
         <span className="cv-nav2__wordmark">CivicView</span>
       </div>
 
       <div className="cv-nav2__cluster">
         {signedIn ? (
-          <>
-            <span className="cv-nav2__id">
-              <NavGlyph.Person size={14} color="rgba(255,255,255,0.78)" />
-              <span>{isAdmin ? 'CivicView Admin' : `${identityName} · ${identityScope}`}</span>
-            </span>
-            <button className="cv-nav2__ghost">Sign out</button>
-          </>
+          <button className="cv-nav2__id">
+            <NavGlyph.Person size={14} color="rgba(255,255,255,0.78)" />
+            <span>Signed in</span>
+            <span className="cv-nav2__id-count cl-num">{identityCount}</span>
+            <NavGlyph.Chev size={10} color="rgba(255,255,255,0.7)" />
+          </button>
         ) : (
           <>
             <button className="cv-nav2__ghost">Log in</button>
@@ -95,20 +88,24 @@ function PollsNavbar({ signedIn = true, isAdmin = false, identityName = 'Maria H
           </>
         )}
 
+        <button className="cv-nav2__helpbuild">
+          <NavGlyph.Spark size={13} color="white" />
+          <span>Help build this</span>
+        </button>
+
         <button className="cv-nav2__primary">Subscribe</button>
 
-        <button className="cv-nav2__ghost cv-nav2__ghost--current" aria-current="page">
-          <NavGlyph.Spark size={14} color="rgba(255,255,255,0.92)" />
-          <span>Polls</span>
-        </button>
         <button className="cv-nav2__ghost">
-          <NavGlyph.Bookmark size={14} color="rgba(255,255,255,0.92)" />
+          <NavGlyph.Bookmark size={13} color="rgba(255,255,255,0.92)" />
           <span>My Tracked</span>
+          {trackedCount > 0 && (
+            <span className="cv-nav2__pillcount cl-num">{trackedCount}</span>
+          )}
         </button>
 
         <button className="cv-nav2__icon" aria-label="Notifications">
           <NavGlyph.Bell size={16} color="white" />
-          <span className="cv-nav2__dot" aria-hidden="true" />
+          {unread && <span className="cv-nav2__dot" aria-hidden="true" />}
         </button>
 
         <button className="cv-nav2__icon" aria-label="Menu">
@@ -120,3 +117,4 @@ function PollsNavbar({ signedIn = true, isAdmin = false, identityName = 'Maria H
 }
 
 window.PollsNavbar = PollsNavbar;
+window.NavGlyph = NavGlyph;
