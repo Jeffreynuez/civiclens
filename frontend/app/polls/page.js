@@ -43,9 +43,10 @@ import {
   createStandalonePoll,
   aiHealth,
   filterPolls,
-  voteOnCitizenPoll,
-  closeCitizenPoll,
 } from '@/lib/pagesApi';
+import FeedCard from '@/components/polls/FeedCard';
+import BranchChipV2 from '@/components/polls/BranchChip';
+import StateDropdown from '@/components/polls/StateDropdown';
 import { useCitizenAuth, logoutCitizen } from '@/lib/citizenAuth';
 import Navbar from '@/components/Navbar';
 import CitizenLoginModal from '@/components/CitizenLoginModal';
@@ -62,10 +63,15 @@ import './polls.css';
 // (citizens asking candidates questions). Once candidate accounts
 // ship in Phase 3+, this chip will also include candidate-authored
 // polls — same backend filter, broader meaning.
+// Branch chip taxonomy after the PR #2 redesign.
+//   • 'bill'      → 'states'    (renamed — clicking opens a state dropdown)
+//   • 'committee' → 'congress'  (covers both House + Senate)
+//   • All other ids unchanged so existing code that maps by id keeps
+//     working without further edits.
 const BRANCH_FILTERS = [
   { id: 'all',        label: 'All polls',        glyph: 'AllPolls',       tier: 'normal' },
-  { id: 'bill',       label: 'Bill',             glyph: 'Bill',           tier: 'normal' },
-  { id: 'committee',  label: 'Committee',        glyph: 'Committee',      tier: 'normal' },
+  { id: 'states',     label: 'States',           glyph: 'Bill',           tier: 'normal' },
+  { id: 'congress',   label: 'Congress',         glyph: 'Committee',      tier: 'normal' },
   { id: 'executive',  label: 'Executive',        glyph: 'Executive',      tier: 'normal' },
   { id: 'judicial',   label: 'Judicial',         glyph: 'Judicial',       tier: 'normal' },
   { id: 'standalone', label: 'Standalone',       glyph: 'Standalone',     tier: 'standalone' },
@@ -124,7 +130,42 @@ export default function PollsPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [branch, setBranch] = useState('all');
+  // Branch chips are now ADDITIVE multi-select per the brief.
+  // The array always contains at least one id; 'all' acts as the
+  // deactivator (clicking it clears every other chip).
+  const [branches, setBranches] = useState(['all']);
+  const [stateFilter, setStateFilter] = useState(null);          // 2-letter code | null
+  const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
+  // Singleton accordion — only one comment thread is open at a time.
+  const [openCommentId, setOpenCommentId] = useState(null);
+
+  // Additive chip toggler.
+  //   • Clicking 'all' clears every other chip and shows everything.
+  //   • Clicking any other chip:
+  //       - if it's already active, remove it (if that leaves nothing,
+  //         fall back to ['all']);
+  //       - otherwise add it (and drop 'all' from the set so the
+  //         filter actually narrows).
+  const toggleBranch = (id) => {
+    if (id === 'all') {
+      setBranches(['all']);
+      return;
+    }
+    setBranches((prev) => {
+      const next = prev.filter((b) => b !== 'all');
+      if (next.includes(id)) {
+        const after = next.filter((b) => b !== id);
+        return after.length === 0 ? ['all'] : after;
+      }
+      return [...next, id];
+    });
+  };
+
+  // Comment-accordion toggler. Opening a card's thread instantly
+  // collapses any previously-open thread on the page (singleton).
+  const toggleComments = (cardId) => {
+    setOpenCommentId((prev) => (prev === cardId ? null : cardId));
+  };
   const [composerOpen, setComposerOpen] = useState(false);
 
   // Local modal state — /polls doesn't share the home orchestrator's
@@ -156,7 +197,18 @@ export default function PollsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: err } = await fetchPollsFeed({});
+    // Map the active chip set to server-side filter kinds. The
+    // back-end knows 'rep' / 'citizen' / 'standalone' / 'candidate';
+    // page-branch chips (states / congress / executive / judicial)
+    // are narrowed client-side from the wider response.
+    const SERVER_KINDS = new Set(['rep', 'citizen', 'standalone', 'candidate']);
+    const kinds = branches.includes('all')
+      ? undefined
+      : branches.filter((b) => SERVER_KINDS.has(b));
+    const { data, error: err } = await fetchPollsFeed({
+      kinds: kinds && kinds.length ? kinds : undefined,
+      state: stateFilter || undefined,
+    });
     setLoading(false);
     if (err || !data) {
       setError(err || 'Could not load polls.');
@@ -169,7 +221,7 @@ export default function PollsPage() {
     setAiFilterIds(null);
     setAiFilterLabel('');
     setActiveTags([]);
-  }, []);
+  }, [branches, stateFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -191,15 +243,23 @@ export default function PollsPage() {
     return counts;
   }, [items]);
 
-  // Branch-filter pipeline. "All" passes everything; specific
-  // branches filter to that branch. The page is forward-compatible:
-  // when the backend starts emitting per-poll branches, the
-  // existing rep/citizen polls will start showing up under their
-  // matched chips.
+  // Branch-filter pipeline. Multi-select additive: the result is the
+  // union of every active branch's matches, plus an optional state
+  // narrow. The 'all' chip short-circuits to the full set (it lives
+  // in the array but acts as the deactivator).
   const branchFiltered = useMemo(() => {
-    if (branch === 'all') return items;
-    return items.filter((p) => pollBranch(p) === branch);
-  }, [items, branch]);
+    let pool = items;
+    if (stateFilter) {
+      pool = pool.filter((p) => p.state ? p.state === stateFilter : true);
+      // The backend already narrows when ?state= is sent on load();
+      // this is a belt-and-suspenders client-side pass so that
+      // toggling the dropdown without a refetch still feels right
+      // for items that came back from a wider load.
+    }
+    if (branches.includes('all') || branches.length === 0) return pool;
+    const active = new Set(branches);
+    return pool.filter((p) => active.has(pollBranch(p)));
+  }, [items, branches, stateFilter]);
 
   const visibleItems = useMemo(() => {
     if (aiFilterIds === null) return branchFiltered;
@@ -259,7 +319,8 @@ export default function PollsPage() {
 
   const clearAllFilters = () => {
     clearAiFilter();
-    setBranch('all');
+    setBranches(['all']);
+    setStateFilter(null);
   };
 
   const onCreated = (poll) => {
@@ -345,13 +406,38 @@ export default function PollsPage() {
             <div className="polls-kindrow">
               <div className="polls-kindrow__chips">
                 {BRANCH_FILTERS.map((f) => (
-                  <BranchChip
-                    key={f.id}
-                    filter={f}
-                    active={branch === f.id}
-                    count={branchCounts[f.id] || 0}
-                    onClick={() => setBranch(f.id)}
-                  />
+                  <div key={f.id} className={f.id === 'states' ? 'polls-kindrow__states-wrap' : ''}>
+                    <BranchChipV2
+                      filter={f}
+                      active={branches.includes(f.id)}
+                      count={branchCounts[f.id] || 0}
+                      stateBadge={f.id === 'states' ? stateFilter : null}
+                      onClick={() => {
+                        if (f.id === 'states') {
+                          // Toggle the dropdown AND the chip in one
+                          // gesture — first click opens the dropdown
+                          // and activates the chip; second click
+                          // closes it.
+                          if (!branches.includes('states')) toggleBranch('states');
+                          setStateDropdownOpen((open) => !open);
+                        } else {
+                          toggleBranch(f.id);
+                        }
+                      }}
+                      onStateBadgeClick={() => {
+                        // Inline "× state" affordance only clears the
+                        // state narrow — leaves the chip itself active.
+                        setStateFilter(null);
+                      }}
+                    />
+                    {f.id === 'states' && stateDropdownOpen && (
+                      <StateDropdown
+                        selected={stateFilter}
+                        onSelect={setStateFilter}
+                        onClose={() => setStateDropdownOpen(false)}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
               <div className="polls-kindrow__cta">
@@ -415,7 +501,7 @@ export default function PollsPage() {
 
           {!loading && isFullEmpty && (
             <FullEmpty
-              branch={branch}
+              branch={branches.length === 1 ? branches[0] : 'all'}
               onClearFilters={clearAllFilters}
               onStartPoll={handleStartPoll}
               signedIn={signedIn}
@@ -433,12 +519,16 @@ export default function PollsPage() {
           )}
 
           {!loading && !isFullEmpty && !isInlineEmpty && visibleItems.map((p) => (
-            <PollCard
+            <FeedCard
               key={p.id}
-              poll={p}
+              card={p}
+              kind="poll"
+              isCommentsOpen={openCommentId === p.id}
+              onToggleComments={() => toggleComments(p.id)}
               signedIn={signedIn}
               onLoginRequired={() => setCitizenLoginOpen(true)}
               onMutated={load}
+              citizenViewer={citizen}
             />
           ))}
         </div>
