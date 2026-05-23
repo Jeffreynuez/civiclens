@@ -58,6 +58,9 @@ export default function FeedCard({
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  // Post-body collapse — long bodies (>400 chars) show an Expand pill
+  // and stay collapsed by default. Same pattern the rep page uses.
+  const [expanded, setExpanded] = useState(false);
 
   // ── handlers ────────────────────────────────────────────────────
   const handleVote = async (optionId) => {
@@ -242,6 +245,37 @@ export default function FeedCard({
         </div>
       )}
 
+      {/* Post body — kind='post' on the /posts feed. Long bodies
+          collapse to a preview with an Expand affordance; attached
+          polls render an inline "+ poll attached" badge that
+          deep-links to the page where the poll can be voted. */}
+      {kind === 'post' && (
+        <div className="feed-card__body">
+          <div className={`feed-card__post-body ${expanded ? 'is-expanded' : ''}`}>
+            {card.body}
+          </div>
+          {card.body && card.body.length > 400 && !expanded && (
+            <button
+              type="button"
+              className="feed-card__expand"
+              onClick={() => setExpanded(true)}
+            >
+              Expand
+            </button>
+          )}
+          {card.has_attached_poll && (
+            <a
+              className="feed-card__crosslink feed-card__crosslink--inline"
+              href={card.official_id ? `/?page=${encodeURIComponent(card.official_id)}` : '#'}
+            >
+              <span className="feed-card__crosslink-dot" aria-hidden="true">●</span>
+              <span>+ poll attached</span>
+              <span className="feed-card__crosslink-arrow">→ Open page</span>
+            </a>
+          )}
+        </div>
+      )}
+
       <div className="feed-card__actions">
         <button
           type="button"
@@ -270,9 +304,19 @@ export default function FeedCard({
       {isCommentsOpen && (
         <div className="feed-card__thread">
           <CommentsThread
-            mode={card.parent_post_id ? 'post' : 'poll'}
-            postId={card.parent_post_id || undefined}
-            pollId={card.parent_post_id ? undefined : card.id}
+            // Three cases:
+            //   • post card               → comments live on the post directly
+            //   • poll card w/ parent post → comments live on the parent post
+            //   • citizen-/standalone-poll → comments live on the poll
+            mode={kind === 'post' || card.parent_post_id ? 'post' : 'poll'}
+            postId={
+              kind === 'post'
+                ? card.id
+                : card.parent_post_id || undefined
+            }
+            pollId={
+              kind === 'post' || card.parent_post_id ? undefined : card.id
+            }
             signedIn={signedIn}
             onLoginRequired={onLoginRequired}
             onMutated={onMutated}

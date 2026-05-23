@@ -40,6 +40,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   fetchPollsFeed,
+  fetchPostsFeed,
   createStandalonePoll,
   aiHealth,
   filterPolls,
@@ -47,6 +48,7 @@ import {
 import FeedCard from '@/components/polls/FeedCard';
 import BranchChipV2 from '@/components/polls/BranchChip';
 import StateDropdown from '@/components/polls/StateDropdown';
+import { TabStrip, TabContent } from '@/components/polls/TabStrip';
 import { useCitizenAuth, logoutCitizen } from '@/lib/citizenAuth';
 import Navbar from '@/components/Navbar';
 import CitizenLoginModal from '@/components/CitizenLoginModal';
@@ -122,7 +124,12 @@ function pollBranch(poll) {
   return null;
 }
 
-export default function PollsPage() {
+// Shared shell for both /polls (tab='polls') and /posts (tab='posts').
+// /posts/page.js mounts this component with the other tab; tab
+// changes triggered by the TabStrip push a new URL via router.push
+// so the back button works and a deep-link to /posts opens the
+// right tab on first paint.
+export function GrassrootsFeed({ tab = 'polls' }) {
   const router = useRouter();
   const { citizen } = useCitizenAuth();
   const signedIn = !!citizen;
@@ -166,6 +173,21 @@ export default function PollsPage() {
   const toggleComments = (cardId) => {
     setOpenCommentId((prev) => (prev === cardId ? null : cardId));
   };
+
+  // Tab toggle — pushes the URL so /polls ↔ /posts is bookmarkable
+  // and the back button works. The actual data swap happens inside
+  // GrassrootsFeed (the component re-renders with the new `tab`
+  // prop on the new route).
+  const handleTabChange = (next) => {
+    if (next === tab) return;
+    router.push(next === 'posts' ? '/posts' : '/polls');
+  };
+
+  // Per-tab branch chips. Posts tab drops 'standalone' because
+  // citizens can't author posts. All other chips stay.
+  const activeBranchFilters = tab === 'posts'
+    ? BRANCH_FILTERS.filter((f) => f.id !== 'standalone')
+    : BRANCH_FILTERS;
   const [composerOpen, setComposerOpen] = useState(false);
 
   // Local modal state — /polls doesn't share the home orchestrator's
@@ -205,8 +227,17 @@ export default function PollsPage() {
     const kinds = branches.includes('all')
       ? undefined
       : branches.filter((b) => SERVER_KINDS.has(b));
-    const { data, error: err } = await fetchPollsFeed({
-      kinds: kinds && kinds.length ? kinds : undefined,
+    const feedFn = tab === 'posts' ? fetchPostsFeed : fetchPollsFeed;
+    // The posts feed only knows 'rep' | 'candidate'. Strip the kinds
+    // that don't apply so we don't ask the backend to filter on a
+    // value it doesn't recognize (and so the union doesn't collapse
+    // to empty on the first chip toggle).
+    const POSTS_KINDS = new Set(['rep', 'candidate']);
+    const effectiveKinds = tab === 'posts' && kinds
+      ? kinds.filter((k) => POSTS_KINDS.has(k))
+      : kinds;
+    const { data, error: err } = await feedFn({
+      kinds: effectiveKinds && effectiveKinds.length ? effectiveKinds : undefined,
       state: stateFilter || undefined,
     });
     setLoading(false);
@@ -221,7 +252,7 @@ export default function PollsPage() {
     setAiFilterIds(null);
     setAiFilterLabel('');
     setActiveTags([]);
-  }, [branches, stateFilter]);
+  }, [branches, stateFilter, tab]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -398,14 +429,20 @@ export default function PollsPage() {
         </button>
       </div>
 
-      <PollsHero counts={branchCounts} />
+      <PollsHero counts={branchCounts} tab={tab} />
+
+      {/* TabStrip — Polls / Posts segmented control. Lives between
+          the hero and the filter row per the design brief. */}
+      <div className="polls-tabstrip-wrap polls-wrap">
+        <TabStrip active={tab} onChange={handleTabChange} />
+      </div>
 
       <div className="polls-filters">
         <div className="polls-wrap">
           <div className="polls-filters__inner">
             <div className="polls-kindrow">
               <div className="polls-kindrow__chips">
-                {BRANCH_FILTERS.map((f) => (
+                {activeBranchFilters.map((f) => (
                   <div key={f.id} className={f.id === 'states' ? 'polls-kindrow__states-wrap' : ''}>
                     <BranchChipV2
                       filter={f}
@@ -487,6 +524,7 @@ export default function PollsPage() {
           />
         )}
 
+        <TabContent tabKey={tab}>
         <div className="polls-grid">
           {loading && items.length === 0 && (
             <>
@@ -522,7 +560,7 @@ export default function PollsPage() {
             <FeedCard
               key={p.id}
               card={p}
-              kind="poll"
+              kind={tab === "posts" ? "post" : "poll"}
               isCommentsOpen={openCommentId === p.id}
               onToggleComments={() => toggleComments(p.id)}
               signedIn={signedIn}
@@ -532,8 +570,9 @@ export default function PollsPage() {
             />
           ))}
         </div>
+        </TabContent>
 
-        {!loading && !isFullEmpty && !isInlineEmpty && visibleItems.length > 0 && (
+        {!loading && !isFullEmpty && !isInlineEmpty && visibleItems.length > 0 && tab !== 'posts' && (
           <BottomStartCTA signedIn={signedIn} onClick={handleStartPoll} />
         )}
       </div>
@@ -680,33 +719,43 @@ export default function PollsPage() {
 // totals today, so we display branch-derived counts that adapt as
 // the feed grows.
 // ─────────────────────────────────────────────────────────────────────
-function PollsHero({ counts }) {
+function PollsHero({ counts, tab = 'polls' }) {
+  // Hero copy + stats swap per tab. Stats labels stay generic because
+  // the per-tab semantics differ (live polls vs total posts) and the
+  // backend numbers we have today are the same shape either way.
+  const isPosts = tab === 'posts';
+  const eyebrow = isPosts ? 'Posts · grassroots feed' : 'Civic polls · grassroots feed';
+  const title = isPosts ? 'Posts' : 'Polls';
+  const sub = isPosts
+    ? "Every post from verified reps and candidates — see what they're saying without scrolling each page individually."
+    : 'Every active poll on CivicView — what reps are asking constituents, what citizens are asking each other and the officials who serve them, and standalone polls on civic topics that don\u2019t belong to any single page.';
+  const stat1Label = isPosts ? 'Total posts' : 'Live polls';
+  const stat2Label = isPosts ? 'From reps' : 'Standalone';
+  const stat3Label = isPosts ? 'From candidates' : 'On rep pages';
+  const stat1 = counts.all || 0;
+  const stat2 = isPosts ? (counts.rep || 0) : (counts.standalone || 0);
+  const stat3 = isPosts ? (counts.candidate || 0) : ((counts.all || 0) - (counts.standalone || 0));
   return (
-    <section className="polls-hero" aria-label="Polls hero">
+    <section className="polls-hero" aria-label={`${title} hero`}>
       <div className="polls-wrap">
         <div className="polls-hero__inner">
           <div>
-            <div className="polls-hero__eyebrow">Civic polls · grassroots feed</div>
-            <h1 className="polls-hero__title">Polls</h1>
-            <p className="polls-hero__sub">
-              Every active poll on CivicView — what reps are asking constituents,
-              what citizens are asking each other and the officials who serve them,
-              and standalone polls on civic topics that don&rsquo;t belong to any
-              single page.
-            </p>
+            <div className="polls-hero__eyebrow">{eyebrow}</div>
+            <h1 className="polls-hero__title">{title}</h1>
+            <p className="polls-hero__sub">{sub}</p>
           </div>
           <div className="polls-hero__stats">
             <div className="polls-hero__stat">
-              <span className="polls-hero__stat-num cl-num">{formatCount(counts.all || 0)}</span>
-              <span className="polls-hero__stat-label">Live polls</span>
+              <span className="polls-hero__stat-num cl-num">{formatCount(stat1)}</span>
+              <span className="polls-hero__stat-label">{stat1Label}</span>
             </div>
             <div className="polls-hero__stat">
-              <span className="polls-hero__stat-num cl-num">{formatCount(counts.standalone || 0)}</span>
-              <span className="polls-hero__stat-label">Standalone</span>
+              <span className="polls-hero__stat-num cl-num">{formatCount(stat2)}</span>
+              <span className="polls-hero__stat-label">{stat2Label}</span>
             </div>
             <div className="polls-hero__stat">
-              <span className="polls-hero__stat-num cl-num">{formatCount((counts.all || 0) - (counts.standalone || 0))}</span>
-              <span className="polls-hero__stat-label">On rep pages</span>
+              <span className="polls-hero__stat-num cl-num">{formatCount(stat3)}</span>
+              <span className="polls-hero__stat-label">{stat3Label}</span>
             </div>
           </div>
         </div>
@@ -1528,3 +1577,9 @@ const BRANCH_GLYPHS = {
   Standalone: StandaloneGlyph,
   FromCandidates: FromCandidatesGlyph,
 };
+
+// Default export — /polls/page.js routes here. /posts/page.js
+// imports GrassrootsFeed directly and passes tab='posts'.
+export default function PollsPage() {
+  return <GrassrootsFeed tab="polls" />;
+}

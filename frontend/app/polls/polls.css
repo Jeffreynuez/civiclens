@@ -1410,3 +1410,97 @@ a.poll-card { display: flex; }
   color: var(--cl-accent, #18794e);
   cursor: pointer;
 }
+
+/* ───────────────────────────────────────────────────────────────────
+   PR #3 — TabStrip + post variant of FeedCard
+   ─────────────────────────────────────────────────────────────────── */
+
+/* TabStrip — Polls / Posts segmented pill control between hero +
+   filter row. Active = solid accent; inactive = outlined. Full-width
+   on mobile so the 44pt min hit-target is comfortable. */
+.polls-tabstrip-wrap {
+  padding: 16px 0 0;
+}
+.tabstrip {
+  display: inline-flex; gap: 0;
+  background: var(--cl-surface, #fff);
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 999px;
+  padding: 3px;
+}
+.tabstrip__tab {
+  appearance: none;
+  background: transparent; border: 0;
+  padding: 8px 22px;
+  font-size: 13px; font-weight: 700;
+  color: var(--cl-text, #111);
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 36px;
+  transition: background 120ms, color 120ms;
+}
+.tabstrip__tab.is-active {
+  background: var(--cl-accent, #18794e);
+  color: #fff;
+}
+
+/* TabContent — outgoing slides left + fades; incoming slides in from
+   the right + fades. ~240ms each direction. */
+.tabcontent {
+  transition: opacity 240ms ease, transform 240ms ease;
+  opacity: 1;
+  transform: translateX(0);
+}
+.tabcontent--out {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+.tabcontent--in {
+  opacity: 0;
+  transform: translateX(12px);
+}
+.tabcontent--idle {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@media (max-width: 600px) {
+  .tabstrip {
+    display: flex;
+    width: 100%;
+  }
+  .tabstrip__tab {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+/* FeedCard — post variant body (kind='post'). Long bodies collapse
+   to a preview height with an Expand pill. Attached-poll inline
+   badge uses the same accent treatment as the cross-feed "From a
+   post" link on the polls tab. */
+.feed-card__post-body {
+  font-size: 14px; line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 9.5em;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+}
+.feed-card__post-body.is-expanded {
+  max-height: none;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.feed-card__expand {
+  align-self: flex-start;
+  background: transparent; border: 0;
+  padding: 6px 0 0;
+  font-size: 12px; font-weight: 600;
+  color: var(--cl-accent, #18794e);
+  cursor: pointer;
+}
+.feed-card__crosslink--inline {
+  margin-top: 6px;
+}
