@@ -954,3 +954,553 @@ a.poll-card { display: flex; }
   .polls-kindrow__chips::-webkit-scrollbar { display: none; }
   .polls-chip { flex-shrink: 0; }
 }
+
+/* ───────────────────────────────────────────────────────────────────
+   PR #2 redesign — new components
+   ─────────────────────────────────────────────────────────────────── */
+
+/* StateDropdown — opens from the "States" chip on the filter row.
+   Single-select; scrollable list with fade gradients top + bottom.
+   Mobile: full-width sheet that pushes content. */
+.states-dd {
+  position: absolute;
+  z-index: 80;
+  margin-top: 6px;
+  background: var(--cl-surface, #fff);
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+  min-width: 260px;
+  max-width: 320px;
+  overflow: hidden;
+}
+.states-dd--inline { left: 0; top: 100%; }
+.states-dd__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cl-border, #e5e7eb);
+  font-size: 13px; font-weight: 600;
+}
+.states-dd__clear {
+  background: transparent; border: 0; padding: 0;
+  color: var(--cl-accent, #18794e); font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.states-dd__scroll {
+  position: relative;
+  max-height: 320px;
+}
+.states-dd__list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.states-dd__item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 12px;
+  background: transparent; border: 0; text-align: left; cursor: pointer;
+  font-size: 13px;
+}
+.states-dd__item:hover { background: var(--cl-hover, #f3f4f6); }
+.states-dd__item.is-selected { background: var(--cl-accent-soft, #ecfdf3); }
+.states-dd__abbr {
+  display: inline-block; min-width: 28px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600; color: var(--cl-text-muted, #6b7280);
+}
+.states-dd__name { flex: 1; }
+.states-dd__check { color: var(--cl-accent, #18794e); font-weight: 700; }
+.states-dd__fade {
+  position: absolute; left: 0; right: 0; height: 20px;
+  pointer-events: none; opacity: 0; transition: opacity 120ms;
+}
+.states-dd__fade--top {
+  top: 0;
+  background: linear-gradient(to bottom, var(--cl-surface, #fff) 0%, transparent 100%);
+}
+.states-dd__fade--bot {
+  bottom: 0;
+  background: linear-gradient(to top, var(--cl-surface, #fff) 0%, transparent 100%);
+  opacity: 1;
+}
+.states-dd__scroll.is-scrolled .states-dd__fade--top { opacity: 1; }
+.states-dd__scroll.is-end .states-dd__fade--bot { opacity: 0; }
+.polls-kindrow__states-wrap { position: relative; display: inline-block; }
+
+/* BranchChip — additive multi-select with optional state badge. */
+.branch-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--cl-surface, #fff);
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 999px;
+  font-size: 13px; font-weight: 600; line-height: 1;
+  cursor: pointer; transition: background 100ms, border-color 100ms;
+  color: var(--cl-text, #111);
+}
+.branch-chip:hover { background: var(--cl-hover, #f9fafb); }
+.branch-chip.is-active {
+  background: var(--cl-accent, #18794e);
+  border-color: var(--cl-accent, #18794e);
+  color: #fff;
+}
+.branch-chip--standalone { border-style: dashed; }
+.branch-chip--standalone.is-active {
+  background: var(--cl-text, #111);
+  border-color: var(--cl-text, #111);
+  color: #fff;
+}
+.branch-chip__count {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.branch-chip.is-active .branch-chip__count {
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+}
+.branch-chip__state {
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  cursor: pointer;
+}
+.branch-chip.is-active .branch-chip__state {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+/* FeedCard — shared card shell. Visual weight matches the rep-page
+   card; per-card pieces are kind chip + page tag + timestamp +
+   optional close X (top row), author row, body, action footer. */
+.feed-card {
+  background: var(--cl-surface, #fff);
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.feed-card.is-thread-open {
+  border-color: var(--cl-accent-soft-border, #bbf7d0);
+  box-shadow: 0 0 0 4px var(--cl-accent-soft, #ecfdf3);
+}
+.feed-card__top {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px;
+}
+.feed-card__kind {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--cl-text-muted-soft, #f3f4f6);
+  color: var(--cl-text, #111);
+  border-radius: 4px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.03em;
+}
+.feed-card__kind--rep        { background: #ddeaff; color: #1d4ed8; }
+.feed-card__kind--citizen    { background: #fff4d6; color: #92400e; }
+.feed-card__kind--standalone { background: #fce7f3; color: #9d174d; }
+.feed-card__kind--candidate  { background: #ede9fe; color: #5b21b6; }
+.feed-card__page-tag {
+  font-weight: 600; color: var(--cl-text, #111);
+}
+.feed-card__time {
+  color: var(--cl-text-muted, #6b7280);
+  font-variant-numeric: tabular-nums;
+}
+.feed-card__close {
+  margin-left: auto;
+  width: 24px; height: 24px;
+  background: transparent;
+  border: 1.5px solid var(--cl-down, #dc2626);
+  color: var(--cl-down, #dc2626);
+  border-radius: 50%;
+  font-size: 14px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.feed-card__close:hover { background: var(--cl-down-soft, #fee2e2); }
+.feed-card__close:disabled { opacity: 0.5; cursor: default; }
+.feed-card__crosslink {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600;
+  color: var(--cl-accent, #18794e);
+  text-decoration: none;
+}
+.feed-card__crosslink-dot { color: var(--cl-accent, #18794e); }
+.feed-card__crosslink-arrow { color: var(--cl-text-muted, #6b7280); font-weight: 500; }
+.feed-card__author { display: flex; align-items: center; gap: 12px; }
+.feed-card__avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--cl-text-muted-soft, #f3f4f6);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px;
+  color: var(--cl-text, #111);
+}
+.feed-card__avatar--rep        { background: #ddeaff; color: #1d4ed8; }
+.feed-card__avatar--citizen    { background: #fff4d6; color: #92400e; }
+.feed-card__avatar--standalone { background: #fce7f3; color: #9d174d; }
+.feed-card__avatar--candidate  { background: #ede9fe; color: #5b21b6; }
+.feed-card__name {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; font-size: 14px;
+}
+.feed-card__unverified {
+  padding: 1px 6px;
+  background: var(--cl-warn-soft, #fef3c7);
+  color: var(--cl-warn, #92400e);
+  border-radius: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
+}
+.feed-card__role {
+  font-size: 12px; color: var(--cl-text-muted, #6b7280);
+}
+.feed-card__error,
+.feed-card__confirm {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--cl-down-soft, #fee2e2);
+  border: 1px solid var(--cl-down, #dc2626);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--cl-down, #991b1b);
+}
+.feed-card__confirm-row {
+  display: flex; gap: 8px; margin-top: 8px;
+}
+.feed-card__confirm-cancel {
+  background: transparent;
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 6px 12px; font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.feed-card__confirm-go {
+  background: var(--cl-down, #dc2626);
+  color: #fff; border: 0;
+  border-radius: 8px;
+  padding: 6px 12px; font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.feed-card__confirm-go:disabled { opacity: 0.6; cursor: default; }
+.feed-card__actions {
+  display: flex; align-items: center; gap: 18px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--cl-border, #e5e7eb);
+}
+.feed-act {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: transparent; border: 0; padding: 4px 6px;
+  font-size: 13px; font-weight: 600;
+  color: var(--cl-text-muted, #6b7280);
+  cursor: pointer; border-radius: 6px;
+}
+.feed-act:hover { background: var(--cl-hover, #f9fafb); }
+.feed-act.is-active { color: var(--cl-text, #111); }
+.feed-act--comments { margin-left: auto; }
+.feed-card__thread {
+  margin: 12px -18px -16px;
+  padding: 12px 18px;
+  background: var(--cl-thread-bg, #f9fafb);
+  border-top: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 0 0 14px 14px;
+}
+
+/* Embedded PollBlock inside FeedCard (poll variant). */
+.poll-block { display: flex; flex-direction: column; gap: 8px; }
+.poll-block__q { font-size: 15px; font-weight: 700; line-height: 1.3; }
+.poll-block__opts { display: flex; flex-direction: column; gap: 6px; }
+.poll-opt2 {
+  position: relative;
+  display: flex; align-items: center;
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+}
+.poll-opt2.is-mine { border-color: var(--cl-accent, #18794e); }
+.poll-opt2__fill {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  background: var(--cl-accent-soft, #ecfdf3);
+  z-index: 0;
+}
+.poll-opt2__label,
+.poll-opt2__pct {
+  position: relative; z-index: 1;
+}
+.poll-opt2__label { display: inline-flex; align-items: center; gap: 8px; flex: 1; }
+.poll-opt2__your-vote {
+  font-size: 11px; font-weight: 700;
+  color: var(--cl-accent, #18794e);
+}
+.poll-opt2__pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-text-muted, #6b7280);
+}
+.poll-block__total {
+  font-size: 12px;
+  color: var(--cl-text-muted, #6b7280);
+}
+
+/* CommentsThread — inline accordion under each FeedCard. */
+.thread { display: flex; flex-direction: column; gap: 10px; }
+.thread__identity {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--cl-text-muted, #6b7280);
+}
+.thread__identity-badge {
+  padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+  background: var(--cl-text-muted-soft, #f3f4f6); color: var(--cl-text, #111);
+}
+.thread__identity-badge--citizen { background: #fff4d6; color: #92400e; }
+.thread__identity-badge--rep     { background: #ddeaff; color: #1d4ed8; }
+.thread__identity-badge--candidate { background: #ede9fe; color: #5b21b6; }
+.thread__composer {
+  display: flex; gap: 8px;
+  align-items: flex-end;
+}
+.thread__textarea {
+  flex: 1;
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px; font-family: inherit;
+  resize: vertical;
+}
+.thread__textarea:disabled { background: var(--cl-text-muted-soft, #f3f4f6); cursor: not-allowed; }
+.thread__post-btn {
+  padding: 8px 16px;
+  background: var(--cl-accent, #18794e);
+  color: #fff; border: 0;
+  border-radius: 8px;
+  font-size: 13px; font-weight: 700;
+  cursor: pointer;
+}
+.thread__post-btn:disabled { opacity: 0.5; cursor: default; }
+.thread__post-error,
+.thread__error {
+  font-size: 12px;
+  color: var(--cl-down, #991b1b);
+  padding: 6px 8px;
+  background: var(--cl-down-soft, #fee2e2);
+  border-radius: 6px;
+}
+.thread__controls {
+  display: flex; align-items: center;
+  font-size: 12px;
+}
+.thread__sort { display: inline-flex; align-items: center; gap: 6px; }
+.thread__sort-label { color: var(--cl-text-muted, #6b7280); }
+.thread__sort-select {
+  border: 1px solid var(--cl-border, #e5e7eb);
+  background: var(--cl-surface, #fff);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.thread__filters {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.thread__tone-chips {
+  display: inline-flex; gap: 4px; flex-wrap: wrap;
+}
+.thread__tone-chip {
+  background: transparent;
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px; font-weight: 600;
+  cursor: pointer;
+}
+.thread__tone-chip.is-active {
+  background: var(--cl-text, #111);
+  color: #fff;
+  border-color: var(--cl-text, #111);
+}
+.thread__sem-input {
+  flex: 1; min-width: 160px;
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.thread__apply,
+.thread__clear-filter {
+  padding: 4px 10px;
+  background: var(--cl-surface, #fff);
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+  cursor: pointer;
+}
+.thread__apply:disabled { opacity: 0.5; cursor: default; }
+.thread__list { display: flex; flex-direction: column; gap: 10px; }
+.thread__loading,
+.thread__empty {
+  font-size: 12px;
+  color: var(--cl-text-muted, #6b7280);
+  padding: 8px;
+}
+.thread__comment {
+  padding: 10px 12px;
+  background: var(--cl-surface, #fff);
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 8px;
+}
+.thread__c-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.thread__c-name { font-weight: 700; }
+.thread__c-unverified {
+  padding: 1px 5px;
+  background: var(--cl-warn-soft, #fef3c7);
+  color: var(--cl-warn, #92400e);
+  border-radius: 4px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
+}
+.thread__c-date {
+  margin-left: auto;
+  color: var(--cl-text-muted, #6b7280);
+}
+.thread__c-body { font-size: 13px; line-height: 1.45; }
+.thread__c-actions {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 8px;
+  font-size: 11px;
+}
+.thread__c-react {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: transparent; border: 0;
+  padding: 2px 4px;
+  font-size: 11px; font-weight: 600;
+  color: var(--cl-text-muted, #6b7280);
+  cursor: pointer;
+}
+.thread__c-react.is-active.up { color: var(--cl-accent, #18794e); }
+.thread__c-react.is-active.down { color: var(--cl-down, #dc2626); }
+.thread__c-location { color: var(--cl-text-muted, #6b7280); }
+.thread__c-spacer { flex: 1; }
+.thread__c-link {
+  background: transparent; border: 0;
+  padding: 0;
+  font-size: 11px; font-weight: 600;
+  color: var(--cl-text-muted, #6b7280);
+  cursor: pointer;
+}
+.thread__c-link:hover { color: var(--cl-text, #111); }
+.thread__c-link--del { color: var(--cl-down, #dc2626); }
+.thread__c-link--accent { color: var(--cl-accent, #18794e); }
+.thread__more {
+  align-self: flex-start;
+  background: transparent; border: 0;
+  padding: 6px 0;
+  font-size: 12px; font-weight: 600;
+  color: var(--cl-accent, #18794e);
+  cursor: pointer;
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   PR #3 — TabStrip + post variant of FeedCard
+   ─────────────────────────────────────────────────────────────────── */
+
+/* TabStrip — Polls / Posts segmented pill control between hero +
+   filter row. Active = solid accent; inactive = outlined. Full-width
+   on mobile so the 44pt min hit-target is comfortable. */
+.polls-tabstrip-wrap {
+  padding: 16px 0 0;
+}
+.tabstrip {
+  display: inline-flex; gap: 0;
+  background: var(--cl-surface, #fff);
+  border: 1px solid var(--cl-border, #e5e7eb);
+  border-radius: 999px;
+  padding: 3px;
+}
+.tabstrip__tab {
+  appearance: none;
+  background: transparent; border: 0;
+  padding: 8px 22px;
+  font-size: 13px; font-weight: 700;
+  color: var(--cl-text, #111);
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 36px;
+  transition: background 120ms, color 120ms;
+}
+.tabstrip__tab.is-active {
+  background: var(--cl-accent, #18794e);
+  color: #fff;
+}
+
+/* TabContent — outgoing slides left + fades; incoming slides in from
+   the right + fades. ~240ms each direction. */
+.tabcontent {
+  transition: opacity 240ms ease, transform 240ms ease;
+  opacity: 1;
+  transform: translateX(0);
+}
+.tabcontent--out {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+.tabcontent--in {
+  opacity: 0;
+  transform: translateX(12px);
+}
+.tabcontent--idle {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@media (max-width: 600px) {
+  .tabstrip {
+    display: flex;
+    width: 100%;
+  }
+  .tabstrip__tab {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+/* FeedCard — post variant body (kind='post'). Long bodies collapse
+   to a preview height with an Expand pill. Attached-poll inline
+   badge uses the same accent treatment as the cross-feed "From a
+   post" link on the polls tab. */
+.feed-card__post-body {
+  font-size: 14px; line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 9.5em;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+}
+.feed-card__post-body.is-expanded {
+  max-height: none;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.feed-card__expand {
+  align-self: flex-start;
+  background: transparent; border: 0;
+  padding: 6px 0 0;
+  font-size: 12px; font-weight: 600;
+  color: var(--cl-accent, #18794e);
+  cursor: pointer;
+}
+.feed-card__crosslink--inline {
+  margin-top: 6px;
+}
