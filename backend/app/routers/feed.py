@@ -406,7 +406,25 @@ def popular_polls(
 @router.get("/polls")
 def polls_feed(
     limit: int = Query(default=100, ge=1, le=300),
-    kind: Optional[str] = Query(default=None, description="Filter by 'rep' | 'citizen' | 'standalone' | 'candidate'"),
+    kind: Optional[List[str]] = Query(
+        default=None,
+        description=(
+            "Filter by one or more of 'rep' | 'citizen' | 'standalone' | 'candidate'. "
+            "Repeat the parameter for additive multi-select "
+            "(e.g. ?kind=rep&kind=standalone). Omit for the unfiltered feed."
+        ),
+    ),
+    state: Optional[str] = Query(
+        default=None,
+        min_length=2,
+        max_length=2,
+        pattern=r"^[A-Za-z]{2}$",
+        description=(
+            "Filter to polls whose author lives in (citizen polls) or "
+            "represents (rep + candidate polls) the given 2-letter state. "
+            "Case-insensitive; normalized to upper-case server-side."
+        ),
+    ),
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
@@ -428,35 +446,107 @@ def polls_feed(
     so they always appear here once authored; citizen polls drop
     out when their rep claims the page or the citizen closes them.
 
-    Kind filter:
+    Kind filter (additive — repeat the param to union):
       'rep'        → rep-authored polls only
       'citizen'    → citizen polls tied to a rep page (target_official_id is a rep id)
       'standalone' → citizen polls with no target rep / candidate page
       'candidate'  → polls targeting a candidate page (citizen-authored
                      today since candidate accounts ship in Phase 3+)
       omitted      → everything
+    Multiple values return the union (e.g. ?kind=rep&kind=standalone
+    returns rep polls + standalone citizen polls).
+
+    State filter:
+      Restricts the feed to authors associated with the given state.
+        • Rep polls   → matches when post.author.owner_state == state
+                        (covers rep-authored posts) OR
+                        post.author_candidate.owner_state == state
+                        (covers candidate-authored posts once those land).
+        • Citizen polls → matches when author_citizen.state == state.
+      States are 2-letter codes (case-insensitive).
     """
     from app.services.page_tags import resolve_page_tag, is_candidate_id
+    from sqlalchemy import or_
+
+    # Normalize the kind param. FastAPI hands us a list with one item
+    # for the single-value form (?kind=rep) and a multi-item list for
+    # repeated params. None for the unfiltered case.
+    kinds: List[str] = [k for k in (kind or []) if k] or []
+
+    def _kind_clause(k: str):
+        """Map a single kind string to its SQLAlchemy filter clause."""
+        if k == "rep":
+            return Poll.author_kind == "rep"
+        if k == "citizen":
+            # Citizen polls on rep pages (not candidate pages — those
+            # get their own bucket so the chip count is meaningful).
+            # The candidate-id exclusion still has to happen in Python
+            # because candidate ids are an in-memory dict; the SQL here
+            # is a superset that the Python post-filter narrows.
+            return (
+                (Poll.author_kind == "citizen") & (Poll.target_official_id.is_not(None))
+            )
+        if k == "standalone":
+            return (Poll.author_kind == "citizen") & (Poll.target_official_id.is_(None))
+        if k == "candidate":
+            # Same superset story as 'citizen' — Python narrows.
+            return Poll.target_official_id.is_not(None)
+        return None
 
     q = db.query(Poll).filter(Poll.archived_at.is_(None))
-    if kind == "rep":
-        q = q.filter(Poll.author_kind == "rep")
-    elif kind == "citizen":
-        # Citizen polls on rep pages (not candidate pages — those get
-        # their own bucket so the chip count is meaningful).
-        q = q.filter(
-            Poll.author_kind == "citizen",
-            Poll.target_official_id.is_not(None),
+    if kinds:
+        clauses = [c for k in kinds if (c := _kind_clause(k)) is not None]
+        if clauses:
+            q = q.filter(or_(*clauses))
+
+    # State filter — applies across both author paths. Joins are LEFT
+    # so polls without a matching join row stay in the result set as
+    # NULL on the relevant column; the WHERE then uses COALESCE so
+    # one of the three (rep, candidate, citizen) wins per row.
+    state_upper = state.upper() if state else None
+    if state_upper:
+        q = (
+            q.outerjoin(Post, Post.id == Poll.post_id)
+            .outerjoin(RepAccount, RepAccount.id == Post.author_id)
+            .outerjoin(CandidateAccount, CandidateAccount.id == Post.author_candidate_id)
+            .outerjoin(CitizenAccount, CitizenAccount.id == Poll.author_citizen_id)
+            .filter(
+                func.coalesce(
+                    RepAccount.owner_state,
+                    CandidateAccount.owner_state,
+                    CitizenAccount.state,
+                )
+                == state_upper
+            )
         )
-    elif kind == "standalone":
-        q = q.filter(
-            Poll.author_kind == "citizen",
-            Poll.target_official_id.is_(None),
-        )
-    elif kind == "candidate":
-        q = q.filter(Poll.target_official_id.is_not(None))
 
     rows = q.order_by(Poll.created_at.desc()).limit(limit).all()
+
+    # Pre-compute parent-post like/dislike counts in a single batched
+    # query so the rep-poll items can render the engagement footer
+    # without N+1 SQL. For citizen polls the keys are absent and the
+    # items loop falls back to 0/0 (citizen polls don't have a like /
+    # dislike concept yet — that's a future PR; the design treats it
+    # as forward-compatible).
+    rep_post_ids = [p.post_id for p in rows if p.author_kind == "rep" and p.post_id]
+    post_likes: Dict[int, int] = {}
+    post_dislikes: Dict[int, int] = {}
+    if rep_post_ids:
+        rxn_rows = (
+            db.query(
+                PostReaction.post_id,
+                PostReaction.kind,
+                func.count(PostReaction.id),
+            )
+            .filter(PostReaction.post_id.in_(rep_post_ids))
+            .group_by(PostReaction.post_id, PostReaction.kind)
+            .all()
+        )
+        for pid, k, cnt in rxn_rows:
+            if k == "up":
+                post_likes[int(pid)] = int(cnt or 0)
+            elif k == "down":
+                post_dislikes[int(pid)] = int(cnt or 0)
 
     # Pre-compute the viewer's vote per poll so the UI can render a
     # 'your vote' indicator + know whether the click would CAST or
@@ -485,17 +575,30 @@ def polls_feed(
             vq_cand = vq.filter(PollVote.author_candidate_id == me_candidate.id)
             for pid, oid in vq_cand.all():
                 viewer_votes.setdefault(int(pid), int(oid))
-    # Candidate filter pulls everything with a target then filters in
-    # Python because ElectionsService is an in-memory dict — there's no
-    # SQL way to ask "is this id a candidate." With the result set
-    # capped at 300 this is trivially cheap.
-    if kind == "candidate":
-        rows = [p for p in rows if is_candidate_id(p.target_official_id)]
-    elif kind == "citizen":
-        # Conversely, the 'citizen' filter should EXCLUDE candidate-page
-        # polls so the rep-targeting chip count stays accurate now that
-        # candidate gets its own bucket.
-        rows = [p for p in rows if not is_candidate_id(p.target_official_id)]
+    # Candidate-id narrowing — ElectionsService is an in-memory dict so
+    # there's no SQL way to ask "is this id a candidate." We do this in
+    # Python after the SQL pass. Three cases to handle in multi-kind mode:
+    #
+    #   • 'candidate' present, 'citizen' absent → keep only candidate-tagged.
+    #   • 'citizen' present,  'candidate' absent → drop candidate-tagged.
+    #   • both (or neither) present → keep everything from the SQL pass.
+    #
+    # With the result set capped at 300 this is trivially cheap.
+    if kinds:
+        has_candidate = "candidate" in kinds
+        has_citizen = "citizen" in kinds
+        if has_candidate and not has_citizen:
+            # Only candidate-page polls should remain from the union.
+            # rep + standalone polls (if requested) pass through unchanged.
+            rows = [
+                p for p in rows
+                if (p.author_kind == "rep")
+                or (p.author_kind == "citizen" and p.target_official_id is None and "standalone" in kinds)
+                or is_candidate_id(p.target_official_id)
+            ]
+        elif has_citizen and not has_candidate:
+            # Citizen on rep pages only — drop candidate-page polls.
+            rows = [p for p in rows if not is_candidate_id(p.target_official_id)]
 
     items: List[Dict[str, Any]] = []
     for poll in rows:
@@ -612,6 +715,18 @@ def polls_feed(
             "is_author": is_author,
         }
 
+        # Engagement counters. Likes + dislikes come from the parent
+        # post for rep polls; citizen polls don't have a separate
+        # like/dislike concept yet (future PR) so they report 0/0.
+        # Returned explicitly so the frontend doesn't have to special-
+        # case "likes missing" — every poll item has the same shape.
+        if poll.author_kind == "rep" and poll.post_id:
+            likes = post_likes.get(int(poll.post_id), 0)
+            dislikes = post_dislikes.get(int(poll.post_id), 0)
+        else:
+            likes = 0
+            dislikes = 0
+
         items.append(
             {
                 "id": poll.id,
@@ -626,7 +741,310 @@ def polls_feed(
                 "options": options,
                 "votes": total,
                 "comments": int(comments),
+                "likes": likes,
+                "dislikes": dislikes,
+                # Cross-feed link to the post this poll was attached
+                # to. Non-null for rep polls (every rep poll is
+                # attached to a Post by construction); null for
+                # citizen polls. The frontend uses this to render
+                # the "from a post" badge on the polls feed.
+                "parent_post_id": int(poll.post_id) if poll.post_id else None,
                 "viewer": viewer,
+            }
+        )
+    return {"items": items}
+
+
+# ── /posts — full posts feed (the new /posts tab on the redesign) ───
+@router.get("/posts")
+def posts_feed(
+    limit: int = Query(default=100, ge=1, le=300),
+    kind: Optional[List[str]] = Query(
+        default=None,
+        description=(
+            "Filter by one or more of 'rep' | 'candidate'. Repeat the "
+            "parameter for additive multi-select. Omit for the "
+            "unfiltered feed."
+        ),
+    ),
+    state: Optional[str] = Query(
+        default=None,
+        min_length=2,
+        max_length=2,
+        pattern=r"^[A-Za-z]{2}$",
+        description=(
+            "Filter to posts whose author represents the given 2-letter "
+            "state. Matches RepAccount.owner_state for rep posts and "
+            "CandidateAccount.owner_state for candidate posts. Case-"
+            "insensitive."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
+) -> dict:
+    """Every non-deleted post from verified reps + candidates, sorted
+    by engagement score so the most-engaged posts surface first.
+
+    Pairs with /api/feed/polls; together they back the dual-feed
+    /polls + /posts redesign. Citizens can't author posts, so this
+    surface has no 'citizen' or 'standalone' kind.
+
+    Engagement score:
+        likes + dislikes + comments + attached_poll_votes
+      where attached_poll_votes is the total option-vote count on the
+      Poll attached to the post (0 if no poll is attached). The score
+      is computed in Python at response time over the full non-deleted
+      result set, then the top `limit` are returned. There's no
+      cached engagement column yet; with the early-launch volume the
+      Python sum over ~hundreds of posts is comfortably cheap and
+      keeps the model schema unchanged.
+
+    Item shape:
+      {
+        id: int,
+        kind: 'rep' | 'candidate',
+        author: str,
+        role: str | null,
+        party: 'R'|'D'|'I'|null,
+        official_id: str,
+        page_tag: str | null,
+        created_at: iso8601,
+        body: str,
+        likes: int,
+        dislikes: int,
+        comments: int,
+        # Cross-feed link to the attached poll (if any). Non-null
+        # when the post carries a poll; null otherwise. The frontend
+        # uses this to render the "+ poll attached" badge.
+        attached_poll_id: int | null,
+        has_attached_poll: bool,
+        # Total votes across the attached poll's options. Included
+        # in the engagement-score sum, returned as a field so the
+        # frontend can render a hint of activity in the poll badge.
+        attached_poll_votes: int,
+        viewer: {
+          # Per-viewer reaction state. 'up' / 'down' / null. Mirrors
+          # the polls feed's viewer block; useful for the like/dislike
+          # button highlight without a separate /reactions round-trip.
+          reaction: str | null,
+        }
+      }
+    """
+    from app.services.page_tags import resolve_page_tag
+    from sqlalchemy import or_
+
+    kinds: List[str] = [k for k in (kind or []) if k] or []
+
+    def _kind_clause(k: str):
+        if k == "rep":
+            return Post.author_id.is_not(None)
+        if k == "candidate":
+            return Post.author_candidate_id.is_not(None)
+        return None
+
+    q = db.query(Post).filter(Post.deleted_at.is_(None))
+    if kinds:
+        clauses = [c for k in kinds if (c := _kind_clause(k)) is not None]
+        if clauses:
+            q = q.filter(or_(*clauses))
+
+    state_upper = state.upper() if state else None
+    if state_upper:
+        q = (
+            q.outerjoin(RepAccount, RepAccount.id == Post.author_id)
+            .outerjoin(CandidateAccount, CandidateAccount.id == Post.author_candidate_id)
+            .filter(
+                func.coalesce(
+                    RepAccount.owner_state,
+                    CandidateAccount.owner_state,
+                )
+                == state_upper
+            )
+        )
+
+    # Pull the full filtered set so we can score-sort in Python. The
+    # `limit` is applied after sort, not at SQL — otherwise we'd be
+    # ordering by created_at and chopping before engagement entered
+    # the picture. Within the cap (300) this is a few hundred rows
+    # tops with current usage.
+    posts = q.all()
+
+    if not posts:
+        return {"items": []}
+
+    post_ids = [p.id for p in posts]
+
+    # Batched: reaction counts per post (up + down separately).
+    rxn_rows = (
+        db.query(
+            PostReaction.post_id,
+            PostReaction.kind,
+            func.count(PostReaction.id),
+        )
+        .filter(PostReaction.post_id.in_(post_ids))
+        .group_by(PostReaction.post_id, PostReaction.kind)
+        .all()
+    )
+    likes_by_post: Dict[int, int] = {}
+    dislikes_by_post: Dict[int, int] = {}
+    for pid, k, cnt in rxn_rows:
+        if k == "up":
+            likes_by_post[int(pid)] = int(cnt or 0)
+        elif k == "down":
+            dislikes_by_post[int(pid)] = int(cnt or 0)
+
+    # Batched: non-deleted comment counts per post.
+    cmt_rows = (
+        db.query(
+            PostComment.post_id,
+            func.count(PostComment.id),
+        )
+        .filter(PostComment.post_id.in_(post_ids))
+        .filter(PostComment.deleted_at.is_(None))
+        .group_by(PostComment.post_id)
+        .all()
+    )
+    comments_by_post: Dict[int, int] = {pid: int(cnt or 0) for pid, cnt in cmt_rows}
+
+    # Batched: attached-poll lookup. Poll.post_id is unique so this
+    # is at most one Poll per Post. We also fetch each attached poll's
+    # total vote count in the same join — saves an N+1 in the items
+    # loop and folds neatly into the engagement-score formula below.
+    poll_rows = (
+        db.query(
+            Poll.id,
+            Poll.post_id,
+            func.count(PollVote.id),
+        )
+        .outerjoin(PollOption, PollOption.poll_id == Poll.id)
+        .outerjoin(PollVote, PollVote.option_id == PollOption.id)
+        .filter(Poll.post_id.in_(post_ids))
+        .filter(Poll.archived_at.is_(None))
+        .group_by(Poll.id, Poll.post_id)
+        .all()
+    )
+    poll_id_by_post: Dict[int, int] = {}
+    poll_votes_by_post: Dict[int, int] = {}
+    for poll_id, post_id, vcnt in poll_rows:
+        poll_id_by_post[int(post_id)] = int(poll_id)
+        poll_votes_by_post[int(post_id)] = int(vcnt or 0)
+
+    # Batched: viewer's reaction per post (one query per identity
+    # kind, citizen-wins precedence matching the polls feed).
+    viewer_reaction: Dict[int, str] = {}
+    if me_citizen is not None:
+        for pid, k in (
+            db.query(PostReaction.post_id, PostReaction.kind)
+            .filter(PostReaction.post_id.in_(post_ids))
+            .filter(PostReaction.citizen_id == me_citizen.id)
+            .all()
+        ):
+            viewer_reaction[int(pid)] = k
+    if me_rep is not None:
+        for pid, k in (
+            db.query(PostReaction.post_id, PostReaction.kind)
+            .filter(PostReaction.post_id.in_(post_ids))
+            .filter(PostReaction.author_rep_id == me_rep.id)
+            .all()
+        ):
+            viewer_reaction.setdefault(int(pid), k)
+    if me_candidate is not None:
+        for pid, k in (
+            db.query(PostReaction.post_id, PostReaction.kind)
+            .filter(PostReaction.post_id.in_(post_ids))
+            .filter(PostReaction.author_candidate_id == me_candidate.id)
+            .all()
+        ):
+            viewer_reaction.setdefault(int(pid), k)
+
+    # Score, sort, slice. Tiebreaker is created_at DESC so newer posts
+    # win when engagement is equal (matches the design brief's note
+    # that recency is the tiebreaker).
+    def _score(p: Post) -> int:
+        return (
+            likes_by_post.get(int(p.id), 0)
+            + dislikes_by_post.get(int(p.id), 0)
+            + comments_by_post.get(int(p.id), 0)
+            + poll_votes_by_post.get(int(p.id), 0)
+        )
+
+    posts.sort(
+        key=lambda p: (
+            -_score(p),
+            -(p.created_at.timestamp() if p.created_at else 0),
+        )
+    )
+    posts = posts[:limit]
+
+    # Resolve authors in two batched lookups (one per identity kind).
+    rep_ids = [p.author_id for p in posts if p.author_id]
+    cand_ids = [p.author_candidate_id for p in posts if p.author_candidate_id]
+    reps_by_id: Dict[int, RepAccount] = (
+        {r.id: r for r in db.query(RepAccount).filter(RepAccount.id.in_(rep_ids)).all()}
+        if rep_ids
+        else {}
+    )
+    cands_by_id: Dict[int, CandidateAccount] = (
+        {c.id: c for c in db.query(CandidateAccount).filter(CandidateAccount.id.in_(cand_ids)).all()}
+        if cand_ids
+        else {}
+    )
+
+    items: List[Dict[str, Any]] = []
+    for p in posts:
+        if p.author_id and p.author_id in reps_by_id:
+            rep = reps_by_id[p.author_id]
+            kind_label = "rep"
+            author = rep.display_name
+            role = rep.role
+            party = _party_for(p.official_id) if p.official_id else None
+        elif p.author_candidate_id and p.author_candidate_id in cands_by_id:
+            cand = cands_by_id[p.author_candidate_id]
+            kind_label = "candidate"
+            author = cand.display_name
+            # CandidateAccount has no `role` column by design; the
+            # seeking_office comes from ElectionsService at render
+            # time on rep pages. For the feed we surface a stable
+            # short string here and leave the deep label to the
+            # page_tag.
+            role = None
+            party = _party_for(p.official_id) if p.official_id else None
+        else:
+            # Orphan post — author row was deleted out from under
+            # it. Show what we have and move on; the row is still
+            # useful for moderation/audit but won't render the rich
+            # author tile.
+            kind_label = "rep" if p.author_id else "candidate"
+            author = "(unknown)"
+            role = None
+            party = None
+
+        page_tag = resolve_page_tag(db, p.official_id) if p.official_id else None
+        attached_poll_id = poll_id_by_post.get(int(p.id))
+        attached_poll_votes = poll_votes_by_post.get(int(p.id), 0)
+
+        items.append(
+            {
+                "id": int(p.id),
+                "kind": kind_label,
+                "author": author,
+                "role": role,
+                "party": party,
+                "official_id": p.official_id,
+                "page_tag": page_tag,
+                "created_at": (p.created_at.isoformat() if p.created_at else None),
+                "body": p.body,
+                "likes": likes_by_post.get(int(p.id), 0),
+                "dislikes": dislikes_by_post.get(int(p.id), 0),
+                "comments": comments_by_post.get(int(p.id), 0),
+                "attached_poll_id": attached_poll_id,
+                "has_attached_poll": attached_poll_id is not None,
+                "attached_poll_votes": attached_poll_votes,
+                "viewer": {
+                    "reaction": viewer_reaction.get(int(p.id)),
+                },
             }
         )
     return {"items": items}
