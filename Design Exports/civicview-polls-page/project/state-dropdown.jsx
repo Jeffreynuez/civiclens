@@ -7,7 +7,7 @@
    - Mobile (≤600 container): full-width sheet that pushes content below
 */
 
-function StateDropdown({ selected, onSelect, onClose, anchor = 'inline' }) {
+function StateDropdown({ selected, onSelect, onClose, anchor = 'inline', initialScroll = 0 }) {
   const G = window.PollsGlyph;
   const scrollRef = React.useRef(null);
   const [scrolled, setScrolled] = React.useState(false);
@@ -18,6 +18,17 @@ function StateDropdown({ selected, onSelect, onClose, anchor = 'inline' }) {
     setScrolled(el.scrollTop > 6);
     setAtEnd(el.scrollHeight - el.scrollTop - el.clientHeight < 6);
   }, []);
+
+  // Demo-only: pre-scroll the list to a mid position so BOTH fades show.
+  // Used by the canvas artboard that highlights the gradient affordances.
+  React.useEffect(() => {
+    if (initialScroll > 0 && scrollRef.current) {
+      scrollRef.current.scrollTop = initialScroll;
+      // Manually trigger to update fade state (scrollTop assignment doesn't
+      // fire a scroll event in React's synthetic system reliably).
+      handleScroll({ target: scrollRef.current });
+    }
+  }, [initialScroll, handleScroll]);
 
   return (
     <div className={`states-dd states-dd--${anchor}`} role="listbox" aria-label="Filter by state">

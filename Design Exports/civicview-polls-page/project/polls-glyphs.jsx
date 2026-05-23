@@ -145,6 +145,48 @@ const PollsGlyph = {
       <path d="M8 15 L9 21 L12 21 L11 15" stroke={color} strokeWidth="1.8" fill={color} fillOpacity="0.28" />
     </svg>
   ),
+
+  // --- Card-level affordances ---
+  ThumbUp: ({ size = 14, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 11 H7 V20 H3 Z" fill={color} opacity="0.28" stroke={color} strokeWidth="1.6" strokeLinejoin="miter" />
+      <path d="M7 11 L11 4 C12 3 13.5 3.5 13.5 5 V9 H19 C20 9 20.7 9.7 20.5 10.7 L18.6 18.7 C18.4 19.5 17.7 20 17 20 H7 Z"
+            fill={color} opacity="0.22" stroke={color} strokeWidth="1.6" strokeLinejoin="miter" />
+    </svg>
+  ),
+  ThumbDown: ({ size = 14, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 4 H7 V13 H3 Z" fill={color} opacity="0.28" stroke={color} strokeWidth="1.6" strokeLinejoin="miter" />
+      <path d="M7 13 L11 20 C12 21 13.5 20.5 13.5 19 V15 H19 C20 15 20.7 14.3 20.5 13.3 L18.6 5.3 C18.4 4.5 17.7 4 17 4 H7 Z"
+            fill={color} opacity="0.22" stroke={color} strokeWidth="1.6" strokeLinejoin="miter" />
+    </svg>
+  ),
+  CloseX: ({ size = 14, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6 L18 18 M18 6 L6 18" stroke={color} strokeWidth="2.2" strokeLinecap="butt" />
+    </svg>
+  ),
+  Chevron: ({ size = 12, color = 'currentColor', dir = 'down' }) => {
+    const rot = { down: 0, up: 180, left: 90, right: -90 }[dir] || 0;
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ transform: `rotate(${rot}deg)` }}>
+        <path d="M5 9 L12 16 L19 9" stroke={color} strokeWidth="2" strokeLinecap="butt" strokeLinejoin="miter" fill="none" />
+      </svg>
+    );
+  },
+  PollAttached: ({ size = 14, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="6" width="18" height="12" rx="1.5" fill={color} opacity="0.22" stroke={color} strokeWidth="1.6" />
+      <rect x="6" y="9.5" width="9" height="2" fill={color} opacity="0.6" />
+      <rect x="6" y="12.5" width="13" height="2" fill={color} opacity="0.6" />
+    </svg>
+  ),
+  PostAttached: ({ size = 14, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="4" y="4" width="16" height="16" rx="1.5" fill={color} opacity="0.22" stroke={color} strokeWidth="1.6" />
+      <path d="M7 9 H17 M7 12 H17 M7 15 H13" stroke={color} strokeWidth="1.4" strokeLinecap="butt" />
+    </svg>
+  ),
 };
 
 window.PollsGlyph = PollsGlyph;

@@ -1,18 +1,24 @@
 /* CivicView /polls — seed data for the prototype.
-   Mix of rep-authored, citizen-on-rep-page, and standalone polls,
-   chosen to exercise all three card variants and AI-filter chips.
 
-   `kind`   — used for the small chip on each card (rep / citizen / standalone).
-   `branch` — source-type categorization for the top filter chips:
-              'bill' | 'committee' | 'executive' | 'judicial' | 'standalone'.
-              ('candidate' is reserved for the disabled "From candidates" chip.) */
+   Three data sets:
+     POLLS_SEED     — poll cards (rep / citizen / standalone / candidate)
+     POSTS_SEED     — post cards (rep / candidate only)
+     COMMENTS_SEED  — keyed by card id; lazy-loaded into the inline thread
+
+   Cross-feed linking:
+     A post with attached poll appears in BOTH feeds. The post card has
+     `attachedPollId`; the poll card has `fromPostId`. Both link to the
+     parent rep page.
+
+   `branch` values: 'states' | 'congress' | 'executive' | 'judicial' | 'standalone'
+   (was 'bill' / 'committee' — renamed per Reqs.) */
 
 window.POLLS_SEED = [
-  // ----- Rep-authored ----------------------------------------------
   {
     id: 'p1',
     kind: 'rep',
-    branch: 'bill',
+    branch: 'states',
+    state: 'FL',
     source: { code: 'BD · FL-19', label: 'Byron Donalds — FL-19' },
     author: { name: 'Byron Donalds', initials: 'BD', role: 'U.S. Representative · FL-19', avatarTone: 'rep', verified: true },
     time: '14m ago',
@@ -23,14 +29,16 @@ window.POLLS_SEED = [
       { id: 'c', label: 'Let it expire on schedule',   votes: 1050, pct:  8 },
     ],
     totalVotes: 13150,
-    comments: 612,
+    likes: 412, dislikes: 38, comments: 612,
     closesIn: '2d 4h',
     aiTags: ['informative', 'supportive'],
+    fromPostId: 'post-bd-1',  // cross-feed: this poll is attached to post-bd-1
   },
   {
     id: 'p2',
     kind: 'rep',
     branch: 'executive',
+    state: 'DC',
     source: { code: 'EXEC', label: 'Executive Branch' },
     author: { name: 'Donald J. Trump', initials: 'DJT', role: 'President of the United States', avatarTone: 'rep', verified: true },
     time: '1h ago',
@@ -42,7 +50,7 @@ window.POLLS_SEED = [
       { id: 'd', label: 'Rural broadband buildout',     votes: 1750, pct: 11 },
     ],
     totalVotes: 15990,
-    comments: 1840,
+    likes: 1840, dislikes: 612, comments: 1840,
     closesIn: '6h',
     aiTags: ['critical', 'informative'],
   },
@@ -50,6 +58,7 @@ window.POLLS_SEED = [
     id: 'p3',
     kind: 'rep',
     branch: 'judicial',
+    state: 'DC',
     source: { code: 'SCOTUS', label: 'Supreme Court of the United States' },
     author: { name: 'Office of the Court', initials: 'SC', role: 'Public engagement poll · non-binding', avatarTone: 'rep', verified: true },
     time: '3h ago',
@@ -60,14 +69,15 @@ window.POLLS_SEED = [
       { id: 'c', label: 'Decide case-by-case',        votes:  920, pct:  7 },
     ],
     totalVotes: 13210,
-    comments: 487,
+    likes: 287, dislikes: 14, comments: 487,
     closesIn: '1d 12h',
     aiTags: ['supportive'],
   },
   {
     id: 'p4',
     kind: 'rep',
-    branch: 'committee',
+    branch: 'congress',
+    state: 'CA',
     source: { code: 'CA-12', label: 'Nancy Pelosi — CA-12' },
     author: { name: 'Nancy Pelosi', initials: 'NP', role: 'U.S. Representative · CA-12', avatarTone: 'rep', verified: true },
     time: '5h ago',
@@ -79,16 +89,15 @@ window.POLLS_SEED = [
       { id: 'd', label: 'Inland drought watersheds',   votes: 1110, pct: 10 },
     ],
     totalVotes: 11120,
-    comments: 298,
+    likes: 142, dislikes: 22, comments: 298,
     closesIn: '4d',
     aiTags: ['informative', 'positive'],
   },
-
-  // ----- Citizen polls on rep pages ---------------------------------
   {
     id: 'p5',
     kind: 'citizen',
     branch: 'executive',
+    state: 'FL',
     source: { code: 'BD · FL-19', label: 'Posted on Byron Donalds\u2019s page' },
     author: { name: 'Marisol Vega', initials: 'MV', role: 'Constituent · FL-19', avatarTone: 'citizen', verified: false },
     time: '22m ago',
@@ -100,14 +109,15 @@ window.POLLS_SEED = [
       { id: 'd', label: 'Haven\u2019t needed it',               votes:  870, pct: 14 },
     ],
     totalVotes: 6380,
-    comments: 412,
+    likes: 92, dislikes: 14, comments: 412,
     closesIn: '3d',
     aiTags: ['critical', 'skeptical'],
   },
   {
     id: 'p6',
     kind: 'citizen',
-    branch: 'committee',
+    branch: 'congress',
+    state: 'TX',
     source: { code: 'TX-23 (unclaimed)', label: 'Citizen poll on an unclaimed page' },
     author: { name: 'Daniel R. Chen', initials: 'DC', role: 'Constituent · TX-23', avatarTone: 'citizen', verified: false },
     time: '2h ago',
@@ -119,14 +129,15 @@ window.POLLS_SEED = [
       { id: 'd', label: 'Small-business permits',      votes:  470, pct: 11 },
     ],
     totalVotes: 4320,
-    comments: 198,
+    likes: 64, dislikes: 8, comments: 198,
     closesIn: '12h',
     aiTags: ['informative', 'critical'],
   },
   {
     id: 'p7',
     kind: 'citizen',
-    branch: 'committee',
+    branch: 'congress',
+    state: 'NY',
     source: { code: 'NY-14', label: 'Posted on A. Ocasio-Cortez\u2019s page' },
     author: { name: 'Priya Subramaniam', initials: 'PS', role: 'Constituent · NY-14', avatarTone: 'citizen', verified: false },
     time: '6h ago',
@@ -138,18 +149,17 @@ window.POLLS_SEED = [
       { id: 'd', label: 'Telephone town hall',                    votes:  430, pct:  7 },
     ],
     totalVotes: 6240,
-    comments: 287,
+    likes: 84, dislikes: 6, comments: 287,
     closesIn: '5d',
     aiTags: ['supportive', 'positive'],
   },
-
-  // ----- Standalone civic polls -------------------------------------
   {
     id: 'p8',
     kind: 'standalone',
     branch: 'standalone',
+    state: 'IL',
     source: { code: 'Standalone', label: 'Civic topic — not tied to a page' },
-    author: { name: 'CivicView community', initials: 'CV', role: 'Public civic poll', avatarTone: 'standalone', verified: false },
+    author: { name: 'Andre Boyle', initials: 'AB', role: 'Standalone civic poll · IL-13', avatarTone: 'standalone', verified: false, isMe: true },
     time: '45m ago',
     question: 'Ranked-choice voting in federal primaries — where do you land?',
     options: [
@@ -159,7 +169,7 @@ window.POLLS_SEED = [
       { id: 'd', label: 'Not sure yet',               votes:  720, pct:  3 },
     ],
     totalVotes: 20940,
-    comments: 2104,
+    likes: 412, dislikes: 92, comments: 2104,
     closesIn: '6d',
     aiTags: ['informative', 'critical'],
   },
@@ -167,8 +177,9 @@ window.POLLS_SEED = [
     id: 'p9',
     kind: 'standalone',
     branch: 'standalone',
+    state: 'WA',
     source: { code: 'Standalone', label: 'Civic topic — not tied to a page' },
-    author: { name: 'CivicView community', initials: 'CV', role: 'Public civic poll', avatarTone: 'standalone', verified: false },
+    author: { name: 'Olivia Mendez', initials: 'OM', role: 'Standalone civic poll · WA-09', avatarTone: 'standalone', verified: false },
     time: '3h ago',
     question: 'How much do you trust the federal budget process to deliver this year?',
     options: [
@@ -178,7 +189,7 @@ window.POLLS_SEED = [
       { id: 'd', label: 'None at all',    votes: 4280, pct: 40 },
     ],
     totalVotes: 10690,
-    comments: 1340,
+    likes: 248, dislikes: 64, comments: 1340,
     closesIn: '1d 6h',
     aiTags: ['skeptical', 'critical'],
   },
@@ -186,8 +197,9 @@ window.POLLS_SEED = [
     id: 'p10',
     kind: 'standalone',
     branch: 'standalone',
+    state: 'CO',
     source: { code: 'Standalone', label: 'Civic topic — not tied to a page' },
-    author: { name: 'CivicView community', initials: 'CV', role: 'Public civic poll', avatarTone: 'standalone', verified: false },
+    author: { name: 'Jamal Rivers', initials: 'JR', role: 'Standalone civic poll · CO-02', avatarTone: 'standalone', verified: false },
     time: '8h ago',
     question: 'Is "civic education in K-12" something Congress should fund directly?',
     options: [
@@ -197,16 +209,17 @@ window.POLLS_SEED = [
       { id: 'd', label: 'No federal role',            votes:  510, pct:  5 },
     ],
     totalVotes: 10050,
-    comments: 762,
+    likes: 184, dislikes: 22, comments: 762,
     closesIn: '4d',
     aiTags: ['supportive', 'informative'],
   },
   {
     id: 'p11',
-    kind: 'rep',
-    branch: 'committee',
-    source: { code: 'WA-07', label: 'Pramila Jayapal — WA-07' },
-    author: { name: 'Pramila Jayapal', initials: 'PJ', role: 'U.S. Representative · WA-07', avatarTone: 'rep', verified: true },
+    kind: 'candidate',
+    branch: 'congress',
+    state: 'WA',
+    source: { code: 'WA-07 candidate', label: 'Sarah-Jane Liu — running for WA-07' },
+    author: { name: 'Sarah-Jane Liu', initials: 'SL', role: 'Candidate · WA-07', avatarTone: 'candidate', verified: true },
     time: '11h ago',
     question: 'Should the FAA require domestic carriers to publish on-time stats per route, not just per airline?',
     options: [
@@ -215,14 +228,15 @@ window.POLLS_SEED = [
       { id: 'c', label: 'Other / no opinion',         votes:  540, pct:  6 },
     ],
     totalVotes: 9140,
-    comments: 318,
+    likes: 142, dislikes: 18, comments: 318,
     closesIn: '2d',
     aiTags: ['supportive', 'informative'],
   },
   {
     id: 'p12',
     kind: 'citizen',
-    branch: 'bill',
+    branch: 'states',
+    state: 'FL',
     source: { code: 'FL-15', label: 'Posted on L. Lee\u2019s page' },
     author: { name: 'Jasmine O\u2019Connor', initials: 'JO', role: 'Constituent · FL-15', avatarTone: 'citizen', verified: false },
     time: '1d ago',
@@ -234,11 +248,112 @@ window.POLLS_SEED = [
       { id: 'd', label: 'Hold the line; reform later',       votes:  610, pct: 16 },
     ],
     totalVotes: 3830,
-    comments: 142,
+    likes: 38, dislikes: 4, comments: 142,
     closesIn: '8h',
     aiTags: ['critical', 'informative'],
   },
 ];
+
+/* POSTS_SEED — verified reps + candidates only. Sort: engagement-score
+   (likes + dislikes + comments + votes), desc. Tiebreaker = recency. */
+window.POSTS_SEED = [
+  {
+    id: 'post-bd-1',
+    kind: 'rep',
+    branch: 'states',
+    state: 'FL',
+    source: { code: 'BD · FL-19', label: 'Byron Donalds — FL-19' },
+    author: { name: 'Byron Donalds', initials: 'BD', role: 'U.S. Representative · FL-19', avatarTone: 'rep', verified: true },
+    time: '14m ago',
+    body: 'Update from D.C. — and a real one this time, not press-release boilerplate.\n\nAfter 14 months of negotiation, a midnight markup that ran past 2 a.m. last Tuesday, and three amendments I personally rewrote on a napkin in the cloakroom, H.R. 4421 — the Rural Connectivity and Digital Equity Act — passed the floor 218 to 207. It now heads to the Senate, where the path is steeper, but for the first time this Congress we have a bipartisan vehicle moving. I want to be specific about what got watered down and what survived…',
+    summarized: true,
+    attachedPollId: 'p1',
+    likes: 412, dislikes: 38, comments: 612,
+    aiTags: ['informative', 'supportive'],
+  },
+  {
+    id: 'post-djt-1',
+    kind: 'rep',
+    branch: 'executive',
+    state: 'DC',
+    source: { code: 'EXEC', label: 'Executive Branch' },
+    author: { name: 'Donald J. Trump', initials: 'DJT', role: 'President of the United States', avatarTone: 'rep', verified: true },
+    time: '1h ago',
+    body: 'Just back from the infrastructure summit in Pittsburgh. Three takeaways from the governors in the room — and these will shape our Q3 priorities. Power grid first; everything else hinges on it. Ports + rail freight second. Bridges third, with a 90-day backlog review starting next week. Rural broadband stays in the package but tracks on a different timeline. Full readout coming Friday.',
+    likes: 1840, dislikes: 612, comments: 1840,
+    aiTags: ['critical', 'informative'],
+  },
+  {
+    id: 'post-np-1',
+    kind: 'rep',
+    branch: 'congress',
+    state: 'CA',
+    source: { code: 'CA-12', label: 'Nancy Pelosi — CA-12' },
+    author: { name: 'Nancy Pelosi', initials: 'NP', role: 'U.S. Representative · CA-12', avatarTone: 'rep', verified: true },
+    time: '4h ago',
+    body: 'Climate-resilience grant pilot moves to floor markup next week. Of the four candidate locations our committee shortlisted, the inland-drought watershed pilot landed lowest on the constituent-engagement poll we ran — but it scored highest on technical readiness. So we\u2019re proposing a hybrid: coastal-flood retrofits as the headline pilot, with an inland-drought companion that runs in parallel at a quarter of the budget.',
+    likes: 142, dislikes: 22, comments: 298,
+    attachedPollId: 'p4',
+    aiTags: ['informative', 'positive'],
+  },
+  {
+    id: 'post-pj-1',
+    kind: 'rep',
+    branch: 'congress',
+    state: 'WA',
+    source: { code: 'WA-07', label: 'Pramila Jayapal — WA-07' },
+    author: { name: 'Pramila Jayapal', initials: 'PJ', role: 'U.S. Representative · WA-07', avatarTone: 'rep', verified: true },
+    time: '11h ago',
+    body: 'Per-route on-time disclosure passed out of committee 11–8. This is a small win that adds up — passengers in Sea-Tac will be able to see exactly which routes are running late, not just which airlines, before they book. Headed to the full T&I committee next month.',
+    likes: 142, dislikes: 18, comments: 318,
+    aiTags: ['supportive', 'informative'],
+  },
+  {
+    id: 'post-sl-1',
+    kind: 'candidate',
+    branch: 'congress',
+    state: 'WA',
+    source: { code: 'WA-07 candidate', label: 'Sarah-Jane Liu — running for WA-07' },
+    author: { name: 'Sarah-Jane Liu', initials: 'SL', role: 'Candidate · WA-07', avatarTone: 'candidate', verified: true },
+    time: '1d ago',
+    body: 'Three weeks into the campaign and the question I keep getting at door-knocks: "Will you actually show up?" — meaning, will I hold open office hours, will I sit at someone\u2019s kitchen table, will I respond to email. The answer is yes, and we\u2019re publishing the constituent-services workflow as part of our day-one transition plan. Public draft going up next Monday.',
+    likes: 92, dislikes: 14, comments: 142,
+    aiTags: ['supportive', 'positive'],
+  },
+  {
+    id: 'post-sc-1',
+    kind: 'rep',
+    branch: 'judicial',
+    state: 'DC',
+    source: { code: 'SCOTUS', label: 'Supreme Court of the United States' },
+    author: { name: 'Office of the Court', initials: 'SC', role: 'Public engagement · non-binding', avatarTone: 'rep', verified: true },
+    time: '3h ago',
+    body: 'Same-day oral-argument audio publication is under review by the Court\u2019s public-information office. We are taking public input on whether to move from week-of release to same-day. Comments below; aggregate data will be reviewed by the Public Information Officer at the close of the public-comment window.',
+    likes: 287, dislikes: 14, comments: 487,
+    attachedPollId: 'p3',
+    aiTags: ['supportive'],
+  },
+];
+
+/* COMMENTS_SEED — keyed by card id. Lazy-loaded on thread expansion. */
+window.COMMENTS_SEED = {
+  'p1': [
+    { id: 'c1', author: 'Pat Back', initials: 'PB', location: 'LA-4 · Demo City', verified: false, time: '5/14/2026', body: 'Bro wrote amendments on a napkin in the cloakroom and saved rural internet. Absolute legend behavior.', likes: 1, dislikes: 0, isMe: true },
+    { id: 'c2', author: 'Reshanda Bonquiqui', initials: 'RB', location: 'IL-13 · Demo City', verified: false, time: '5/14/2026', body: '$42 per household is not \u2018small.\u2019 That\u2019s $42 per year per family, every year, with no guarantee the audits hold. Why no sunset clause?', likes: 1, dislikes: 0 },
+    { id: 'c3', author: 'Tyron Bigums', initials: 'TB', location: 'FL-12 · Melbourne', verified: false, time: '5/14/2026', body: 'Finally — my parents have been on DSL for a decade. Thank you for the milestone-reporting amendment, that\u2019s the part that matters.', likes: 1, dislikes: 0 },
+    { id: 'c4', author: 'Holly Tanner', initials: 'HT', location: 'FL-19 · Naples', verified: true, time: '5/14/2026', body: 'Genuine question: when does the Senate version markup begin?', likes: 0, dislikes: 0 },
+    { id: 'c5', author: 'Mark Reston', initials: 'MR', location: 'TX-7 · Houston', verified: false, time: '5/13/2026', body: 'Took 14 months. Should\u2019ve taken 4. The horse-trading on the rural-set-aside is what cost us a full session.', likes: 2, dislikes: 1 },
+  ],
+  'post-bd-1': [
+    { id: 'c1', author: 'Pat Back', initials: 'PB', location: 'LA-4 · Demo City', verified: false, time: '5/14/2026', body: 'Bro wrote amendments on a napkin in the cloakroom and saved rural internet. Absolute legend behavior.', likes: 1, dislikes: 0, isMe: true },
+    { id: 'c2', author: 'Reshanda Bonquiqui', initials: 'RB', location: 'IL-13 · Demo City', verified: false, time: '5/14/2026', body: '$42 per household is not \u2018small.\u2019 That\u2019s $42 per year per family, every year, with no guarantee the audits hold. Why no sunset clause?', likes: 1, dislikes: 0 },
+    { id: 'c3', author: 'Tyron Bigums', initials: 'TB', location: 'FL-12 · Melbourne', verified: false, time: '5/14/2026', body: 'Finally — my parents have been on DSL for a decade. Thank you for the milestone-reporting amendment, that\u2019s the part that matters.', likes: 1, dislikes: 0 },
+  ],
+  'p8': [
+    { id: 'c1', author: 'Lana Forshaw', initials: 'LF', location: 'IL-13 · Demo City', verified: false, time: '5/22/2026', body: 'Adopt nationally only if there\u2019s a clean ballot-design standard with it. Otherwise we just trade one set of confused voters for another.', likes: 4, dislikes: 0 },
+    { id: 'c2', author: 'Donovan Reece', initials: 'DR', location: 'WA-03 · Vancouver', verified: false, time: '5/22/2026', body: 'States-decide is the only constitutional answer. Federalism exists for a reason.', likes: 2, dislikes: 5 },
+  ],
+};
 
 window.AI_FILTER_TAGS = [
   { id: 'positive',    label: 'Positive' },
@@ -246,5 +361,20 @@ window.AI_FILTER_TAGS = [
   { id: 'funny',       label: 'Funny' },
   { id: 'supportive',  label: 'Supportive' },
   { id: 'skeptical',   label: 'Skeptical' },
-  { id: 'informative', label: 'Informative' },
+];
+
+window.US_STATES = [
+  ['AL','Alabama'],['AK','Alaska'],['AZ','Arizona'],['AR','Arkansas'],
+  ['CA','California'],['CO','Colorado'],['CT','Connecticut'],['DE','Delaware'],
+  ['DC','District of Columbia'],['FL','Florida'],['GA','Georgia'],['HI','Hawaii'],
+  ['ID','Idaho'],['IL','Illinois'],['IN','Indiana'],['IA','Iowa'],
+  ['KS','Kansas'],['KY','Kentucky'],['LA','Louisiana'],['ME','Maine'],
+  ['MD','Maryland'],['MA','Massachusetts'],['MI','Michigan'],['MN','Minnesota'],
+  ['MS','Mississippi'],['MO','Missouri'],['MT','Montana'],['NE','Nebraska'],
+  ['NV','Nevada'],['NH','New Hampshire'],['NJ','New Jersey'],['NM','New Mexico'],
+  ['NY','New York'],['NC','North Carolina'],['ND','North Dakota'],['OH','Ohio'],
+  ['OK','Oklahoma'],['OR','Oregon'],['PA','Pennsylvania'],['RI','Rhode Island'],
+  ['SC','South Carolina'],['SD','South Dakota'],['TN','Tennessee'],['TX','Texas'],
+  ['UT','Utah'],['VT','Vermont'],['VA','Virginia'],['WA','Washington'],
+  ['WV','West Virginia'],['WI','Wisconsin'],['WY','Wyoming'],
 ];
