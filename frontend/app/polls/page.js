@@ -825,14 +825,21 @@ function BranchChip({ filter, active, count, onClick }) {
 // modal on click.
 // ─────────────────────────────────────────────────────────────────────
 function StartButton({ signedIn, onClick }) {
+  // Start a poll is a citizen-only affordance on the /polls feed. Reps
+  // + candidates create polls only from their own page (where the
+  // existing post-with-poll composer lives), so this button is muted
+  // unless a citizen is specifically signed in.
   return (
     <button
       type="button"
       className={`polls-start-btn ${signedIn ? '' : 'is-muted'}`}
       onClick={onClick}
+      title={signedIn
+        ? 'Start a standalone poll'
+        : 'Citizen sign-in required — reps and candidates create polls from their own page'}
     >
       {signedIn ? <PlusGlyph size={14} color="white" /> : <LockGlyph size={13} />}
-      {signedIn ? 'Start a poll' : 'Sign in to start a poll'}
+      {signedIn ? 'Start a poll' : 'Citizen sign-in to start a poll'}
     </button>
   );
 }

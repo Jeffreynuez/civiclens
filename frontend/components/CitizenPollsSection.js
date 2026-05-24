@@ -911,6 +911,21 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
   const [replyOpenFor, setReplyOpenFor] = useState(null);
   const [replyDraft, setReplyDraft] = useState('');
   const [replyBusy, setReplyBusy] = useState(false);
+  // PR #10 — per-parent "Show replies" toggle. Tracks which top-level
+  // comment ids have their reply pool currently expanded. Same
+  // pattern as PostCard + /polls CommentsThread.
+  const [cpsExpandedReplies, setCpsExpandedReplies] = useState(() => new Set());
+  // PR #10 — composer + AI filter start COLLAPSED behind dropdown
+  // triggers. Reply auto-opens the composer. Cleaner approach than
+  // an earlier attempt: split outer conditionals into separate
+  // trigger + content blocks rather than nesting cpsXxxOpen inside
+  // the existing aiAvailable block (which had nested sub-blocks
+  // that tangled with the wrap).
+  const [cpsComposerOpen, setCpsComposerOpen] = useState(false);
+  const [cpsAiFilterOpen, setCpsAiFilterOpen] = useState(false);
+  useEffect(() => {
+    if (replyOpenFor != null) setCpsComposerOpen(true);
+  }, [replyOpenFor]);
 
   // Phase 6 multi-identity — same composer-picker pattern as PostCard.
   const activeIdentities = useActiveIdentities({ isOwner });
@@ -1084,7 +1099,27 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
         This is a citizen-led conversation. {archived ? 'The page has been claimed; the thread is preserved here.' : 'The official hasn\'t joined CivicView yet.'}
       </div>
 
-      {/* Compose */}
+      {/* Compose trigger — PR #10 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+        <button
+          type="button"
+          onClick={() => setCpsComposerOpen((v) => !v)}
+          aria-expanded={cpsComposerOpen}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '4px 12px',
+            background: cpsComposerOpen ? 'var(--cl-accent-soft)' : 'transparent',
+            color: cpsComposerOpen ? 'var(--cl-accent)' : 'var(--cl-text)',
+            border: `1px solid ${cpsComposerOpen ? 'var(--cl-accent)' : 'var(--cl-border)'}`,
+            borderRadius: 999,
+            fontSize: '0.74rem', fontWeight: 600, fontFamily: 'inherit',
+            cursor: 'pointer',
+          }}
+        >
+          {cpsComposerOpen ? '▾' : '▸'} Add comment
+        </button>
+      </div>
+      {cpsComposerOpen && (
       <form onSubmit={submit} style={{ marginBottom: 12 }}>
         {/* Phase 6 "Posting as" picker — multi-identity sees a
             dropdown, single-identity sees a non-interactive pill. */}
@@ -1148,11 +1183,34 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
           <div style={{ marginTop: 4, color: '#c33333', fontSize: '0.78rem' }}>{error}</div>
         )}
       </form>
+      )}
 
-      {/* AI filter row — chips + free-form input. Mirrors PostCard;
-          hidden when AI isn't configured server-side OR when there
-          are too few comments to make filtering useful. */}
+      {/* AI filter trigger — PR #10. Trigger button renders
+          independently from the content so toggling doesn't unmount
+          the chip/input state. */}
       {aiAvailable && comments && comments.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+          <button
+            type="button"
+            onClick={() => setCpsAiFilterOpen((v) => !v)}
+            aria-expanded={cpsAiFilterOpen}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '4px 12px',
+              background: cpsAiFilterOpen ? 'var(--cl-accent-soft)' : 'transparent',
+              color: cpsAiFilterOpen ? 'var(--cl-accent)' : 'var(--cl-text)',
+              border: `1px solid ${cpsAiFilterOpen ? 'var(--cl-accent)' : 'var(--cl-border)'}`,
+              borderRadius: 999,
+              fontSize: '0.74rem', fontWeight: 600, fontFamily: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
+            {cpsAiFilterOpen ? '▾' : '▸'} AI filter
+          </button>
+        </div>
+      )}
+      {/* AI filter content — gated on the trigger above. */}
+      {aiAvailable && comments && comments.length > 1 && cpsAiFilterOpen && (
         <div style={{ marginBottom: 10 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
             {[
@@ -1259,6 +1317,8 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
         </div>
       )}
 
+      {/* PR #10 — comment-list region with height cap + scroll. */}
+      <div style={{ maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
       {loading && (
         <div style={{ fontSize: '0.78rem', color: 'var(--cl-text-light)' }}>Loading comments…</div>
       )}
@@ -1309,6 +1369,7 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
           renderCommentRow(c, /* depth */ 0, repliesByParent.get(c.id) || [])
         );
       })()}
+      </div>
     </div>
   );
 
@@ -1472,10 +1533,34 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
           </div>
         </div>
 
-        {/* Reply pool — top-level rows only. */}
+        {/* Reply pool — top-level rows only. PR #10: behind a
+            "Show replies (N)" toggle to keep long pools from
+            blowing up the visible height of the parent. */}
         {isTopLevel && replies && replies.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {replies.map((r) => renderCommentRow(r, 1, []))}
+          <div style={{ marginLeft: 14, paddingLeft: 12, borderLeft: '2px solid var(--cl-border)' }}>
+            <button
+              type="button"
+              onClick={() => setCpsExpandedReplies((prev) => {
+                const next = new Set(prev);
+                if (next.has(c.id)) next.delete(c.id);
+                else next.add(c.id);
+                return next;
+              })}
+              aria-expanded={cpsExpandedReplies.has(c.id)}
+              style={{
+                background: 'transparent', border: 0, padding: '4px 0',
+                fontSize: '0.74rem', fontWeight: 600,
+                color: 'var(--cl-accent)', cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {cpsExpandedReplies.has(c.id) ? '⯆ Hide' : '⯈ Show'} replies ({replies.length})
+            </button>
+            {cpsExpandedReplies.has(c.id) && (
+              <div style={{ display: 'flex', flexDirection: 'column', marginTop: 6 }}>
+                {replies.map((r) => renderCommentRow(r, 1, []))}
+              </div>
+            )}
           </div>
         )}
 

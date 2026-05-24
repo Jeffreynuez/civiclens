@@ -173,6 +173,18 @@ export default function PostCard({
   // in-flight reply text. Only one composer is open at a time so
   // the thread doesn't visually fork.
   const [replyOpenFor, setReplyOpenFor] = useState(null);
+  // PR #10 — clicking Reply on any row auto-expands the composer.
+  // Otherwise the user clicks Reply and sees nothing happen
+  // (the composer is collapsed by default).
+  useEffect(() => {
+    if (replyOpenFor != null) setPcComposerOpen(true);
+  }, [replyOpenFor]);
+  // PR #10 — per-parent "Show replies" toggle. Tracks which
+  // top-level comment ids have their reply pool currently
+  // expanded. Sticks for the life of the thread (closing the
+  // comments section unmounts the state so a fresh open starts
+  // collapsed). Mirrors the /polls CommentsThread pattern (PR #8).
+  const [pcExpandedReplies, setPcExpandedReplies] = useState(() => new Set());
   const [replyDraft, setReplyDraft] = useState('');
   const [replyBusy, setReplyBusy] = useState(false);
   // Phase 6 — which identity authors the next comment / reply. The
@@ -957,7 +969,29 @@ export default function PostCard({
               the right; an "Active filter" banner appears underneath
               once a filter is applied so the user knows what list
               they're looking at. */}
+          {/* AI filter — PR #10: trigger + collapsible body */}
           {aiAvailable && comments && comments.length > 1 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPcAiFilterOpen((v) => !v)}
+                  aria-expanded={pcAiFilterOpen}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '4px 12px',
+                    background: pcAiFilterOpen ? 'var(--cl-accent-soft)' : 'transparent',
+                    color: pcAiFilterOpen ? 'var(--cl-accent)' : 'var(--cl-text)',
+                    border: `1px solid ${pcAiFilterOpen ? 'var(--cl-accent)' : 'var(--cl-border)'}`,
+                    borderRadius: 999,
+                    fontSize: '0.74rem', fontWeight: 600, fontFamily: 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {pcAiFilterOpen ? '▾' : '▸'} AI filter
+                </button>
+              </div>
+              {pcAiFilterOpen && (
             <div style={{ marginTop: 10 }}>
               <div
                 style={{
@@ -1067,10 +1101,12 @@ export default function PostCard({
                 </div>
               )}
             </div>
+              )}
+            </div>
           )}
 
-          {/* Comment list */}
-          <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {/* Comment list — PR #10 height cap so long threads scroll inside the card */}
+          <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
             {commentsLoading && (
               <div style={{ color: 'var(--cl-text-light)', fontSize: '0.78rem', padding: '6px 4px' }}>
                 Loading comments…
@@ -1383,12 +1419,35 @@ export default function PostCard({
                   </div>
         </div>
 
-        {/* Replies + composer — top-level rows only. Render the
-            existing reply pool first, then the inline composer if
-            this is the thread the user clicked Reply on. */}
+        {/* Replies — top-level rows only. PR #10: gated behind a
+            "Show replies (N)" toggle so long reply pools don't blow
+            up the visible height of the parent. Composer renders
+            below regardless when the user is replying to THIS row. */}
         {isTopLevel && replies && replies.length > 0 && (
-          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {replies.map((r) => renderCommentRow(r, 1, []))}
+          <div style={{ marginTop: 6, marginLeft: 14, paddingLeft: 12, borderLeft: '2px solid var(--cl-border)' }}>
+            <button
+              type="button"
+              onClick={() => setPcExpandedReplies((prev) => {
+                const next = new Set(prev);
+                if (next.has(c.id)) next.delete(c.id);
+                else next.add(c.id);
+                return next;
+              })}
+              aria-expanded={pcExpandedReplies.has(c.id)}
+              style={{
+                background: 'transparent', border: 0, padding: '4px 0',
+                fontSize: '0.74rem', fontWeight: 600,
+                color: 'var(--cl-accent)', cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {pcExpandedReplies.has(c.id) ? '⯆ Hide' : '⯈ Show'} replies ({replies.length})
+            </button>
+            {pcExpandedReplies.has(c.id) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                {replies.map((r) => renderCommentRow(r, 1, []))}
+              </div>
+            )}
           </div>
         )}
         {isTopLevel && replyOpenFor === c.id && (
