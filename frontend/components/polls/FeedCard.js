@@ -539,28 +539,40 @@ export default function FeedCard({
 // metadata (author, page_tag, parent_post_id, etc.) is preserved.
 function _votePatch(prevCard, updated) {
   if (!updated) return {};
-  // Resolve per-shape: PollRead has voter_choices + voter_choice_id;
-  // CitizenPollRead has voter_choice_id only (per-identity wiring
-  // forthcoming). Either way, the options array carries the new
-  // counts/percents.
-  const opts = (updated.options || []).map((o) => ({
-    id: o.id,
-    label: o.label || o.text,
-    count: o.count != null ? o.count : (o.votes != null ? o.votes : 0),
-    percent: o.percent != null ? o.percent
-      : (o.pct != null ? o.pct : 0),
-  }));
-  const totalVotes = opts.reduce((sum, o) => sum + (o.count || 0), 0);
+  // The response shape differs by endpoint:
+  //   • votePoll (rep / candidate polls)   → PollRead directly
+  //   • voteOnCitizenPoll (citizen polls)  → CitizenPollRead with the
+  //                                          poll nested under .poll
+  // Unwrap so the rest of this function reads one consistent shape.
+  const poll = updated.poll && updated.poll.options ? updated.poll : updated;
+  const totalVotes = poll.total_votes != null
+    ? poll.total_votes
+    : (poll.options || []).reduce((sum, o) => sum + (o.vote_count || 0), 0);
+  const opts = (poll.options || []).map((o) => {
+    // PollOptionRead exposes `text` + `vote_count`. Percent isn't
+    // shipped — compute locally so the bars render at their new width
+    // without waiting for a full feed reload.
+    const count = o.vote_count != null
+      ? o.vote_count
+      : (o.count != null ? o.count : (o.votes != null ? o.votes : 0));
+    const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+    return {
+      id: o.id,
+      label: o.text != null ? o.text : (o.label || ''),
+      count,
+      percent,
+    };
+  });
   const prevViewer = prevCard.viewer || {};
   return {
     options: opts,
     votes: totalVotes,
     viewer: {
       ...prevViewer,
-      voter_choice_id: updated.voter_choice_id != null
-        ? updated.voter_choice_id
+      voter_choice_id: poll.voter_choice_id != null
+        ? poll.voter_choice_id
         : prevViewer.voter_choice_id,
-      voter_choices: updated.voter_choices || prevViewer.voter_choices || {},
+      voter_choices: poll.voter_choices || prevViewer.voter_choices || {},
     },
   };
 }
