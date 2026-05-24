@@ -358,6 +358,52 @@ Index("uq_post_reaction_rep",      PostReaction.post_id, PostReaction.author_rep
 Index("uq_post_reaction_candidate", PostReaction.post_id, PostReaction.author_candidate_id, unique=True)
 
 
+# ── Poll reactions (citizen + standalone polls) ───────────────────────
+class PollReaction(Base):
+    """
+    Up/down reaction on a citizen poll (including standalone polls).
+    Mirrors PostReaction exactly — same three-XOR-identity columns
+    (citizen / rep / candidate), same kind, same geography rollup
+    columns. Lives in its own table because Poll.id is a separate
+    space from Post.id.
+
+    Rep polls don't use this — their like/dislike is recorded on the
+    parent Post via PostReaction. Citizen polls and standalone polls
+    do use this (they have no parent post). The frontend /polls feed
+    dispatches per card kind.
+    """
+    __tablename__ = "poll_reactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    poll_id: Mapped[int] = mapped_column(ForeignKey("polls.id", ondelete="CASCADE"), index=True)
+    citizen_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("citizen_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    author_rep_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rep_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    author_candidate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("candidate_accounts.id", ondelete="CASCADE"),
+        default=None, index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(8))
+    scope_state: Mapped[Optional[str]] = mapped_column(String(2), default=None, index=True)
+    scope_district: Mapped[Optional[str]] = mapped_column(String(8), default=None, index=True)
+    scope_city: Mapped[Optional[str]] = mapped_column(String(128), default=None, index=True)
+    scope_county: Mapped[Optional[str]] = mapped_column(String(128), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# One reaction per (poll, identity). Same SQLite/Postgres NULL-distinct
+# semantics as the post_reactions indexes — rows from each identity
+# kind coexist cleanly.
+Index("uq_poll_reaction_citizen",   PollReaction.poll_id, PollReaction.citizen_id,   unique=True)
+Index("uq_poll_reaction_rep",       PollReaction.poll_id, PollReaction.author_rep_id, unique=True)
+Index("uq_poll_reaction_candidate", PollReaction.poll_id, PollReaction.author_candidate_id, unique=True)
+
+
 class PostComment(Base):
     """
     Flat comment on a post. Soft-delete so the author or moderation

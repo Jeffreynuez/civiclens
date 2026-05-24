@@ -1185,14 +1185,24 @@ def react_to_post(
 @router.delete("/posts/{post_id}/reactions", response_model=ReactionSummary)
 def clear_reaction(
     post_id: int,
+    as_identity: Optional[str] = None,
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
     me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
 ):
     post = _load_post_or_404(db, post_id)
-    citizen, rep, candidate = _resolve_engager(
+    # Phase 6 multi-identity: narrow by `as_identity` query param when
+    # sent so the IdentityPicker's toggle-off clears the EXACT identity
+    # the user picked, not whichever one _resolve_engager picks first
+    # (which was citizen-wins precedence and silently cleared the
+    # wrong row when multiple identities were signed in).
+    acting_citizen, acting_rep, acting_candidate = _apply_as_identity_filter(
         me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+        as_identity=as_identity,
+    )
+    citizen, rep, candidate = _resolve_engager(
+        me_citizen=acting_citizen, me_rep=acting_rep, me_candidate=acting_candidate,
         page_official_id=post.official_id,
     )
     q = db.query(PostReaction).filter(PostReaction.post_id == post.id)
@@ -1517,6 +1527,7 @@ def react_to_comment(
 @router.delete("/comments/{comment_id}/reactions", response_model=ReactionSummary)
 def clear_comment_reaction(
     comment_id: int,
+    as_identity: Optional[str] = None,
     db: Session = Depends(get_db),
     me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
     me_rep: Optional[RepAccount] = Depends(get_optional_rep),
@@ -1528,8 +1539,13 @@ def clear_comment_reaction(
     post = db.get(Post, comment.post_id)
     if post is None or post.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Comment not found")
-    citizen, rep, candidate = _resolve_engager(
+    # Phase 6 multi-identity: same as_identity narrow as clear_reaction.
+    acting_citizen, acting_rep, acting_candidate = _apply_as_identity_filter(
         me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+        as_identity=as_identity,
+    )
+    citizen, rep, candidate = _resolve_engager(
+        me_citizen=acting_citizen, me_rep=acting_rep, me_candidate=acting_candidate,
         page_official_id=post.official_id,
     )
     q = db.query(CommentReaction).filter(CommentReaction.comment_id == comment.id)

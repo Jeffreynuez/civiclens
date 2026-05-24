@@ -50,6 +50,7 @@ from app.models.pages import (
     Poll,
     PollComment,
     PollOption,
+    PollReaction,
     PollVote,
     Post,
     PostComment,
@@ -599,6 +600,42 @@ def polls_feed(
         if me_candidate is not None:
             for pid, k in rq.filter(PostReaction.author_candidate_id == me_candidate.id).all():
                 my_reactions_by_post.setdefault(int(pid), {})["candidate"] = k
+
+    # Citizen-poll reactions (Phase 7 — PollReaction model). Same
+    # shape as the rep-side aggregation; keyed by poll_id rather
+    # than post_id. Citizen polls now have full like/dislike parity
+    # with posts.
+    citizen_poll_ids = [p.id for p in rows if p.author_kind == "citizen"]
+    poll_rxn_counts: Dict[int, Dict[str, int]] = {}
+    my_reactions_by_poll: Dict[int, Dict[str, str]] = {}
+    if citizen_poll_ids:
+        # Aggregate counts (up + down) per poll in one batched group-by.
+        for pid, k, cnt in (
+            db.query(
+                PollReaction.poll_id,
+                PollReaction.kind,
+                func.count(PollReaction.id),
+            )
+            .filter(PollReaction.poll_id.in_(citizen_poll_ids))
+            .group_by(PollReaction.poll_id, PollReaction.kind)
+            .all()
+        ):
+            d = poll_rxn_counts.setdefault(int(pid), {"up": 0, "down": 0})
+            if k in d:
+                d[k] = int(cnt or 0)
+        if me_citizen or me_rep or me_candidate:
+            prq = db.query(PollReaction.poll_id, PollReaction.kind).filter(
+                PollReaction.poll_id.in_(citizen_poll_ids)
+            )
+            if me_citizen is not None:
+                for pid, k in prq.filter(PollReaction.citizen_id == me_citizen.id).all():
+                    my_reactions_by_poll.setdefault(int(pid), {})["citizen"] = k
+            if me_rep is not None:
+                for pid, k in prq.filter(PollReaction.author_rep_id == me_rep.id).all():
+                    my_reactions_by_poll.setdefault(int(pid), {})["rep"] = k
+            if me_candidate is not None:
+                for pid, k in prq.filter(PollReaction.author_candidate_id == me_candidate.id).all():
+                    my_reactions_by_poll.setdefault(int(pid), {})["candidate"] = k
     # Candidate-id narrowing — ElectionsService is an in-memory dict so
     # there's no SQL way to ask "is this id a candidate." We do this in
     # Python after the SQL pass. Three cases to handle in multi-kind mode:
@@ -737,14 +774,15 @@ def polls_feed(
         # Per-identity engagement state. UI picks: voter_choice_id is
         # the resolved single value (legacy callers); voter_choices is
         # the per-identity map IdentityPicker reads. my_reactions is
-        # the per-identity reaction map for rep polls (via the parent
-        # post). Citizen polls leave my_reactions empty for now.
+        # the per-identity reaction map — sourced from the parent
+        # post for REP polls, from PollReaction for CITIZEN polls.
         per_identity_votes = viewer_votes_by_identity.get(int(poll.id), {})
-        per_identity_rxns = (
-            my_reactions_by_post.get(int(poll.post_id), {})
-            if poll.author_kind == "rep" and poll.post_id
-            else {}
-        )
+        if poll.author_kind == "rep" and poll.post_id:
+            per_identity_rxns = my_reactions_by_post.get(int(poll.post_id), {})
+        elif poll.author_kind == "citizen":
+            per_identity_rxns = my_reactions_by_poll.get(int(poll.id), {})
+        else:
+            per_identity_rxns = {}
         viewer = {
             "voter_choice_id": _resolved_choice(poll.id),
             "voter_choices": per_identity_votes,
@@ -752,14 +790,19 @@ def polls_feed(
             "is_author": is_author,
         }
 
-        # Engagement counters. Likes + dislikes come from the parent
-        # post for rep polls; citizen polls don't have a separate
-        # like/dislike concept yet (future PR) so they report 0/0.
+        # Engagement counters. Likes + dislikes are sourced from the
+        # right table per poll kind:
+        #   • Rep polls  → PostReaction on the parent Post
+        #   • Citizen polls → PollReaction on the poll itself
         # Returned explicitly so the frontend doesn't have to special-
         # case "likes missing" — every poll item has the same shape.
         if poll.author_kind == "rep" and poll.post_id:
             likes = post_likes.get(int(poll.post_id), 0)
             dislikes = post_dislikes.get(int(poll.post_id), 0)
+        elif poll.author_kind == "citizen":
+            counts = poll_rxn_counts.get(int(poll.id), {"up": 0, "down": 0})
+            likes = int(counts.get("up", 0))
+            dislikes = int(counts.get("down", 0))
         else:
             likes = 0
             dislikes = 0

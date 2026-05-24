@@ -41,6 +41,8 @@ import {
   votePoll,
   reactToPost,
   clearReaction,
+  reactToCitizenPoll,
+  clearCitizenPollReaction,
 } from '../../lib/pagesApi';
 import { getVoterToken } from '../../lib/voterToken';
 import { useActiveIdentities, pickEngagementIdentity } from '../../lib/activeIdentities';
@@ -185,30 +187,39 @@ export default function FeedCard({
   };
 
   // ── Reactions (like / dislike) ─────────────────────────────────
-  // Three cases:
-  //   • Post card (kind='post')          → reactToPost(card.id)
-  //   • Poll w/ parent post (rep polls)  → reactToPost(parent_post_id)
-  //   • Citizen / standalone poll         → no-op (PollReaction model
-  //                                           not yet wired; future PR)
-  // The picker pops when 2+ identities are signed in, identical to
-  // the vote pattern above.
-  const reactablePostId = kind === 'post'
-    ? card.id
-    : (card.parent_post_id || null);
+  // Dispatch per card kind:
+  //   • Post card (kind='post')                → reactToPost(card.id)
+  //   • Poll card whose parent is a Post       → reactToPost(parent_post_id)
+  //     (i.e. rep polls — every rep poll attaches to a post)
+  //   • Citizen / standalone poll               → reactToCitizenPoll(card.id)
+  //     (Phase 7 — PollReaction model + endpoint now live, mirrors
+  //      the post-side surface)
+  // The picker pops when 2+ identities are signed in.
+  //
+  // reactableTarget is the (endpointKind, id) tuple — 'post' uses
+  // the post endpoints, 'poll' uses the citizen-poll endpoints.
+  const reactableTarget = (() => {
+    if (kind === 'post') return { kind: 'post', id: card.id };
+    if (card.parent_post_id) return { kind: 'post', id: card.parent_post_id };
+    // Citizen + standalone polls — react against the poll itself.
+    if (kind === 'poll') return { kind: 'poll', id: card.id };
+    return null;
+  })();
 
   const fireReact = async (rxnKind, asIdentity, currentlyActive) => {
-    if (!reactablePostId) {
-      // Citizen poll without a parent post — silently no-op for
-      // now; CommentsThread surfaces the same constraint with a
-      // tooltip for AI filter, react picker stays disabled until
-      // PollReaction lands.
-      return;
-    }
+    if (!reactableTarget) return;
     setBusy(true);
     setErrorMsg(null);
-    const res = currentlyActive
-      ? await clearReaction(reactablePostId)
-      : await reactToPost(reactablePostId, rxnKind, asIdentity);
+    let res;
+    if (reactableTarget.kind === 'post') {
+      res = currentlyActive
+        ? await clearReaction(reactableTarget.id, asIdentity)
+        : await reactToPost(reactableTarget.id, rxnKind, asIdentity);
+    } else {
+      res = currentlyActive
+        ? await clearCitizenPollReaction(reactableTarget.id, asIdentity)
+        : await reactToCitizenPoll(reactableTarget.id, rxnKind, asIdentity);
+    }
     setBusy(false);
     if (res?.error) {
       setErrorMsg(typeof res.error === 'string' ? res.error : 'Could not record reaction.');
@@ -224,9 +235,8 @@ export default function FeedCard({
   const handleReact = (rxnKind) => {
     if (busy) return;
     if (!signedIn) { onLoginRequired?.(); return; }
-    if (!reactablePostId) {
-      // Citizen-poll like/dislike isn't wired yet. Silently no-op so
-      // the click feels responsive but doesn't error.
+    if (!reactableTarget) {
+      // Unrecognized card shape — nothing to react to.
       return;
     }
     const decision = pickEngagementIdentity({ identities: activeIdentities });
@@ -455,7 +465,7 @@ export default function FeedCard({
             onClick={() => handleReact('up')}
             disabled={busy}
             aria-label="Like"
-            title={reactablePostId ? 'Like' : 'Likes coming soon for citizen polls'}
+            title="Like"
           >
             <ThumbsUp size={14} />
             <span>{formatCount(card.likes || 0)}</span>
@@ -474,7 +484,7 @@ export default function FeedCard({
             onClick={() => handleReact('down')}
             disabled={busy}
             aria-label="Dislike"
-            title={reactablePostId ? 'Dislike' : 'Dislikes coming soon for citizen polls'}
+            title="Dislike"
           >
             <ThumbsDown size={14} />
             <span>{formatCount(card.dislikes || 0)}</span>
