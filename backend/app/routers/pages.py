@@ -193,6 +193,18 @@ def _resolve_engager(
         return (None, None, me_candidate)
     if me_citizen is not None:
         return (me_citizen, None, None)
+    # Phase 7 — feed-surface engagement. When the IdentityPicker
+    # explicitly chose rep/candidate (via as_identity), the upstream
+    # filter zeros the other slots and only rep or only candidate
+    # arrives here. On the rep page UI the engagement controls are
+    # hidden when isOwner is False, so this branch never fires from
+    # that surface. On the /polls + /posts feed UI the controls are
+    # visible universally — honor the explicit identity pick rather
+    # than 401'ing because rep/candidate doesn't own this page.
+    if me_rep is not None:
+        return (None, me_rep, None)
+    if me_candidate is not None:
+        return (None, None, me_candidate)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Sign in to engage with this content.",
