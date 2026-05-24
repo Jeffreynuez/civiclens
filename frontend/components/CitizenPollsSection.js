@@ -1259,6 +1259,8 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
         </div>
       )}
 
+      {/* PR #10 — comment-list region with height cap + scroll. */}
+      <div style={{ maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
       {loading && (
         <div style={{ fontSize: '0.78rem', color: 'var(--cl-text-light)' }}>Loading comments…</div>
       )}
@@ -1309,6 +1311,7 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
           renderCommentRow(c, /* depth */ 0, repliesByParent.get(c.id) || [])
         );
       })()}
+      </div>
     </div>
   );
 

@@ -128,6 +128,11 @@ export default function CommentsThread({
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState(null);
+  // Both composer + AI filter start COLLAPSED — users opt in with the
+  // header dropdown triggers. Keeps the card chrome lighter for the
+  // common "scan the thread" path.
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [aiFilterOpen, setAiFilterOpen] = useState(false);
 
   const [activeTones, setActiveTones] = useState([]);
   const [semQuery, setSemQuery] = useState('');
@@ -136,6 +141,13 @@ export default function CommentsThread({
 
   const [shown, setShown] = useState(PAGE_SIZE);
   const [replyingTo, setReplyingTo] = useState(null); // commentId
+  // Auto-expand the composer when the user clicks Reply on a comment
+  // row. Keeps the collapsed-by-default UX out of the way for the
+  // common case (scanning) but doesn't surprise the user who just
+  // clicked an obvious "I want to reply" affordance.
+  useEffect(() => {
+    if (replyingTo != null) setComposerOpen(true);
+  }, [replyingTo]);
 
   // ── load thread on mount, refetch when sort changes ───────────────
   const load = useCallback(async () => {
@@ -377,28 +389,45 @@ export default function CommentsThread({
         </div>
       )}
 
-      {/* Composer */}
-      <div className="thread__composer">
-        <textarea
-          rows="2"
-          className="thread__textarea"
-          placeholder={signedIn ? 'Add a comment…' : 'Sign in to comment'}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          disabled={!signedIn || posting}
-        />
+      {/* Composer — collapsed by default behind an "Add comment ▾"
+          trigger next to the identity badge. Replying via a comment-
+          row's Reply button auto-expands the composer (see the Reply
+          onClick handler below). */}
+      <div className="thread__composer-row">
         <button
           type="button"
-          className="thread__post-btn"
-          onClick={() => handlePost(replyingTo)}
-          disabled={!signedIn || posting || !draft.trim()}
+          className={`thread__composer-toggle ${composerOpen ? 'is-open' : ''}`}
+          onClick={() => setComposerOpen((v) => !v)}
+          aria-expanded={composerOpen}
         >
-          {posting ? 'Posting…' : (replyingTo ? 'Reply' : 'Post')}
+          {composerOpen ? '▾' : '▸'} {replyingTo ? 'Reply' : 'Add comment'}
         </button>
       </div>
-      {postError && <div className="thread__post-error">{postError}</div>}
+      {composerOpen && (
+        <>
+          <div className="thread__composer">
+            <textarea
+              rows="2"
+              className="thread__textarea"
+              placeholder={signedIn ? 'Add a comment…' : 'Sign in to comment'}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              disabled={!signedIn || posting}
+            />
+            <button
+              type="button"
+              className="thread__post-btn"
+              onClick={() => handlePost(replyingTo)}
+              disabled={!signedIn || posting || !draft.trim()}
+            >
+              {posting ? 'Posting…' : (replyingTo ? 'Reply' : 'Post')}
+            </button>
+          </div>
+          {postError && <div className="thread__post-error">{postError}</div>}
+        </>
+      )}
 
-      {/* Sort + AI filters */}
+      {/* Sort + AI filter trigger */}
       <div className="thread__controls">
         <label className="thread__sort">
           <span className="thread__sort-label">Sort</span>
@@ -412,8 +441,17 @@ export default function CommentsThread({
             ))}
           </select>
         </label>
+        <button
+          type="button"
+          className={`thread__filter-toggle ${aiFilterOpen ? 'is-open' : ''}`}
+          onClick={() => setAiFilterOpen((v) => !v)}
+          aria-expanded={aiFilterOpen}
+        >
+          {aiFilterOpen ? '▾' : '▸'} AI filter
+        </button>
       </div>
 
+      {aiFilterOpen && (
       <div className="thread__filters">
         <div className="thread__tone-chips">
           {TONE_PRESETS.map((t) => (
@@ -450,6 +488,7 @@ export default function CommentsThread({
           </button>
         )}
       </div>
+      )}
 
       {/* Comments — nested rendering. We bucket the flat list into
           top-level comments + a children map keyed on parent_comment_id.
