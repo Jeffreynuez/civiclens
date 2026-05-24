@@ -53,6 +53,13 @@ export default function FeedCard({
   kind = 'poll',
   isCommentsOpen,
   onToggleComments,
+  // onCardUpdated(cardId, patch) — preferred: merge patched fields
+  // into one card in place; no full feed reload, no scroll jump.
+  onCardUpdated,
+  // onMutated() — legacy: triggers a full feed reload. Kept as a
+  // fallback for callers that haven't switched to onCardUpdated yet,
+  // and used after destructive actions (close-poll) where the row
+  // disappears entirely.
   onMutated,
   signedIn = false,
   onLoginRequired,
@@ -92,29 +99,40 @@ export default function FeedCard({
   const fireVote = async (optionId, asIdentity) => {
     setBusy(true);
     setErrorMsg(null);
-    let err;
+    let res;
     if (card.kind === 'rep' || card.kind === 'candidate') {
       if (!card.official_id) {
         setBusy(false);
         setErrorMsg('Missing page reference for this poll.');
         return;
       }
-      const res = await votePoll(card.official_id, card.id, {
+      res = await votePoll(card.official_id, card.id, {
         optionId,
         voterToken: getVoterToken(),
         asIdentity,
       });
-      err = res.error;
     } else {
-      const res = await voteOnCitizenPoll(card.id, optionId, asIdentity);
-      err = res.error;
+      res = await voteOnCitizenPoll(card.id, optionId, asIdentity);
     }
     setBusy(false);
-    if (err) {
-      setErrorMsg(typeof err === 'string' ? err : 'Could not record vote.');
+    if (res?.error) {
+      setErrorMsg(typeof res.error === 'string' ? res.error : 'Could not record vote.');
       return;
     }
-    onMutated?.();
+    // Local-merge path: build a patch from the response without a
+    // full feed reload, so the page doesn't scroll-jump back to the
+    // top of the grid on every click.
+    if (res?.data && onCardUpdated) {
+      const updated = res.data;
+      // votePoll → full PollRead; voteOnCitizenPoll → CitizenPollRead.
+      // Both expose the same vote-relevant fields under slightly
+      // different keys, so reach for what's present.
+      const patch = _votePatch(card, updated);
+      onCardUpdated(card.id, patch);
+    } else {
+      // Fallback when caller hasn't wired onCardUpdated yet.
+      onMutated?.();
+    }
   };
 
   const handleVote = (optionId) => {
@@ -131,11 +149,17 @@ export default function FeedCard({
       return;
     }
     // Multi-identity — pop the picker. The user picks who's casting.
+    // Mark each identity row '✓ Voted' only when THAT specific
+    // identity has voted for THIS specific option — read from the
+    // backend's per-identity map. Falls back to the legacy single
+    // voter_choice_id only if the per-identity map is absent (older
+    // backend response shape).
+    const choicesByIdentity = (viewer && viewer.voter_choices) || {};
     setVotePicker({
       optionId,
       identities: decision.showPicker.map((id) => ({
         ...id,
-        currentState: viewer.voter_choice_id === optionId ? 'voted' : null,
+        currentState: choicesByIdentity[id.kind] === optionId ? 'voted' : null,
       })),
     });
   };
@@ -183,14 +207,18 @@ export default function FeedCard({
     setBusy(true);
     setErrorMsg(null);
     const res = currentlyActive
-      ? await clearReaction(reactablePostId, asIdentity)
+      ? await clearReaction(reactablePostId)
       : await reactToPost(reactablePostId, rxnKind, asIdentity);
     setBusy(false);
-    if (res.error) {
+    if (res?.error) {
       setErrorMsg(typeof res.error === 'string' ? res.error : 'Could not record reaction.');
       return;
     }
-    onMutated?.();
+    if (res?.data && onCardUpdated) {
+      onCardUpdated(card.id, _reactPatch(card, res.data));
+    } else {
+      onMutated?.();
+    }
   };
 
   const handleReact = (rxnKind) => {
@@ -206,23 +234,33 @@ export default function FeedCard({
       onLoginRequired?.();
       return;
     }
-    // viewer.my_reaction isn't on the feed item shape yet — best-effort
-    // toggle: assume not-currently-active. Server is the source of
-    // truth; the response refresh corrects any drift.
+    const myReactions = (viewer && viewer.my_reactions) || {};
     if (decision.single) {
-      fireReact(rxnKind, decision.single, false);
+      // Single-identity: toggle off when the same identity already
+      // reacted with the same kind. Backend's DELETE clears its
+      // reaction; POST upserts.
+      const already = myReactions[decision.single] === rxnKind;
+      fireReact(rxnKind, decision.single, already);
       return;
     }
     setReactPicker({
       kind: rxnKind,
-      identities: decision.showPicker.map((id) => ({ ...id, currentState: null })),
+      identities: decision.showPicker.map((id) => ({
+        ...id,
+        // ✓ marker only when this identity has reacted with THIS
+        // specific kind. Different-kind reactions don't qualify.
+        currentState: myReactions[id.kind] === rxnKind ? rxnKind : null,
+      })),
     });
   };
 
   const onReactPick = (asIdentity) => {
     const rxnKind = reactPicker?.kind;
     setReactPicker(null);
-    if (rxnKind) fireReact(rxnKind, asIdentity, false);
+    if (!rxnKind) return;
+    const myReactions = (viewer && viewer.my_reactions) || {};
+    const already = myReactions[asIdentity] === rxnKind;
+    fireReact(rxnKind, asIdentity, already);
   };
 
   // ── label / chrome helpers ──────────────────────────────────────
@@ -483,6 +521,56 @@ export default function FeedCard({
       )}
     </article>
   );
+}
+
+// Patch helper — map a votePoll / voteOnCitizenPoll response into
+// the feed-item shape so onCardUpdated can merge cleanly. We only
+// touch the vote-affected fields and the viewer block so other
+// metadata (author, page_tag, parent_post_id, etc.) is preserved.
+function _votePatch(prevCard, updated) {
+  if (!updated) return {};
+  // Resolve per-shape: PollRead has voter_choices + voter_choice_id;
+  // CitizenPollRead has voter_choice_id only (per-identity wiring
+  // forthcoming). Either way, the options array carries the new
+  // counts/percents.
+  const opts = (updated.options || []).map((o) => ({
+    id: o.id,
+    label: o.label || o.text,
+    count: o.count != null ? o.count : (o.votes != null ? o.votes : 0),
+    percent: o.percent != null ? o.percent
+      : (o.pct != null ? o.pct : 0),
+  }));
+  const totalVotes = opts.reduce((sum, o) => sum + (o.count || 0), 0);
+  const prevViewer = prevCard.viewer || {};
+  return {
+    options: opts,
+    votes: totalVotes,
+    viewer: {
+      ...prevViewer,
+      voter_choice_id: updated.voter_choice_id != null
+        ? updated.voter_choice_id
+        : prevViewer.voter_choice_id,
+      voter_choices: updated.voter_choices || prevViewer.voter_choices || {},
+    },
+  };
+}
+
+// Same idea for reactions — map a ReactionSummary response into the
+// feed-item viewer block + top-level likes/dislikes counts.
+function _reactPatch(prevCard, summary) {
+  if (!summary) return {};
+  const prevViewer = prevCard.viewer || {};
+  return {
+    likes: summary.up_count != null ? summary.up_count : prevCard.likes,
+    dislikes: summary.down_count != null ? summary.down_count : prevCard.dislikes,
+    viewer: {
+      ...prevViewer,
+      my_reaction: summary.my_reaction != null
+        ? summary.my_reaction
+        : prevViewer.my_reaction,
+      my_reactions: summary.my_reactions || prevViewer.my_reactions || {},
+    },
+  };
 }
 
 // Tiny inline formatters — kept local so this file has zero shared-

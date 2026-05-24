@@ -548,33 +548,57 @@ def polls_feed(
             elif k == "down":
                 post_dislikes[int(pid)] = int(cnt or 0)
 
-    # Pre-compute the viewer's vote per poll so the UI can render a
-    # 'your vote' indicator + know whether the click would CAST or
-    # SWITCH. Single batched query across the result set — at the
-    # cap of 300 polls this is one SELECT, much cheaper than the
-    # N+1 alternative of querying per-poll in the items loop below.
-    # Multi-identity callers: prefer citizen, fall back to rep, then
-    # candidate (matches the engagement-write side's _primary_tracker).
-    viewer_votes: Dict[int, int] = {}  # poll_id -> option_id
+    # Pre-compute the viewer's vote per poll — keyed by identity so
+    # the IdentityPicker can mark which identities have already voted
+    # for which option (the "✓ Voted" stamp on picker rows). Single
+    # batched query across the result set at the 300-poll cap.
+    # Two shapes returned per item:
+    #   • viewer.voter_choice_id  — legacy single value (citizen wins,
+    #     then rep, then candidate). Kept for backwards-compat with
+    #     UI that doesn't yet read per-identity state.
+    #   • viewer.voter_choices    — { citizen: oid, rep: oid, candidate: oid }
+    #     mapping per identity. UI surfaces with per-identity markers.
+    viewer_votes_by_identity: Dict[int, Dict[str, int]] = {}
     poll_ids = [p.id for p in rows]
     if poll_ids and (me_citizen or me_rep or me_candidate):
         vq = db.query(PollVote.poll_id, PollVote.option_id).filter(
             PollVote.poll_id.in_(poll_ids)
         )
         if me_citizen is not None:
-            vq_self = vq.filter(PollVote.citizen_id == me_citizen.id)
-            for pid, oid in vq_self.all():
-                viewer_votes[int(pid)] = int(oid)
+            for pid, oid in vq.filter(PollVote.citizen_id == me_citizen.id).all():
+                viewer_votes_by_identity.setdefault(int(pid), {})["citizen"] = int(oid)
         if me_rep is not None:
-            vq_rep = vq.filter(PollVote.author_rep_id == me_rep.id)
-            for pid, oid in vq_rep.all():
-                # Don't overwrite a citizen vote (citizen wins per the
-                # primary-tracker precedence; matches what the UI shows).
-                viewer_votes.setdefault(int(pid), int(oid))
+            for pid, oid in vq.filter(PollVote.author_rep_id == me_rep.id).all():
+                viewer_votes_by_identity.setdefault(int(pid), {})["rep"] = int(oid)
         if me_candidate is not None:
-            vq_cand = vq.filter(PollVote.author_candidate_id == me_candidate.id)
-            for pid, oid in vq_cand.all():
-                viewer_votes.setdefault(int(pid), int(oid))
+            for pid, oid in vq.filter(PollVote.author_candidate_id == me_candidate.id).all():
+                viewer_votes_by_identity.setdefault(int(pid), {})["candidate"] = int(oid)
+
+    # Citizen-wins-then-rep-then-candidate resolution for the legacy
+    # single-value field. Used by callers that haven't switched to
+    # voter_choices yet.
+    def _resolved_choice(poll_id: int) -> Optional[int]:
+        m = viewer_votes_by_identity.get(int(poll_id), {})
+        return m.get("citizen") or m.get("rep") or m.get("candidate")
+
+    # Pre-compute per-identity reactions on each REP poll's parent
+    # post. Citizen polls don't have reactions yet (no PollReaction
+    # model) so they get empty maps.
+    rep_post_ids_for_rxn = [p.post_id for p in rows if p.author_kind == "rep" and p.post_id]
+    my_reactions_by_post: Dict[int, Dict[str, str]] = {}
+    if rep_post_ids_for_rxn and (me_citizen or me_rep or me_candidate):
+        rq = db.query(PostReaction.post_id, PostReaction.kind).filter(
+            PostReaction.post_id.in_(rep_post_ids_for_rxn)
+        )
+        if me_citizen is not None:
+            for pid, k in rq.filter(PostReaction.citizen_id == me_citizen.id).all():
+                my_reactions_by_post.setdefault(int(pid), {})["citizen"] = k
+        if me_rep is not None:
+            for pid, k in rq.filter(PostReaction.author_rep_id == me_rep.id).all():
+                my_reactions_by_post.setdefault(int(pid), {})["rep"] = k
+        if me_candidate is not None:
+            for pid, k in rq.filter(PostReaction.author_candidate_id == me_candidate.id).all():
+                my_reactions_by_post.setdefault(int(pid), {})["candidate"] = k
     # Candidate-id narrowing — ElectionsService is an in-memory dict so
     # there's no SQL way to ask "is this id a candidate." We do this in
     # Python after the SQL pass. Three cases to handle in multi-kind mode:
@@ -710,8 +734,21 @@ def polls_feed(
             and poll.author_kind == "citizen"
             and poll.author_citizen_id == me_citizen.id
         )
+        # Per-identity engagement state. UI picks: voter_choice_id is
+        # the resolved single value (legacy callers); voter_choices is
+        # the per-identity map IdentityPicker reads. my_reactions is
+        # the per-identity reaction map for rep polls (via the parent
+        # post). Citizen polls leave my_reactions empty for now.
+        per_identity_votes = viewer_votes_by_identity.get(int(poll.id), {})
+        per_identity_rxns = (
+            my_reactions_by_post.get(int(poll.post_id), {})
+            if poll.author_kind == "rep" and poll.post_id
+            else {}
+        )
         viewer = {
-            "voter_choice_id": viewer_votes.get(int(poll.id)),
+            "voter_choice_id": _resolved_choice(poll.id),
+            "voter_choices": per_identity_votes,
+            "my_reactions": per_identity_rxns,
             "is_author": is_author,
         }
 
@@ -931,9 +968,15 @@ def posts_feed(
         poll_id_by_post[int(post_id)] = int(poll_id)
         poll_votes_by_post[int(post_id)] = int(vcnt or 0)
 
-    # Batched: viewer's reaction per post (one query per identity
-    # kind, citizen-wins precedence matching the polls feed).
-    viewer_reaction: Dict[int, str] = {}
+    # Batched: viewer's reaction per post, KEPT PER-IDENTITY so the
+    # IdentityPicker can mark "✓ Liked" / "✓ Disliked" against the
+    # specific identity that acted. Three response fields per item:
+    #   • viewer.reaction       — legacy single resolved value (citizen
+    #                              wins, then rep, then candidate)
+    #   • viewer.my_reaction    — same as reaction (alias for
+    #                              consistency with PostCard's shape)
+    #   • viewer.my_reactions   — { citizen, rep, candidate } per-identity
+    viewer_rxns_by_identity: Dict[int, Dict[str, str]] = {}
     if me_citizen is not None:
         for pid, k in (
             db.query(PostReaction.post_id, PostReaction.kind)
@@ -941,7 +984,7 @@ def posts_feed(
             .filter(PostReaction.citizen_id == me_citizen.id)
             .all()
         ):
-            viewer_reaction[int(pid)] = k
+            viewer_rxns_by_identity.setdefault(int(pid), {})["citizen"] = k
     if me_rep is not None:
         for pid, k in (
             db.query(PostReaction.post_id, PostReaction.kind)
@@ -949,7 +992,7 @@ def posts_feed(
             .filter(PostReaction.author_rep_id == me_rep.id)
             .all()
         ):
-            viewer_reaction.setdefault(int(pid), k)
+            viewer_rxns_by_identity.setdefault(int(pid), {})["rep"] = k
     if me_candidate is not None:
         for pid, k in (
             db.query(PostReaction.post_id, PostReaction.kind)
@@ -957,7 +1000,11 @@ def posts_feed(
             .filter(PostReaction.author_candidate_id == me_candidate.id)
             .all()
         ):
-            viewer_reaction.setdefault(int(pid), k)
+            viewer_rxns_by_identity.setdefault(int(pid), {})["candidate"] = k
+
+    def _resolved_reaction(post_id: int) -> Optional[str]:
+        m = viewer_rxns_by_identity.get(int(post_id), {})
+        return m.get("citizen") or m.get("rep") or m.get("candidate")
 
     # Score, sort, slice. Tiebreaker is created_at DESC so newer posts
     # win when engagement is equal (matches the design brief's note
@@ -1043,7 +1090,15 @@ def posts_feed(
                 "has_attached_poll": attached_poll_id is not None,
                 "attached_poll_votes": attached_poll_votes,
                 "viewer": {
-                    "reaction": viewer_reaction.get(int(p.id)),
+                    # Legacy single-value field (citizen wins). Kept for
+                    # backwards-compat with callers that pre-date the
+                    # per-identity shape.
+                    "reaction": _resolved_reaction(p.id),
+                    # Alias for ReactionSummary parity — PostCard reads
+                    # both `my_reaction` and `my_reactions` per the
+                    # Phase 6 multi-identity contract.
+                    "my_reaction": _resolved_reaction(p.id),
+                    "my_reactions": viewer_rxns_by_identity.get(int(p.id), {}),
                 },
             }
         )
