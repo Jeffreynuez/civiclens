@@ -2347,6 +2347,13 @@ def get_page_dashboard(
             most_disliked = None
 
     # ── Top commenters (scoped) ──────────────────────────────────────
+    # CITIZEN commenters only. Rep + candidate self-comments and cross-
+    # page rep/candidate comments (Phase 6/7 feed-surface engagement)
+    # have citizen_id=NULL — excluding them keeps the leaderboard a
+    # constituent leaderboard (the dashboard's actual point), AND avoids
+    # a 500 from DashboardCommenter.citizen_id: int rejecting NULL.
+    # Surfacing rep/candidate comment activity on the dashboard would
+    # be a separate, schema-changing addition.
     tc_q = (
         db.query(
             PostComment.citizen_id,
@@ -2356,7 +2363,11 @@ def get_page_dashboard(
             PostComment.scope_state,
             func.count(PostComment.id).label("n"),
         )
-        .filter(PostComment.post_id.in_(post_ids), PostComment.deleted_at.is_(None))
+        .filter(
+            PostComment.post_id.in_(post_ids),
+            PostComment.deleted_at.is_(None),
+            PostComment.citizen_id.isnot(None),
+        )
     )
     tc_q = _apply_geo_filter(tc_q, PostComment, active_scope, owner)
     tc_rows = (

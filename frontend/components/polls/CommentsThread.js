@@ -37,7 +37,7 @@
  * we don't keep stale state around.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThumbsUp, ThumbsDown } from '../ui';
 import {
   listComments,
@@ -57,6 +57,8 @@ import {
 import { useCitizenAuth } from '../../lib/citizenAuth';
 import { useAuth as useRepAuth } from '../../lib/auth';
 import { useCandidateAuth } from '../../lib/candidateAuth';
+import { useActiveIdentities, pickEngagementIdentity } from '../../lib/activeIdentities';
+import IdentityPicker from '../IdentityPicker';
 
 // AI tone presets — same labels + ids the page-level filter uses.
 const TONE_PRESETS = [
@@ -120,6 +122,30 @@ export default function CommentsThread({
 
   const [identityMenuOpen, setIdentityMenuOpen] = useState(false);
   const activeIdentityRecord = availableIdentities.find((i) => i.id === activeIdentity) || availableIdentities[0];
+
+  // Close the "Posting as" menu when the user clicks anywhere outside
+  // it. Matches the dismissal pattern every other dropdown in the app
+  // already follows (IdentityPicker, PostingAsPicker, StateDropdown).
+  // Listener is only registered while the menu is open so we don't
+  // pay the cost on every render.
+  const identityMenuRef = useRef(null);
+  useEffect(() => {
+    if (!identityMenuOpen) return undefined;
+    const onDown = (e) => {
+      if (identityMenuRef.current && !identityMenuRef.current.contains(e.target)) {
+        setIdentityMenuOpen(false);
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setIdentityMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [identityMenuOpen]);
 
   const [comments, setComments] = useState(null);     // null = loading
   const [error, setError] = useState(null);
@@ -218,6 +244,19 @@ export default function CommentsThread({
   // set resets).
   const [expandedReplies, setExpandedReplies] = useState(() => new Set());
 
+  // Per-row engagement-identity picker. Multi-identity users get a
+  // popover next to the comment's like/dislike button (mirrors the
+  // FeedCard pattern). `null` = no picker open. Shape:
+  //   { commentId, kind: 'up' | 'down', identities: [...] }
+  const [commentReactPicker, setCommentReactPicker] = useState(null);
+
+  // Engagement identities — used to decide whether to pop the picker
+  // and to populate its rows. isOwner=true so rep + candidate sessions
+  // can engage from the feed surface (where they don't strictly "own"
+  // each card's page, but the as_identity contract honors the explicit
+  // choice — same path FeedCard uses).
+  const engageIdentities = useActiveIdentities({ isOwner: true });
+
   // ── handlers ──────────────────────────────────────────────────────
   const handlePost = async (parentId = null) => {
     if (!signedIn) { onLoginRequired?.(); return; }
@@ -270,25 +309,68 @@ export default function CommentsThread({
     window.alert('Thanks — a moderator will review this comment.');
   };
 
-  const handleReact = async (commentId, kind, currentlyActive) => {
-    if (!signedIn) { onLoginRequired?.(); return; }
-    // Post-comments use the existing /api/pages/comments/{id}/reactions
-    // surface (mode='post'). Poll-comments would need a parallel
-    // /api/citizen-polls/comments/{id}/reactions surface that doesn't
-    // exist yet — silent no-op until that lands.
+  // Fire the actual reaction request — split out from handleReact so
+  // both the single-identity and multi-identity (picker-finalized)
+  // paths share the same dispatch.
+  const fireReact = async (commentId, kind, asIdentity, currentlyActive) => {
     const fn = mode === 'poll'
       ? (currentlyActive
-          ? clearPollCommentReaction(commentId, activeIdentity)
-          : reactToPollComment(commentId, kind, activeIdentity))
+          ? clearPollCommentReaction(commentId, asIdentity)
+          : reactToPollComment(commentId, kind, asIdentity))
       : (currentlyActive
-          ? clearCommentReaction(commentId, activeIdentity)
-          : reactToComment(commentId, kind, activeIdentity));
+          ? clearCommentReaction(commentId, asIdentity)
+          : reactToComment(commentId, kind, asIdentity));
     const { error: err } = await fn;
     if (err) {
       setError(typeof err === 'string' ? err : 'Could not record reaction.');
       return;
     }
     await load();
+  };
+
+  const handleReact = (commentId, kind, _legacyCurrentlyActive) => {
+    if (!signedIn) { onLoginRequired?.(); return; }
+    // Decide which identity acts. Mirrors FeedCard:
+    //   • Zero identities → login prompt.
+    //   • One identity   → fire immediately, toggle based on whether
+    //                      that identity's my_reactions already shows
+    //                      the same kind.
+    //   • Multi          → pop the per-row picker. Final dispatch
+    //                      happens in onCommentReactPick once the
+    //                      user picks an identity.
+    const decision = pickEngagementIdentity({ identities: engageIdentities });
+    if (decision.none) { onLoginRequired?.(); return; }
+    // Find the row's per-identity map. CommentRead surfaces my_reactions
+    // as { citizen: 'up'|'down'|null, rep: ..., candidate: ... } — see
+    // PR #9 followup #2. Falls back to the legacy single my_reaction
+    // when an older backend response is in flight.
+    const row = (comments || []).find((c) => c.id === commentId);
+    const myReactions = row?.my_reactions || {};
+    if (decision.single) {
+      const already = (myReactions[decision.single] || row?.my_reaction) === kind;
+      fireReact(commentId, kind, decision.single, already);
+      return;
+    }
+    setCommentReactPicker({
+      commentId,
+      kind,
+      identities: decision.showPicker.map((id) => ({
+        ...id,
+        // ✓ stamp only when this identity has reacted with THIS
+        // specific kind. Matches the FeedCard picker semantics.
+        currentState: myReactions[id.kind] === kind ? kind : null,
+      })),
+    });
+  };
+
+  const onCommentReactPick = (asIdentity) => {
+    const pending = commentReactPicker;
+    setCommentReactPicker(null);
+    if (!pending) return;
+    const row = (comments || []).find((c) => c.id === pending.commentId);
+    const myReactions = row?.my_reactions || {};
+    const already = (myReactions[asIdentity] || row?.my_reaction) === pending.kind;
+    fireReact(pending.commentId, pending.kind, asIdentity, already);
   };
 
   const toggleTone = (id) => {
@@ -349,7 +431,7 @@ export default function CommentsThread({
           <span className="thread__identity-name">{activeIdentityRecord.name}</span>
         </div>
       ) : (
-        <div className="thread__identity thread__identity--picker">
+        <div ref={identityMenuRef} className="thread__identity thread__identity--picker">
           <button
             type="button"
             className="thread__identity-trigger"
@@ -520,6 +602,9 @@ export default function CommentsThread({
               onReact={handleReact}
               onDelete={handleDelete}
               onReport={handleReport}
+              reactPicker={commentReactPicker}
+              onReactPick={onCommentReactPick}
+              onClosePicker={() => setCommentReactPicker(null)}
               replies={replies}
               showReplies={expandedReplies.has(c.id)}
               onToggleReplies={() => setExpandedReplies((prev) => {
@@ -561,6 +646,9 @@ function CommentRow({
   onReact,
   onDelete,
   onReport,
+  reactPicker,
+  onReactPick,
+  onClosePicker,
   replies = [],
   showReplies = false,
   onToggleReplies,
@@ -574,6 +662,10 @@ function CommentRow({
   );
   const upActive = c.my_reaction === 'up';
   const downActive = c.my_reaction === 'down';
+  // Per-row picker open-state. Compare against the centrally-tracked
+  // commentReactPicker so only ONE picker is open across the thread.
+  const upPickerOpen = !!reactPicker && reactPicker.commentId === c.id && reactPicker.kind === 'up';
+  const downPickerOpen = !!reactPicker && reactPicker.commentId === c.id && reactPicker.kind === 'down';
   const loc = [c.scope_district || c.scope_state, c.scope_city].filter(Boolean).join(' · ');
   return (
     <div className={`thread__comment ${isReply ? 'is-reply' : ''}`}>
@@ -584,24 +676,39 @@ function CommentRow({
       </div>
       <div className="thread__c-body">{c.body}</div>
       <div className="thread__c-actions">
-        <button
-          type="button"
-          className={`thread__c-react ${upActive ? 'is-active up' : ''}`}
-          onClick={() => onReact(c.id, 'up', upActive)}
-          aria-label="Like"
-        >
-          <ThumbsUp size={13} />
-          <span>{c.up_count || 0}</span>
-        </button>
-        <button
-          type="button"
-          className={`thread__c-react ${downActive ? 'is-active down' : ''}`}
-          onClick={() => onReact(c.id, 'down', downActive)}
-          aria-label="Dislike"
-        >
-          <ThumbsDown size={13} />
-          <span>{c.down_count || 0}</span>
-        </button>
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          <button
+            className={`thread__c-react ${upActive ? 'is-active up' : ''}`}
+            onClick={() => onReact(c.id, 'up', upActive)}
+            aria-label="Like"
+          >
+            <ThumbsUp size={13} />
+            <span>{c.up_count || 0}</span>
+          </button>
+          <IdentityPicker
+            open={upPickerOpen}
+            identities={upPickerOpen ? reactPicker.identities : []}
+            onPick={onReactPick}
+            onClose={onClosePicker}
+          />
+        </span>
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          <button
+            type="button"
+            className={`thread__c-react ${downActive ? 'is-active down' : ''}`}
+            onClick={() => onReact(c.id, 'down', downActive)}
+            aria-label="Dislike"
+          >
+            <ThumbsDown size={13} />
+            <span>{c.down_count || 0}</span>
+          </button>
+          <IdentityPicker
+            open={downPickerOpen}
+            identities={downPickerOpen ? reactPicker.identities : []}
+            onPick={onReactPick}
+            onClose={onClosePicker}
+          />
+        </span>
         {loc && <span className="thread__c-location">{loc}</span>}
         <span className="thread__c-spacer" />
         {isMine ? (
@@ -661,11 +768,13 @@ function CommentRow({
                   citizen={citizen}
                   rep={rep}
                   candidate={candidate}
-                  replyingTo={replyingTo}
                   setReplyingTo={setReplyingTo}
                   onReact={onReact}
                   onDelete={onDelete}
                   onReport={onReport}
+                  reactPicker={reactPicker}
+                  onReactPick={onReactPick}
+                  onClosePicker={onClosePicker}
                 />
               ))}
             </div>
