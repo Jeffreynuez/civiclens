@@ -198,7 +198,7 @@ Headline list:
   sleeps after 15 min and the first request after waking often
   times out. "Failed to fetch" after long inactivity is usually
   cold start, not a real bug.
-- **Repo:** `https://github.com/Jeffreynuez/civiclens` (private).
+- **Repo:** `https://github.com/Jeffreynuez/civicview` (private).
   Branch protection on `main`; PR-only workflow. Jeffrey is the
   sole maintainer — GitHub's "Require approval of the most recent
   reviewable push" MUST be OFF or he can't self-merge.

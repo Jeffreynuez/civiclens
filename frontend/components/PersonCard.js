@@ -46,9 +46,9 @@ export default function PersonCard({
     if (!highlight || !rowRef.current) return;
     const node = rowRef.current;
     try { node.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
-    node.classList.add('civiclens-pulse');
+    node.classList.add('civicview-pulse');
     const t = setTimeout(() => {
-      node.classList.remove('civiclens-pulse');
+      node.classList.remove('civicview-pulse');
       if (onHighlightConsumed) onHighlightConsumed();
     }, 1500);
     return () => clearTimeout(t);
@@ -74,12 +74,12 @@ export default function PersonCard({
       }}
     >
       <style jsx global>{`
-        @keyframes civiclens-pulse {
+        @keyframes civicview-pulse {
           0%   { background: rgba(255, 196, 64, 0.0); }
           30%  { background: rgba(255, 196, 64, 0.35); }
           100% { background: rgba(255, 196, 64, 0.0); }
         }
-        .civiclens-pulse { animation: civiclens-pulse 1.4s ease-out; }
+        .civicview-pulse { animation: civicview-pulse 1.4s ease-out; }
       `}</style>
       {/* Avatar */}
       {member.photoUrl ? (

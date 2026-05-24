@@ -7,7 +7,7 @@ import React, { useEffect, useRef } from 'react';
 import { useIsMobile } from '@/lib/useViewport';
 
 /**
- * CivicLens ModalShell — the canonical centered card on a dimmed
+ * CivicView ModalShell — the canonical centered card on a dimmed
  * backdrop. Used by every modal in the app (auth, claim-page,
  * waitlist, committees, my-tracked, etc.).
  *

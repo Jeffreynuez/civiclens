@@ -12,7 +12,7 @@
  * account — but the backend endpoint stays shape-compatible, so the
  * frontend change is scoped to this file.
  */
-const STORAGE_KEY = 'civiclens_voter_token';
+const STORAGE_KEY = 'civicview_voter_token';
 
 function randomToken() {
   // 24 hex chars (12 random bytes). Fits inside the 64-char DB column

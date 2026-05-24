@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens Eyebrow — tiny ALL-CAPS label above headlines and
+ * CivicView Eyebrow — tiny ALL-CAPS label above headlines and
  * section titles ("CONSTITUENT DASHBOARD", "MOST LIKED",
  * "PRIMARY · 114 DAYS"). Mounts the .cl-eyebrow class onto a
  * configurable tag (default <div>) and supports a `tone` prop

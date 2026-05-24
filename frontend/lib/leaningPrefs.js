@@ -25,7 +25,7 @@
  * `ts` is for future "you last leaned this 3 days ago" UI.
  */
 
-const STORAGE_KEY = 'civiclens.leanings.v1';
+const STORAGE_KEY = 'civicview.leanings.v1';
 
 function readAll() {
   if (typeof window === 'undefined') return {};
@@ -45,7 +45,7 @@ function writeAll(blob) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
     // Notify same-tab listeners. Cross-tab listeners get the native
     // 'storage' event for free.
-    window.dispatchEvent(new CustomEvent('civiclens:leaning-changed'));
+    window.dispatchEvent(new CustomEvent('civicview:leaning-changed'));
   } catch {
     // QuotaExceededError or storage disabled — degrade gracefully to
     // session-only state. Caller will just see leanings reset on reload.
@@ -86,13 +86,13 @@ export function setLean(measureId, lean) {
 export function subscribe(listener) {
   if (typeof window === 'undefined') return () => {};
   const handler = () => listener();
-  window.addEventListener('civiclens:leaning-changed', handler);
+  window.addEventListener('civicview:leaning-changed', handler);
   // Cross-tab updates fire the native 'storage' event.
   window.addEventListener('storage', (e) => {
     if (e.key === STORAGE_KEY) handler();
   });
   return () => {
-    window.removeEventListener('civiclens:leaning-changed', handler);
+    window.removeEventListener('civicview:leaning-changed', handler);
     window.removeEventListener('storage', handler);
   };
 }

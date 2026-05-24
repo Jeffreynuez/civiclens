@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens iconography — Phosphor Duotone, hand-inlined as SVG.
+ * CivicView iconography — Phosphor Duotone, hand-inlined as SVG.
  *
  * Per design system spec (README §Iconography):
  *   - 24×24 viewBox

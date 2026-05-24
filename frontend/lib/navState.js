@@ -26,7 +26,7 @@
  * so old stored payloads can be ignored without crashing the page.
  */
 
-const NAV_STATE_KEY = 'civiclens:nav-state:v1';
+const NAV_STATE_KEY = 'civicview:nav-state:v1';
 
 export function loadNavState() {
   if (typeof window === 'undefined') return null;

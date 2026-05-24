@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens PartyChip — the small party-letter pill.
+ * CivicView PartyChip — the small party-letter pill.
  *
  * Per design system: party-coded reds/blues are PILL-ONLY,
  * never CTA fills, never backgrounds. Use this component

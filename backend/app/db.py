@@ -6,7 +6,8 @@ Database plumbing for the Pages feature.
 
 SQLite was picked over Postgres for Phase 1 because:
   • The MVP is single-node and read-light.
-  • Zero-install — file sits at `backend/civiclens.db`.
+  • Zero-install — file sits at `backend/civicview.db` (legacy
+        `civiclens.db` is auto-detected for backward compat).
   • Swap to Postgres later by changing DATABASE_URL and adding Alembic;
     the SQLAlchemy models port without changes.
 
@@ -15,7 +16,7 @@ the schema stops shifting we'll introduce Alembic migrations. Until
 then, init_db() also runs a small auto-migration pass that ADDs any
 new columns defined on the models but missing from the on-disk
 schema. This is dev-only ergonomics — you can restart the backend
-after editing a model without having to delete civiclens.db. For
+after editing a model without having to delete civicview.db. For
 Postgres we short-circuit this pass (Alembic is the right tool).
 """
 from __future__ import annotations
@@ -32,7 +33,19 @@ from sqlalchemy.sql.expression import false as sa_false, true as sa_true
 
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_DB_PATH = BACKEND_DIR / "civiclens.db"
+# Default SQLite filename is `civicview.db`. Backward-compat shim:
+# if a legacy `civiclens.db` exists (pre-rename dev DB) and the new
+# file does not, keep using the legacy one so existing local data
+# doesn't disappear after the rename. Once the user runs anything
+# that writes to the DB, both paths converge naturally.
+_NEW_DB_PATH = BACKEND_DIR / "civicview.db"
+_LEGACY_DB_PATH = BACKEND_DIR / "civiclens.db"
+if _NEW_DB_PATH.exists():
+    DEFAULT_DB_PATH = _NEW_DB_PATH
+elif _LEGACY_DB_PATH.exists():
+    DEFAULT_DB_PATH = _LEGACY_DB_PATH
+else:
+    DEFAULT_DB_PATH = _NEW_DB_PATH  # fresh install — new naming
 _RAW_DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
 
 # Render (and Heroku, and several other managed-Postgres hosts) issues

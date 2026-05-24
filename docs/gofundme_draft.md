@@ -193,7 +193,7 @@ A: Subscription perks activate once we ship the verified-account system + Stripe
 A: GoFundMe has buyer-protection mechanisms; supporters can request a refund of unredeemed pledges through their dispute process. We'd also publish a wind-down notice on the site itself with at least 60 days of warning.
 
 **Q: Can I see the source code?**
-A: Yes — the full backend + frontend source is on GitHub (jeffreynuez/civiclens). Reading the code is the highest form of due-diligence.
+A: Yes — the full backend + frontend source is on GitHub (jeffreynuez/civicview). Reading the code is the highest form of due-diligence.
 
 **Q: Why $5/month for the eventual subscription? Why not free or ad-supported?**
 A: Ads corrupt the editorial neutrality (advertisers gain leverage over what gets shown to whom). Free-forever doesn't sustainably cover ID.me verification ($1.50/user), Render hosting at scale, or the data-API costs above. $5/month is the floor that lets the project pay its own way without ads or VC compromise.
@@ -335,7 +335,7 @@ campaign, then use the proceeds to onboard ID.me + Stripe live mode.
 >
 > What's gated on funding: ID.me identity verification, the paid tier of ProPublica's Congress API, OpenStates Pro for all 50 state legislatures, and the Year-2 hosting buffer. Total ask is $25K with every line item sourced — breakdown at civicview.app/help-build.
 >
-> Built as a Florida Benefit Corp (no ads, no VC), source on GitHub at jeffreynuez/civiclens. Happy to answer technical or product questions in the thread.
+> Built as a Florida Benefit Corp (no ads, no VC), source on GitHub at jeffreynuez/civicview. Happy to answer technical or product questions in the thread.
 >
 > GoFundMe: [link]
 

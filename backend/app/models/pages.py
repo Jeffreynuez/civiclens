@@ -1652,7 +1652,7 @@ class RecoveryCode(Base):
 # ── Tracked items (per-identity, server-side) ────────────────────────
 #
 # Previously the user's tracked bills / officials / elections lived in
-# localStorage under singleton keys (`civiclens.trackedBills` etc.), so
+# localStorage under singleton keys (`civicview.trackedBills` etc.), so
 # logging out of citizen A and into citizen B kept A's tracked items
 # visible on B's navbar. That cross-account leak was also a privacy
 # red flag for the eventual App Store review. Moving to server-side

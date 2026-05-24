@@ -1,7 +1,7 @@
 // CivicView — Copyright (c) 2026 Jeffrey De La Nuez. All rights reserved.
 // Proprietary and confidential. See LICENSE at the repository root.
 
-// Barrel export for CivicLens UI primitives.
+// Barrel export for CivicView UI primitives.
 // Phase 2A: atomic primitives.
 // Phase 2B: state primitives.
 // Phase 2C will add the PhosphorIcon utility + glyph set.

@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 CITIZEN_COOKIE_NAME = "cl_citizen"
 CITIZEN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14  # 14 days, matches rep sessions
 
-_SECRET = os.getenv("SESSION_SECRET") or "civiclens-dev-secret-DO-NOT-USE-IN-PROD"
+_SECRET = os.getenv("SESSION_SECRET") or "civicview-dev-secret-DO-NOT-USE-IN-PROD"
 # Distinct salt from rep sessions so the two token families can't be
 # confused even if an attacker copies a cookie across.
 _serializer = URLSafeTimedSerializer(_SECRET, salt="cl-citizen-v1")

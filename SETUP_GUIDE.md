@@ -6,7 +6,7 @@
 
 ```bash
 # Open a terminal and navigate to the backend folder
-cd CivicLens/backend
+cd CivicView/backend
 
 # Create a virtual environment
 python -m venv venv
@@ -35,7 +35,7 @@ Test it by visiting:
 
 ```bash
 # Open a SECOND terminal and navigate to the frontend folder
-cd CivicLens/frontend
+cd CivicView/frontend
 
 # Install dependencies
 npm install
@@ -87,7 +87,7 @@ Stop the running uvicorn (Ctrl+C in its terminal), then restart with the
 localhost:
 
 ```bash
-cd CivicLens/backend
+cd CivicView/backend
 uvicorn app.main:app --reload --host 0.0.0.0
 ```
 
@@ -131,7 +131,7 @@ hit `localhost:8000` *on the phone itself* and 404.
 Stop the Next.js dev server (Ctrl+C), then restart with the `-H` flag:
 
 ```bash
-cd CivicLens/frontend
+cd CivicView/frontend
 npm run dev -- -H 0.0.0.0
 ```
 
@@ -199,7 +199,7 @@ Your API key is already configured in `backend/.env`. If you ever need a new one
 ## Project Structure
 
 ```
-CivicLens/
+CivicView/
 ├── SETUP_GUIDE.md              ← This file
 │
 ├── backend/                     ← Python / FastAPI

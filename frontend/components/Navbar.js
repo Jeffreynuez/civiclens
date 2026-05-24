@@ -366,7 +366,7 @@ export default function Navbar({
       {/* Logo — Phase 4-wiring: swap the prior clock-circle placeholder for
           the locked-in magnify-lens-with-flag mark. Reverse variant has the
           white lens ring/handle so it stands on the navy navbar.
-          On mobile: hide the wordmark "CivicLens" — the lens icon alone
+          On mobile: hide the wordmark "CivicView" — the lens icon alone
           is recognizable enough and we need the horizontal space. */}
       {/* Logo + wordmark — clickable home link. Tapping resets the
           app's selection state (selectedState / member / candidate /
