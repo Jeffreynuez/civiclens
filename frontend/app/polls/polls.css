@@ -1604,3 +1604,52 @@ a.poll-card { display: flex; }
   opacity: 0.55;
   cursor: wait;
 }
+
+/* ───────────────────────────────────────────────────────────────────
+   PR #8 — CommentsThread nested replies + thumb-icon buttons
+   ─────────────────────────────────────────────────────────────────── */
+
+/* Thumb icons inside comment-row react buttons inherit the same
+   colored treatment as feed-card reactions. */
+.thread__c-react {
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.thread__c-react svg {
+  width: 13px; height: 13px;
+  stroke-width: 2;
+}
+.thread__c-react.is-active.up {
+  color: var(--cl-up, #1877f2);
+}
+.thread__c-react.is-active.down {
+  color: var(--cl-down, #8c2929);
+}
+.thread__c-react:hover {
+  color: var(--cl-text, #111);
+}
+
+/* Reply nesting. The replies block indents under the parent +
+   gets a left border that visually links it to the parent. */
+.thread__replies {
+  margin: 8px 0 0 14px;
+  padding-left: 12px;
+  border-left: 2px solid var(--cl-border, #e5e7eb);
+}
+.thread__replies-toggle {
+  background: transparent; border: 0;
+  padding: 4px 0;
+  font-size: 11px; font-weight: 600;
+  color: var(--cl-accent, #18794e);
+  cursor: pointer;
+}
+.thread__replies-toggle:hover {
+  text-decoration: underline;
+}
+.thread__replies-list {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 6px;
+}
+.thread__comment.is-reply {
+  background: var(--cl-surface, #fff);
+  padding: 8px 10px;
+}

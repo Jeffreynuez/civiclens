@@ -38,6 +38,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ThumbsUp, ThumbsDown } from '../ui';
 import {
   listComments,
   createComment,
@@ -177,7 +178,31 @@ export default function CommentsThread({
     return list;
   }, [comments, sort, filterIds]);
 
-  const visible = sortedFiltered.slice(0, shown);
+  // Bucket the flat comment list into top-level + a map of
+  // parent_comment_id → replies. Top-level are comments whose
+  // parent_comment_id is null/undefined; replies are everything else.
+  // Reply order is oldest-first inside each parent's pool so the
+  // conversation reads chronologically when expanded.
+  const topLevel = useMemo(() => sortedFiltered.filter((c) => !c.parent_comment_id), [sortedFiltered]);
+  const repliesByParent = useMemo(() => {
+    const m = new Map();
+    for (const c of sortedFiltered) {
+      if (!c.parent_comment_id) continue;
+      if (!m.has(c.parent_comment_id)) m.set(c.parent_comment_id, []);
+      m.get(c.parent_comment_id).push(c);
+    }
+    // Replies render oldest-first regardless of the parent sort
+    // (a reply thread reads top-to-bottom chronologically).
+    for (const [, arr] of m) {
+      arr.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    }
+    return m;
+  }, [sortedFiltered]);
+  const visible = topLevel.slice(0, shown);
+  // Per-parent "Show replies" expansion state. Sticks for the life
+  // of the thread (closing the FeedCard unmounts the thread so the
+  // set resets).
+  const [expandedReplies, setExpandedReplies] = useState(() => new Set());
 
   // ── handlers ──────────────────────────────────────────────────────
   const handlePost = async (parentId = null) => {
@@ -229,14 +254,14 @@ export default function CommentsThread({
 
   const handleReact = async (commentId, kind, currentlyActive) => {
     if (!signedIn) { onLoginRequired?.(); return; }
-    // post-comment endpoints only today; citizen-poll-comment reactions
-    // aren't wired through the same endpoint yet — keep both safe.
-    if (mode === 'poll') {
-      // No-op stub for now; PR #4 polish can wire poll-comment reactions
-      // once the backend mirrors PostComment's reactions surface.
-      return;
-    }
-    const fn = currentlyActive ? clearCommentReaction(commentId) : reactToComment(commentId, kind);
+    // Post-comments use the existing /api/pages/comments/{id}/reactions
+    // surface (mode='post'). Poll-comments would need a parallel
+    // /api/citizen-polls/comments/{id}/reactions surface that doesn't
+    // exist yet — silent no-op until that lands.
+    if (mode === 'poll') return;
+    const fn = currentlyActive
+      ? clearCommentReaction(commentId, activeIdentity)
+      : reactToComment(commentId, kind, activeIdentity);
     const { error: err } = await fn;
     if (err) {
       setError(typeof err === 'string' ? err : 'Could not record reaction.');
@@ -417,7 +442,13 @@ export default function CommentsThread({
         )}
       </div>
 
-      {/* Comments */}
+      {/* Comments — nested rendering. We bucket the flat list into
+          top-level comments + a children map keyed on parent_comment_id.
+          Each top-level renders its replies under a collapsed
+          "Show replies (N)" toggle so a busy thread doesn't fill the
+          card. The 5-newest pagination cap still applies to TOP-LEVEL
+          comments only; replies under an expanded parent always render
+          in full because the user explicitly opened them. */}
       <div className="thread__list">
         {error && <div className="thread__error">{error}</div>}
         {comments === null && <div className="thread__loading">Loading comments…</div>}
@@ -427,74 +458,34 @@ export default function CommentsThread({
           </div>
         )}
         {visible.map((c) => {
-          const isMine = !!(citizen && c.citizen_id === citizen.id);
-          const upActive = c.viewer_reaction === 'up';
-          const downActive = c.viewer_reaction === 'down';
-          const loc = [c.scope_district || c.scope_state, c.scope_city].filter(Boolean).join(' · ');
+          const replies = repliesByParent.get(c.id) || [];
           return (
-            <div key={c.id} className="thread__comment">
-              <div className="thread__c-head">
-                <span className="thread__c-name">{c.citizen_display_name || c.author || 'Citizen'}</span>
-                {c.verified === false && <span className="thread__c-unverified">Unverified</span>}
-                <span className="thread__c-date">{relTime(c.created_at)}</span>
-              </div>
-              <div className="thread__c-body">{c.body}</div>
-              <div className="thread__c-actions">
-                <button
-                  type="button"
-                  className={`thread__c-react ${upActive ? 'is-active up' : ''}`}
-                  onClick={() => handleReact(c.id, 'up', upActive)}
-                  aria-label="Like"
-                >
-                  ▲ <span>{c.reactions_up || 0}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`thread__c-react ${downActive ? 'is-active down' : ''}`}
-                  onClick={() => handleReact(c.id, 'down', downActive)}
-                  aria-label="Dislike"
-                >
-                  ▼ <span>{c.reactions_down || 0}</span>
-                </button>
-                {loc && <span className="thread__c-location">{loc}</span>}
-                <span className="thread__c-spacer" />
-                {isMine ? (
-                  <button
-                    type="button"
-                    className="thread__c-link thread__c-link--del"
-                    onClick={() => handleDelete(c.id)}
-                  >
-                    Delete
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="thread__c-link"
-                    onClick={() => handleReport(c.id)}
-                  >
-                    Report
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="thread__c-link thread__c-link--accent"
-                  onClick={() => {
-                    setReplyingTo(c.id);
-                    // Focus the composer textarea on next paint.
-                    setTimeout(() => {
-                      document.querySelector('.thread__textarea')?.focus();
-                    }, 0);
-                  }}
-                >
-                  {replyingTo === c.id ? 'Replying…' : 'Reply'}
-                </button>
-              </div>
-            </div>
+            <CommentRow
+              key={c.id}
+              c={c}
+              isReply={false}
+              citizen={citizen}
+              rep={rep}
+              candidate={candidate}
+              replyingTo={replyingTo}
+              setReplyingTo={setReplyingTo}
+              onReact={handleReact}
+              onDelete={handleDelete}
+              onReport={handleReport}
+              replies={replies}
+              showReplies={expandedReplies.has(c.id)}
+              onToggleReplies={() => setExpandedReplies((prev) => {
+                const next = new Set(prev);
+                if (next.has(c.id)) next.delete(c.id);
+                else next.add(c.id);
+                return next;
+              })}
+            />
           );
         })}
       </div>
 
-      {sortedFiltered.length > shown && (
+      {topLevel.length > shown && (
         <button
           type="button"
           className="thread__more"
@@ -502,6 +493,136 @@ export default function CommentsThread({
         >
           View all ({sortedFiltered.length}) comments
         </button>
+      )}
+    </div>
+  );
+}
+
+// CommentRow — one comment item. Used twice: top-level + nested
+// (when `isReply` is true the visual indents under the parent).
+// Splitting it out keeps the parent map clean and lets the
+// "Show replies" toggle render an arbitrary count of children.
+function CommentRow({
+  c,
+  isReply,
+  citizen,
+  rep,
+  candidate,
+  replyingTo,
+  setReplyingTo,
+  onReact,
+  onDelete,
+  onReport,
+  replies = [],
+  showReplies = false,
+  onToggleReplies,
+}) {
+  // isMine across all three identity columns — a rep / candidate
+  // viewing their own comment sees Delete; everyone else sees Report.
+  const isMine = !!(
+    (citizen && c.citizen_id === citizen.id) ||
+    (rep && c.author_rep_id === rep.id) ||
+    (candidate && c.author_candidate_id === candidate.id)
+  );
+  const upActive = c.my_reaction === 'up';
+  const downActive = c.my_reaction === 'down';
+  const loc = [c.scope_district || c.scope_state, c.scope_city].filter(Boolean).join(' · ');
+  return (
+    <div className={`thread__comment ${isReply ? 'is-reply' : ''}`}>
+      <div className="thread__c-head">
+        <span className="thread__c-name">{c.citizen_display_name || c.author || 'Citizen'}</span>
+        {c.verified === false && <span className="thread__c-unverified">Unverified</span>}
+        <span className="thread__c-date">{relTime(c.created_at)}</span>
+      </div>
+      <div className="thread__c-body">{c.body}</div>
+      <div className="thread__c-actions">
+        <button
+          type="button"
+          className={`thread__c-react ${upActive ? 'is-active up' : ''}`}
+          onClick={() => onReact(c.id, 'up', upActive)}
+          aria-label="Like"
+        >
+          <ThumbsUp size={13} />
+          <span>{c.up_count || 0}</span>
+        </button>
+        <button
+          type="button"
+          className={`thread__c-react ${downActive ? 'is-active down' : ''}`}
+          onClick={() => onReact(c.id, 'down', downActive)}
+          aria-label="Dislike"
+        >
+          <ThumbsDown size={13} />
+          <span>{c.down_count || 0}</span>
+        </button>
+        {loc && <span className="thread__c-location">{loc}</span>}
+        <span className="thread__c-spacer" />
+        {isMine ? (
+          <button
+            type="button"
+            className="thread__c-link thread__c-link--del"
+            onClick={() => onDelete(c.id)}
+          >
+            Delete
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="thread__c-link"
+            onClick={() => onReport(c.id)}
+          >
+            Report
+          </button>
+        )}
+        {/* Reply only appears on top-level comments (Phase 3 rule:
+            replies-to-replies aren't supported, threads stay one
+            level deep). */}
+        {!isReply && (
+          <button
+            type="button"
+            className="thread__c-link thread__c-link--accent"
+            onClick={() => {
+              setReplyingTo(c.id);
+              setTimeout(() => {
+                document.querySelector('.thread__textarea')?.focus();
+              }, 0);
+            }}
+          >
+            {replyingTo === c.id ? 'Replying…' : 'Reply'}
+          </button>
+        )}
+      </div>
+      {/* "Show replies" toggle + nested children. Only on top-level
+          comments with at least one reply. */}
+      {!isReply && replies.length > 0 && (
+        <div className="thread__replies">
+          <button
+            type="button"
+            className="thread__replies-toggle"
+            onClick={onToggleReplies}
+            aria-expanded={showReplies}
+          >
+            {showReplies ? '⯆' : '⯈'} {showReplies ? 'Hide' : 'Show'} replies ({replies.length})
+          </button>
+          {showReplies && (
+            <div className="thread__replies-list">
+              {replies.map((r) => (
+                <CommentRow
+                  key={r.id}
+                  c={r}
+                  isReply
+                  citizen={citizen}
+                  rep={rep}
+                  candidate={candidate}
+                  replyingTo={replyingTo}
+                  setReplyingTo={setReplyingTo}
+                  onReact={onReact}
+                  onDelete={onDelete}
+                  onReport={onReport}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
