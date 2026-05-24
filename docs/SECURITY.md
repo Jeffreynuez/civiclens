@@ -133,7 +133,7 @@ All three are free for public repos and take ~5 minutes total to enable. For
 private repos, Dependabot + Secret Scanning are still free; CodeQL costs $49 per
 active committer per month under GitHub Advanced Security.
 
-1. **GitHub** → `Jeffreynuez/civiclens` → Settings → **Advanced Security**.
+1. **GitHub** → `Jeffreynuez/civicview` → Settings → **Advanced Security**.
    (Path: `/settings/security_analysis`. GitHub reorganized this from
    "Code security and analysis" sometime in 2024; same features, new
    shell. CodeQL on private repos requires GitHub Advanced Security

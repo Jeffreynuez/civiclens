@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens Card — the canonical white surface.
+ * CivicView Card — the canonical white surface.
  *
  * Per design system:
  *   background: var(--cl-card)

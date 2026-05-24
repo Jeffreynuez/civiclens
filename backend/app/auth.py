@@ -44,7 +44,7 @@ SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14
 _SECRET = os.getenv("SESSION_SECRET")
 if not _SECRET:
     # Dev-only fallback. Logged loudly so it can't slip into prod unnoticed.
-    _SECRET = "civiclens-dev-secret-DO-NOT-USE-IN-PROD"
+    _SECRET = "civicview-dev-secret-DO-NOT-USE-IN-PROD"
     logger.warning("SESSION_SECRET not set — using dev fallback. Set a real value in .env for production.")
 
 _serializer = URLSafeTimedSerializer(_SECRET, salt="cl-session-v1")

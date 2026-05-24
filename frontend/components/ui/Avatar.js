@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens Avatar — circular, with initials fallback.
+ * CivicView Avatar — circular, with initials fallback.
  *
  * Per design system: avatar fallbacks are initials on a colored
  * circle (party-tinted when a party is provided, neutral gray

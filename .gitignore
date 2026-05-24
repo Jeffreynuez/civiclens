@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# Top-level .gitignore for CivicLens.
+# Top-level .gitignore for CivicView.
 #
 # Sub-folder .gitignore files (backend/.gitignore, frontend/.gitignore)
 # stay in place and add their own rules — git uses all of them

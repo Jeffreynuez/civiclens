@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens Skeleton — shape-matching loading placeholders.
+ * CivicView Skeleton — shape-matching loading placeholders.
  *
  * Per design system: skeletons match the SHAPE of the content
  * they precede (no generic gray rectangles where a real card has

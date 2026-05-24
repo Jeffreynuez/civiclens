@@ -9,7 +9,7 @@
 @tailwind utilities;
 
 /* ============================================================
-   CivicLens — globals.css
+   CivicView — globals.css
    Foundation: design tokens + Geist font + semantic typography.
    Single source of truth for color, type, spacing, radii, motion.
    Per the design system, all canonical tokens use the --cl-*

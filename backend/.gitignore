@@ -9,6 +9,8 @@ venv/
 # made locally, and (c) make merges painful when two people seed
 # different demo state.
 civiclens.db
+civicview.db
+civicview.db-journal
 civiclens.db-journal
 uploads/
 

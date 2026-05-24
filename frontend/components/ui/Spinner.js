@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens Spinner — canonical 16px ring with accent-green leader
+ * CivicView Spinner — canonical 16px ring with accent-green leader
  * over a low-alpha track. 0.9s linear rotation per design system spec.
  *
  * Use inside buttons (the Button component already has its own copy

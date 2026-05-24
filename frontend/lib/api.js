@@ -2,7 +2,7 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 /**
- * CivicLens API Client
+ * CivicView API Client
  * Fetches data from the FastAPI backend, with fallback to sample data.
  */
 

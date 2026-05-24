@@ -1166,10 +1166,10 @@ function StatsBlock({ party, stats, loading }) {
             <div style={{
               position: 'absolute', inset: 0,
               background: 'linear-gradient(90deg, transparent, var(--cl-border), transparent)',
-              animation: 'civiclens-shimmer 1.2s linear infinite',
+              animation: 'civicview-shimmer 1.2s linear infinite',
             }} />
             <style jsx>{`
-              @keyframes civiclens-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+              @keyframes civicview-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
             `}</style>
           </div>
         ) : typeof pct === 'number' ? (

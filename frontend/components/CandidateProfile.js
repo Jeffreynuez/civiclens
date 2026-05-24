@@ -609,7 +609,7 @@ export default function CandidateProfile({
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
         {activeTab === 'overview' && (
           <div>
-            {/* Skeleton-record disclosure. CivicLens tries to give every
+            {/* Skeleton-record disclosure. CivicView tries to give every
                 filed candidate equal footing on the ballot, which means
                 listing minor / NPA / write-in candidates that don't have
                 public bios or campaign sites. We surface that gap

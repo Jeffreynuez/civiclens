@@ -303,7 +303,7 @@ function Hero({ onVerifyClick }) {
   // "States covered" was dropped (50 is implicit for any US-civic app);
   // replaced with chamber + SCOTUS counts that give the visitor a
   // meaningful sense of the surface area covered. "Reps joined" is a
-  // fake CivicLens-side stat (officials with a claimed Page on the
+  // fake CivicView-side stat (officials with a claimed Page on the
   // platform) — same scaffolding pattern as "Verified citizens".
   const STATS = [
     { value: '100',   label: 'Senators' },
@@ -313,7 +313,7 @@ function Hero({ onVerifyClick }) {
     { value: '12.4k', label: 'Verified citizens' },
   ];
 
-  // CivicLens Stats dropdown — starts collapsed per design feedback.
+  // CivicView Stats dropdown — starts collapsed per design feedback.
   // The numbers are a "nice to have" peek; collapsing them by default
   // moves the verify-address CTA closer to the fold and reduces
   // first-paint cognitive load. Persisted so a user who opens it once
@@ -453,7 +453,7 @@ function Hero({ onVerifyClick }) {
             Address used to match your district. Never shared, never sold.
           </div>
 
-          {/* CivicLens Stats — wrapped in a collapsible so the hero CTA
+          {/* CivicView Stats — wrapped in a collapsible so the hero CTA
               ("Find my reps") sits closer to the fold on first paint.
               The numbers are interesting context but not load-bearing
               for someone landing here for the first time, so we hide

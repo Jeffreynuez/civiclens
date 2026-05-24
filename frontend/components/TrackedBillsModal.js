@@ -334,11 +334,11 @@ function Spinner() {
         display: 'inline-block', width: '12px', height: '12px',
         border: '2px solid rgba(255,255,255,0.4)',
         borderTopColor: 'white', borderRadius: '50%',
-        animation: 'civiclens-tracked-spin 0.8s linear infinite',
+        animation: 'civicview-tracked-spin 0.8s linear infinite',
       }}
     >
       <style jsx>{`
-        @keyframes civiclens-tracked-spin { to { transform: rotate(360deg); } }
+        @keyframes civicview-tracked-spin { to { transform: rotate(360deg); } }
       `}</style>
     </span>
   );

@@ -7,13 +7,13 @@ import React from 'react';
 import EmptyState from './EmptyState';
 
 /**
- * CivicLens ErrorState — same shell as EmptyState but with warning
+ * CivicView ErrorState — same shell as EmptyState but with warning
  * iconography and a tone shift. Per design system: network errors
  * and 404s use the burgundy "down-react" token (NOT destructive red),
  * while informational issues (scope mismatch) use warning yellow.
  *
  * Three preset kinds:
- *   - 'network' : "Couldn't reach CivicLens" / Retry CTA
+ *   - 'network' : "Couldn't reach CivicView" / Retry CTA
  *   - 'notFound': "We couldn't find that page"
  *   - 'scope'   : "This is scoped to a different district" (informational)
  *

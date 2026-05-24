@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens EmptyState — the reusable shell for "nothing here yet"
+ * CivicView EmptyState — the reusable shell for "nothing here yet"
  * moments. Per design system principles:
  *
  *   - Never blame the user. "No recent activity yet" — never

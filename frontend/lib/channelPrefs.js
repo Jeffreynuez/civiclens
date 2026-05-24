@@ -17,7 +17,7 @@
 import { useEffect, useState } from 'react';
 import { defaultChannelPrefs, mergeChannelPrefs, CHANNEL_SCHEMA } from './notificationPrefs';
 
-const STORAGE_KEY = 'civiclens.channelPrefs';
+const STORAGE_KEY = 'civicview.channelPrefs';
 
 const listeners = new Set();
 function notify() {

@@ -149,7 +149,7 @@ citizen login) will work as soon as ALLOWED_ORIGINS is right.
 ## Local dev still works
 
 None of the env-var changes break local development. With no
-`.env` set, the backend defaults to SQLite at `backend/civiclens.db`,
+`.env` set, the backend defaults to SQLite at `backend/civicview.db`,
 COOKIE_SECURE=false, COOKIE_SAMESITE=lax, and the localhost CORS
 allow-list. `pnpm dev` / `npm run dev` / `uvicorn app.main:app
 --reload` all work the same.

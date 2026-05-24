@@ -6,7 +6,7 @@
 import React from 'react';
 
 /**
- * CivicLens Button — token-first, used across every surface.
+ * CivicView Button — token-first, used across every surface.
  *
  * Variants:
  *   - 'primary'   (default) : solid accent-green, white text. Main CTA.

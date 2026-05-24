@@ -789,9 +789,9 @@ function CandidateRow({
       const node = rowRef.current;
       if (!node) return;
       try { node.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
-      node.classList.add('civiclens-pulse');
+      node.classList.add('civicview-pulse');
       setTimeout(() => {
-        node.classList.remove('civiclens-pulse');
+        node.classList.remove('civicview-pulse');
         if (isFocused && onFocusCandidateConsumed) onFocusCandidateConsumed();
         if (isHighlighted && onHighlightConsumed) onHighlightConsumed();
       }, 1500);
@@ -1347,9 +1347,9 @@ function VoterInfoBlock({ loading, data, error, disabled }) {
   // Debug breadcrumbs so you can diagnose from devtools without reading the code.
   useEffect(() => {
     if (disabled) {
-      console.debug('[CivicLens] voterInfo: disabled (GOOGLE_CIVIC_API_KEY not set on backend)');
+      console.debug('[CivicView] voterInfo: disabled (GOOGLE_CIVIC_API_KEY not set on backend)');
     } else if (error) {
-      console.debug('[CivicLens] voterInfo: error', error);
+      console.debug('[CivicView] voterInfo: error', error);
     } else if (!loading && data) {
       const sizes = {
         polling: (data.polling_locations || []).length,
@@ -1358,7 +1358,7 @@ function VoterInfoBlock({ loading, data, error, disabled }) {
         contests: (data.contests || []).length,
         election: data.election?.name || null,
       };
-      console.debug('[CivicLens] voterInfo payload:', sizes);
+      console.debug('[CivicView] voterInfo payload:', sizes);
     }
   }, [loading, data, error, disabled]);
 

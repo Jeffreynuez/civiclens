@@ -1,12 +1,12 @@
-# CivicLens — Design Handoff
+# CivicView — Design Handoff
 
-This document seeds Claude Design with the context it needs to do meaningful design work on CivicLens. The codebase is feature-complete through Phase 1.5 — the engineering work is at a stopping point and the project is ready for a visual design pass.
+This document seeds Claude Design with the context it needs to do meaningful design work on CivicView. The codebase is feature-complete through Phase 1.5 — the engineering work is at a stopping point and the project is ready for a visual design pass.
 
 ---
 
-## 1. What CivicLens is
+## 1. What CivicView is
 
-CivicLens is a Next.js 14 + FastAPI web app that gives US citizens a clearer path to understanding and connecting with their elected representatives. The first state with full coverage is Florida; federal-level data covers all 50 states.
+CivicView is a Next.js 14 + FastAPI web app that gives US citizens a clearer path to understanding and connecting with their elected representatives. The first state with full coverage is Florida; federal-level data covers all 50 states.
 
 The app has two distinct user types and a third unauthenticated viewing mode:
 
@@ -204,7 +204,7 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 On startup the backend will:
-- Auto-create a SQLite DB at `backend/civiclens.db`
+- Auto-create a SQLite DB at `backend/civicview.db`
 - Auto-migrate schema (logged on stdout)
 - Seed 4 demo rep accounts + 60 demo citizen accounts
 
@@ -217,10 +217,10 @@ npm run dev          # starts Next.js on http://localhost:3000
 
 **Demo credentials:**
 - Rep accounts (any of these, password `***REDACTED-DURING-PUBLIC-FLIP-AUDIT***`):
-  - `byron.donalds@civiclens-demo.com` (FL-19 House rep — most-built-out demo persona)
-  - `bernie.sanders@civiclens-demo.com` (VT senator)
-  - `ron.desantis@civiclens-demo.com` (FL governor)
-  - `donalds.campaign@civiclens-demo.com` (FL gubernatorial candidate)
+  - `byron.donalds@civicview-demo.com` (FL-19 House rep — most-built-out demo persona)
+  - `bernie.sanders@civicview-demo.com` (VT senator)
+  - `ron.desantis@civicview-demo.com` (FL governor)
+  - `donalds.campaign@civicview-demo.com` (FL gubernatorial candidate)
 - Citizen accounts (60, password `***REDACTED-DURING-PUBLIC-FLIP-AUDIT***`):
   - 50 across Florida (10 in FL-19 / Naples for cluster richness)
   - 10 in CA, TX, NY, IL, PA, OH, GA, WA, MI, VA
@@ -228,9 +228,9 @@ npm run dev          # starts Next.js on http://localhost:3000
 
 **Best demo path for screenshots:**
 1. Open `http://localhost:3000`
-2. Sign in as `byron.donalds@civiclens-demo.com`, navigate to his page (FL → Congress → Byron Donalds → Page button)
+2. Sign in as `byron.donalds@civicview-demo.com`, navigate to his page (FL → Congress → Byron Donalds → Page button)
 3. Write a post with a poll + 2 images → publish
-4. Sign out, sign in as `maria.hernandez@civiclens-voters.com` (FL-19 citizen) → react, comment, vote
+4. Sign out, sign in as `maria.hernandez@civicview-voters.com` (FL-19 citizen) → react, comment, vote
 5. Sign back in as Donalds → switch to Dashboard view → flip scope filter
 
 ---
@@ -258,7 +258,7 @@ Steer clear of (no design value, large risk of regression):
 
 ## 11. Repo
 
-`https://github.com/Jeffreynuez/civiclens` (private)
+`https://github.com/Jeffreynuez/civicview` (private)
 
 Main branch only. Clean commit history starts at `Phase 1.5 feature-complete: …`.
 
