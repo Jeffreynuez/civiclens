@@ -465,8 +465,15 @@ export async function reactToPost(postId, kind, asIdentity = null) {
   });
 }
 
-export async function clearReaction(postId) {
-  return request(`/api/pages/posts/${postId}/reactions`, { method: 'DELETE' });
+export async function clearReaction(postId, asIdentity = null) {
+  // Phase 6 multi-identity: pass as_identity as a query param so
+  // toggle-off targets the picker's exact chosen identity. DELETE
+  // requests don't normally carry bodies so query is the cleanest
+  // way; backend reads it via FastAPI dep injection.
+  return request(`/api/pages/posts/${postId}/reactions`, {
+    method: 'DELETE',
+    query: asIdentity ? { as_identity: asIdentity } : undefined,
+  });
 }
 
 // ── Comments ────────────────────────────────────────────────────────
@@ -507,8 +514,12 @@ export async function reactToComment(commentId, kind, asIdentity = null) {
   });
 }
 
-export async function clearCommentReaction(commentId) {
-  return request(`/api/pages/comments/${commentId}/reactions`, { method: 'DELETE' });
+export async function clearCommentReaction(commentId, asIdentity = null) {
+  // Same as_identity contract as clearReaction.
+  return request(`/api/pages/comments/${commentId}/reactions`, {
+    method: 'DELETE',
+    query: asIdentity ? { as_identity: asIdentity } : undefined,
+  });
 }
 
 // ── Post CRUD ─────────────────────────────────────────────────────────
@@ -733,6 +744,25 @@ export async function voteOnCitizenPoll(pollId, optionId, asIdentity = null) {
 
 export async function closeCitizenPoll(pollId) {
   return request(`/api/citizen-polls/${pollId}/close`, { method: 'POST' });
+}
+
+
+// ── Reactions on citizen polls (Phase 7 — PollReaction parity) ──────
+// Mirror reactToPost / clearReaction shape. asIdentity narrows to the
+// IdentityPicker's chosen identity; null falls back to the backend's
+// default precedence (citizen → rep → candidate).
+export async function reactToCitizenPoll(pollId, kind, asIdentity = null) {
+  return request(`/api/citizen-polls/${pollId}/reactions`, {
+    method: 'POST',
+    body: { kind, as_identity: asIdentity || undefined },
+  });
+}
+
+export async function clearCitizenPollReaction(pollId, asIdentity = null) {
+  return request(`/api/citizen-polls/${pollId}/reactions`, {
+    method: 'DELETE',
+    query: asIdentity ? { as_identity: asIdentity } : undefined,
+  });
 }
 
 export async function reportCitizenPoll(pollId, { reason, detail } = {}) {

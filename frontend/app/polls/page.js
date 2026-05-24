@@ -579,6 +579,17 @@ export function GrassrootsFeed({ tab = 'polls' }) {
               onToggleComments={() => toggleComments(p.id)}
               signedIn={signedIn}
               onLoginRequired={() => setCitizenLoginOpen(true)}
+              // Preferred: shallow-merge the patch into the matching
+              // item so React re-renders ONE card. No scroll jump.
+              onCardUpdated={(cardId, patch) => {
+                setItems((prev) => prev.map((it) => (
+                  it.id === cardId
+                    ? { ...it, ...patch, viewer: { ...(it.viewer || {}), ...(patch.viewer || {}) } }
+                    : it
+                )));
+              }}
+              // Legacy fallback for destructive actions (close-poll
+              // removes the row entirely; cheapest to refetch).
               onMutated={load}
               citizenViewer={citizen}
             />

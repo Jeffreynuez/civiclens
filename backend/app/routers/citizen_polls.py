@@ -69,6 +69,7 @@ from app.models.pages import (
     PollComment,
     PollCommentReport,
     PollOption,
+    PollReaction,
     PollReport,
     PollVote,
     RepAccount,
@@ -87,6 +88,8 @@ from app.schemas.pages import (
     PollReportCreate,
     PollReportStatus,
     PollVoteRequest,
+    ReactionRequest,
+    ReactionSummary,
 )
 from app.services.citizen_polls_service import (
     active_poll_count_for_page,
@@ -1030,4 +1033,207 @@ def list_my_polls(
     return CitizenPollListMineResponse(
         active=[serialize_citizen_poll(db, p, citizen, None) for p in active_rows],
         archived=[serialize_citizen_poll(db, p, citizen, None) for p in archived_rows],
+    )
+
+
+# ── Reactions on citizen polls (Phase 6 — parity with PostReaction) ──
+def _reaction_summary_for_citizen_poll(
+    poll: Poll,
+    db: Session,
+    me_citizen: Optional[CitizenAccount] = None,
+    me_rep: Optional[RepAccount] = None,
+    me_candidate: Optional[CandidateAccount] = None,
+) -> ReactionSummary:
+    """Aggregate a citizen poll's reactions into the same shape
+    PostCard / FeedCard consume on the post side. Mirrors
+    _reaction_summary_for_post in pages.py exactly, swapping
+    PostReaction for PollReaction.
+
+    Per-identity slots are populated only for identities the caller is
+    signed in to — this powers the IdentityPicker's ✓ markers
+    ("✓ Liked" / "✓ Disliked").
+    """
+    per_identity: dict = {}
+    if me_citizen is not None:
+        per_identity["citizen"] = None
+    if me_rep is not None:
+        per_identity["rep"] = None
+    if me_candidate is not None:
+        per_identity["candidate"] = None
+
+    rows = (
+        db.query(PollReaction)
+        .filter(PollReaction.poll_id == poll.id)
+        .all()
+    )
+    up = down = 0
+    mine: Optional[str] = None
+    for r in rows:
+        if me_citizen is not None and r.citizen_id == me_citizen.id:
+            mine = r.kind
+            per_identity["citizen"] = r.kind
+        if me_rep is not None and r.author_rep_id == me_rep.id:
+            mine = r.kind
+            per_identity["rep"] = r.kind
+        if me_candidate is not None and r.author_candidate_id == me_candidate.id:
+            mine = r.kind
+            per_identity["candidate"] = r.kind
+        if r.kind == "up":
+            up += 1
+        elif r.kind == "down":
+            down += 1
+    return ReactionSummary(
+        up_count=up, down_count=down,
+        my_reaction=mine, my_reactions=per_identity,
+    )
+
+
+def _apply_as_identity_filter_poll(
+    *,
+    me_citizen: Optional[CitizenAccount],
+    me_rep: Optional[RepAccount],
+    me_candidate: Optional[CandidateAccount],
+    as_identity: Optional[str],
+):
+    """Mirror pages.py's _apply_as_identity_filter — narrow which
+    identity ACTS based on the picker's explicit choice. Returns
+    (acting_citizen, acting_rep, acting_candidate). When as_identity
+    is None, returns all three so the existing precedence applies.
+    Returns all-None when the caller asked to act as an identity
+    they aren't signed in to (route raises 401 below).
+    """
+    if not as_identity:
+        return me_citizen, me_rep, me_candidate
+    if as_identity == "citizen" and me_citizen is not None:
+        return me_citizen, None, None
+    if as_identity == "rep" and me_rep is not None:
+        return None, me_rep, None
+    if as_identity == "candidate" and me_candidate is not None:
+        return None, None, me_candidate
+    return None, None, None
+
+
+@router.post(
+    "/citizen-polls/{poll_id}/reactions",
+    response_model=ReactionSummary,
+    summary="Add / flip / remove a reaction on a citizen poll",
+)
+def react_to_citizen_poll(
+    poll_id: int,
+    payload: ReactionRequest,
+    db: Session = Depends(get_db),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
+):
+    """Create, flip, or toggle-off the caller's reaction on a citizen
+    poll (page-tied or standalone). Three behaviors mirror PostReaction:
+
+      • First call with kind='up'   → insert 'up'.
+      • kind='down' while 'up' active → flip to 'down'.
+      • kind='up' while 'up' active   → remove (toggle off).
+    """
+    poll = db.query(Poll).filter(Poll.id == poll_id).first()
+    if poll is None or poll.author_kind != "citizen":
+        raise HTTPException(status_code=404, detail="Poll not found")
+
+    acting_citizen, acting_rep, acting_candidate = _apply_as_identity_filter_poll(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+        as_identity=payload.as_identity,
+    )
+
+    # Engagement requires SOME signed-in identity. Unlike rep posts
+    # (where the rep-on-own-page path narrows further), every signed-
+    # in viewer can react to a citizen poll on /polls — the surface
+    # is the public grassroots feed.
+    if acting_citizen is None and acting_rep is None and acting_candidate is None:
+        raise HTTPException(status_code=401, detail="Sign in to react")
+
+    # Dedupe lookup keyed on the acting identity — matches the same
+    # (poll, identity) unique indexes defined on PollReaction.
+    q = db.query(PollReaction).filter(PollReaction.poll_id == poll.id)
+    if acting_rep is not None:
+        q = q.filter(PollReaction.author_rep_id == acting_rep.id)
+    elif acting_candidate is not None:
+        q = q.filter(PollReaction.author_candidate_id == acting_candidate.id)
+    else:
+        q = q.filter(PollReaction.citizen_id == acting_citizen.id)
+    existing = q.first()
+
+    if existing:
+        if existing.kind == payload.kind:
+            db.delete(existing)
+        else:
+            existing.kind = payload.kind
+            if acting_citizen is not None:
+                existing.scope_state = acting_citizen.state
+                existing.scope_district = acting_citizen.congressional_district
+                existing.scope_city = acting_citizen.city
+                existing.scope_county = acting_citizen.county
+    else:
+        db.add(PollReaction(
+            poll_id=poll.id,
+            citizen_id=acting_citizen.id if acting_citizen is not None else None,
+            author_rep_id=acting_rep.id if acting_rep is not None else None,
+            author_candidate_id=acting_candidate.id if acting_candidate is not None else None,
+            kind=payload.kind,
+            scope_state=acting_citizen.state if acting_citizen is not None else None,
+            scope_district=acting_citizen.congressional_district if acting_citizen is not None else None,
+            scope_city=acting_citizen.city if acting_citizen is not None else None,
+            scope_county=acting_citizen.county if acting_citizen is not None else None,
+        ))
+
+    db.commit()
+    db.refresh(poll)
+    # Return summary keyed off the ORIGINAL identities so my_reactions
+    # populates every slot the caller is signed in to (matches the
+    # rep-side react_to_post contract).
+    return _reaction_summary_for_citizen_poll(
+        poll, db,
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+    )
+
+
+@router.delete(
+    "/citizen-polls/{poll_id}/reactions",
+    response_model=ReactionSummary,
+    summary="Clear the caller's reaction on a citizen poll",
+)
+def clear_citizen_poll_reaction(
+    poll_id: int,
+    as_identity: Optional[str] = None,
+    db: Session = Depends(get_db),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
+):
+    """Clear the caller's reaction. `as_identity` query param narrows
+    to the picker's exact chosen identity (mirrors the post-side
+    clear_reaction)."""
+    poll = db.query(Poll).filter(Poll.id == poll_id).first()
+    if poll is None or poll.author_kind != "citizen":
+        raise HTTPException(status_code=404, detail="Poll not found")
+
+    acting_citizen, acting_rep, acting_candidate = _apply_as_identity_filter_poll(
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
+        as_identity=as_identity,
+    )
+    if acting_citizen is None and acting_rep is None and acting_candidate is None:
+        raise HTTPException(status_code=401, detail="Sign in to react")
+
+    q = db.query(PollReaction).filter(PollReaction.poll_id == poll.id)
+    if acting_rep is not None:
+        q = q.filter(PollReaction.author_rep_id == acting_rep.id)
+    elif acting_candidate is not None:
+        q = q.filter(PollReaction.author_candidate_id == acting_candidate.id)
+    else:
+        q = q.filter(PollReaction.citizen_id == acting_citizen.id)
+    existing = q.first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+        db.refresh(poll)
+    return _reaction_summary_for_citizen_poll(
+        poll, db,
+        me_citizen=me_citizen, me_rep=me_rep, me_candidate=me_candidate,
     )
