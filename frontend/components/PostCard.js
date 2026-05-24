@@ -179,6 +179,12 @@ export default function PostCard({
   useEffect(() => {
     if (replyOpenFor != null) setPcComposerOpen(true);
   }, [replyOpenFor]);
+  // PR #10 — per-parent "Show replies" toggle. Tracks which
+  // top-level comment ids have their reply pool currently
+  // expanded. Sticks for the life of the thread (closing the
+  // comments section unmounts the state so a fresh open starts
+  // collapsed). Mirrors the /polls CommentsThread pattern (PR #8).
+  const [pcExpandedReplies, setPcExpandedReplies] = useState(() => new Set());
   const [replyDraft, setReplyDraft] = useState('');
   const [replyBusy, setReplyBusy] = useState(false);
   // Phase 6 — which identity authors the next comment / reply. The
@@ -1413,12 +1419,35 @@ export default function PostCard({
                   </div>
         </div>
 
-        {/* Replies + composer — top-level rows only. Render the
-            existing reply pool first, then the inline composer if
-            this is the thread the user clicked Reply on. */}
+        {/* Replies — top-level rows only. PR #10: gated behind a
+            "Show replies (N)" toggle so long reply pools don't blow
+            up the visible height of the parent. Composer renders
+            below regardless when the user is replying to THIS row. */}
         {isTopLevel && replies && replies.length > 0 && (
-          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {replies.map((r) => renderCommentRow(r, 1, []))}
+          <div style={{ marginTop: 6, marginLeft: 14, paddingLeft: 12, borderLeft: '2px solid var(--cl-border)' }}>
+            <button
+              type="button"
+              onClick={() => setPcExpandedReplies((prev) => {
+                const next = new Set(prev);
+                if (next.has(c.id)) next.delete(c.id);
+                else next.add(c.id);
+                return next;
+              })}
+              aria-expanded={pcExpandedReplies.has(c.id)}
+              style={{
+                background: 'transparent', border: 0, padding: '4px 0',
+                fontSize: '0.74rem', fontWeight: 600,
+                color: 'var(--cl-accent)', cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {pcExpandedReplies.has(c.id) ? '⯆ Hide' : '⯈ Show'} replies ({replies.length})
+            </button>
+            {pcExpandedReplies.has(c.id) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                {replies.map((r) => renderCommentRow(r, 1, []))}
+              </div>
+            )}
           </div>
         )}
         {isTopLevel && replyOpenFor === c.id && (
