@@ -282,7 +282,12 @@ export function GrassrootsFeed({ tab = 'polls' }) {
   const branchCounts = useMemo(() => {
     const counts = {
       all: items.length,
-      bill: 0, committee: 0, executive: 0, judicial: 0,
+      // Branch buckets — keys must match BRANCH_FILTERS ids
+      // (the chip ids were renamed bill→states + committee→congress
+      // in the PR #2 redesign; counts hadn't been updated). Without
+      // the new keys present, `counts[b] != null` evaluated false
+      // and chips showed 0 even when polls matched.
+      states: 0, congress: 0, executive: 0, judicial: 0,
       standalone: 0, candidate: 0,
       // Author-kind tallies for the hero stat row.
       rep: 0, citizen: 0,

@@ -351,6 +351,8 @@ def popular_polls(
             )
 
         # Author resolution branches on author_kind.
+        # Default — only the rep branch sets a branch override below.
+        _branch_override = None
         if poll.author_kind == "citizen":
             cz = (
                 db.query(CitizenAccount)
@@ -778,6 +780,28 @@ def polls_feed(
                 # Party lookup — re-use the lazy index built for the
                 # National Activity feed earlier in this module.
                 party = _party_for(official_id) if official_id else None
+                # Branch detection — used by the /polls page Congress
+                # filter chip. A rep is considered to hold a Congress
+                # seat when EITHER (a) the rep carries an owner_district
+                # (House seats always have one; Senate doesn't but the
+                # role check below catches Senators) OR (b) the role
+                # string mentions a Congress chamber. The test rep
+                # (official_id='test-civicview-internal') is seeded with
+                # owner_district='FL-19' + role='U.S. Representative'
+                # so this rule catches it without a special-case branch.
+                if rep is not None:
+                    _r = (rep.role or "").lower()
+                    if rep.owner_district or any(
+                        kw in _r for kw in (
+                            "representative", "senator", "senate",
+                            "house", "congress",
+                        )
+                    ):
+                        _branch_override = "congress"
+                    else:
+                        _branch_override = None
+                else:
+                    _branch_override = None
 
         # Page-tag for the chip. Standalone polls get the literal
         # 'Standalone' string at the UI layer; this endpoint returns
@@ -835,6 +859,10 @@ def polls_feed(
             {
                 "id": poll.id,
                 "kind": display_kind,
+                # Optional branch (e.g. 'congress') — drives the
+                # /polls page Congress filter chip. Frontend
+                # pollBranch() consumes this when set.
+                "branch": _branch_override,
                 "author": author,
                 "role": role,
                 "party": party,
