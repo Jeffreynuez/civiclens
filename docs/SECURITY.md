@@ -366,6 +366,9 @@ to switch backends; just set the env vars and restart.
 ## 7. Reference — related docs
 
 - `DEPLOY.md` — how to deploy from scratch (Vercel + Render + Cloudflare DNS).
+- `EMAIL-DELIVERABILITY.md` — SPF / DKIM / DMARC runbook for Postmark + Resend
+  on Cloudflare. Required before launching to real (non-demo) accounts so
+  password-reset + report-notification mail reaches the inbox.
 - `INCIDENT-RESPONSE.md` — runbook for security incidents.
 - `docs/identity-model.pdf` — three-tier auth spec.
 - `render.yaml` — backend deployment blueprint, including which env vars need

@@ -519,6 +519,8 @@ Tracked here so it stays visible across sessions:
   Cloudflare DNS end-to-end walkthrough.
 - **Security setup:** [`docs/SECURITY.md`](./docs/SECURITY.md) — env-var
   inventory, R2 / Postmark / Stripe / ID.me configuration.
+- **Email deliverability:** [`docs/EMAIL-DELIVERABILITY.md`](./docs/EMAIL-DELIVERABILITY.md)
+  — SPF / DKIM / DMARC setup for Postmark + Resend on Cloudflare DNS.
 - **Incident response:** [`docs/INCIDENT-RESPONSE.md`](./docs/INCIDENT-RESPONSE.md)
   — runbook for compromised admin, DB breach, DDoS, credential leak.
 - **Fundraising:** [`docs/gofundme_draft.md`](./docs/gofundme_draft.md)
