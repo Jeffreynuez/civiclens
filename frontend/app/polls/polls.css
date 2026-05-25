@@ -1521,9 +1521,16 @@ a.feed-card__kind--link:hover { filter: brightness(0.95); }
    to a preview height with an Expand pill. Attached-poll inline
    badge uses the same accent treatment as the cross-feed "From a
    post" link on the polls tab. */
+/* Body wrapper — position:relative so the absolute-positioned
+   Expand/Show less pill anchors to the post's body region instead of
+   bubbling up to a far ancestor. Without this rule the pill rendered
+   in the bottom-right corner of the whole page (regression introduced
+   in c17ff06). */
+.feed-card__body {
+  position: relative;
+}
 /* Long-post body — clipped + gradient-faded when collapsed; opens to
-   full height when expanded. Position:relative so the Expand pill can
-   anchor to the bottom-right. */
+   full height when expanded. */
 .feed-card__post-body {
   font-size: 14px; line-height: 1.5;
   white-space: pre-wrap;
