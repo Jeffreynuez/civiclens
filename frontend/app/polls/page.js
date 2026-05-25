@@ -433,6 +433,24 @@ export function GrassrootsFeed({ tab = 'polls' }) {
           onCitizenLogin={() => setCitizenLoginOpen(true)}
           onCitizenLogout={handleCitizenLogout}
           onCitizenDashboard={() => setDashboardOpen(true)}
+          /* IdentitySwitcher dashboard-jump handlers — same pattern as
+             app/page.js. /polls is its own Next.js route so it can't
+             call the home page's local state setters directly; we
+             navigate home with the page slug in the query string and
+             the URL-restore branch on app/page.js opens the matching
+             rep/candidate page. The Dashboard tab is reached by
+             clicking it once the page loads (a sessionStorage signal
+             would pre-select it; deferred until needed). */
+          onOpenRepDashboard={(r) => {
+            if (r?.official_id) {
+              router.push(`/?page=${encodeURIComponent(r.official_id)}`);
+            }
+          }}
+          onOpenCandidateDashboard={(c) => {
+            if (c?.candidate_id) {
+              router.push(`/?page=${encodeURIComponent(c.candidate_id)}`);
+            }
+          }}
           onOpenHelpBuild={() => setHelpBuildOpen(true)}
           onOpenFeedback={() => setFeedbackOpen(true)}
           onHome={handleHome}
