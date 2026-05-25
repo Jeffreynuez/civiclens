@@ -28,6 +28,7 @@
  *   onClose()    — fired when the user clicks outside or presses Esc
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const KIND_BADGE = {
   citizen:   { label: 'Citizen',   color: '#1d3557' },
@@ -45,18 +46,42 @@ const SUBLABEL_MAX_WIDTH = 100;
 export default function IdentityPicker({
   open, identities = [], mode = 'pick', onPick, onClose,
 }) {
-  const ref = useRef(null);
+  const ref = useRef(null);        // ref to the portaled picker (for click-outside + measurement)
+  const sentinelRef = useRef(null); // 0x0 marker stays in the original DOM tree to locate the anchor
 
-  // Edge-aware placement. We start with the default (drop below + align
-  // left) and let a useLayoutEffect measure the rendered position. If
-  // the picker would overflow the viewport bottom or right, we flip
-  // to drop-above and/or right-align. useLayoutEffect fires before
-  // paint, so the corrected position is what the user sees — no
-  // visible flicker.
+  // Anchor rect + flip flags. The anchor is the picker's natural
+  // parentElement (the position:relative wrapper that holds the
+  // trigger button alongside the IdentityPicker JSX element). Because
+  // we portal out of the DOM, we can't use parentElement directly on
+  // the portaled node — the sentinel below stays in place to give us
+  // a reference back to the original parent.
+  const [anchor, setAnchor] = useState(null);
   const [placement, setPlacement] = useState({ vertical: 'bottom', horizontal: 'left' });
 
+  // First useLayoutEffect: when the picker opens, measure the
+  // anchor (the sentinel's parentElement). Runs before paint so the
+  // portaled picker renders at the correct coords on first frame.
   useLayoutEffect(() => {
-    if (!open || !ref.current) return;
+    if (!open || !sentinelRef.current) {
+      setAnchor(null);
+      return;
+    }
+    const parent = sentinelRef.current.parentElement;
+    if (!parent) return;
+    const r = parent.getBoundingClientRect();
+    setAnchor({
+      top: r.top, bottom: r.bottom,
+      left: r.left, right: r.right,
+      width: r.width, height: r.height,
+    });
+  }, [open]);
+
+  // Second useLayoutEffect: once the picker is rendered into the
+  // portal, measure ITS bbox and flip vertical / horizontal placement
+  // if it would overflow the viewport. Same flip logic as the prior
+  // inline version, just running against the picker's portaled rect.
+  useLayoutEffect(() => {
+    if (!open || !ref.current || !anchor) return;
     const rect = ref.current.getBoundingClientRect();
     const vh = window.innerHeight;
     const vw = window.innerWidth;
@@ -66,21 +91,22 @@ export default function IdentityPicker({
     if (nextVertical !== placement.vertical || nextHorizontal !== placement.horizontal) {
       setPlacement({ vertical: nextVertical, horizontal: nextHorizontal });
     }
-  // We deliberately re-measure on every open + on identities count
-  // change (different option counts → different heights). We DON'T
-  // depend on `placement` itself because the goal is to settle on
-  // the correct placement after one measure, not oscillate.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, identities.length]);
+  }, [open, anchor, identities.length]);
 
-  // Close on click-outside + Escape. Wired only while open so the
-  // listener doesn't fire on every render.
+  // Close on click-outside + Escape. Wired only while open. The
+  // click-outside check uses the portaled picker's ref AND the
+  // sentinel's parent — clicking the trigger button (which lives
+  // inside sentinelRef.current.parentElement) should NOT auto-close
+  // since the trigger's own onClick toggles the picker.
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        onClose?.();
-      }
+      const picker = ref.current;
+      const anchorEl = sentinelRef.current?.parentElement;
+      if (picker && picker.contains(e.target)) return;
+      if (anchorEl && anchorEl.contains(e.target)) return;
+      onClose?.();
     };
     const onKey = (e) => {
       if (e.key === 'Escape') onClose?.();
@@ -93,28 +119,48 @@ export default function IdentityPicker({
     };
   }, [open, onClose]);
 
-  if (!open || identities.length === 0) return null;
+  // The sentinel renders in EVERY state (even closed) so its
+  // parentElement lookup works on the first open. It has zero
+  // dimensions and zero visibility — pure DOM anchor.
+  const sentinel = (
+    <span
+      ref={sentinelRef}
+      aria-hidden="true"
+      style={{ display: 'none' }}
+    />
+  );
 
-  // Compose position styles from the resolved placement. We use
-  // `calc(100% + 4px)` so the picker hangs 4px outside the anchor
-  // (matches the original marginTop spacing).
-  const positionStyle = {
-    ...(placement.vertical === 'top'
-      ? { bottom: 'calc(100% + 4px)' }
-      : { top: 'calc(100% + 4px)' }),
-    ...(placement.horizontal === 'right'
-      ? { right: 0 }
-      : { left: 0 }),
-  };
+  if (!open || identities.length === 0) return sentinel;
 
-  return (
+  // Compute fixed-position coords from the anchor's viewport rect.
+  // Vertical: drop below by default (anchor.bottom + 4); flip to
+  // anchor.top - <picker_height> - 4 if it'd overflow viewport
+  // bottom (handled via `bottom:` instead of `top:` so we don't have
+  // to know picker height up front).
+  // Horizontal: align left edge with anchor by default; flip to
+  // right-align if the picker would overflow viewport right.
+  let positionStyle = {};
+  if (anchor) {
+    positionStyle = placement.vertical === 'top'
+      ? { bottom: `${window.innerHeight - anchor.top + 4}px` }
+      : { top: `${anchor.bottom + 4}px` };
+    positionStyle = placement.horizontal === 'right'
+      ? { ...positionStyle, right: `${window.innerWidth - anchor.right}px` }
+      : { ...positionStyle, left: `${anchor.left}px` };
+  } else {
+    // First frame before anchor is measured — render off-screen so
+    // we don't flash a mis-positioned picker.
+    positionStyle = { top: -9999, left: -9999 };
+  }
+
+  const pickerNode = (
     <div
       ref={ref}
       role="menu"
       aria-label="Choose identity"
       style={{
-        position: 'absolute',
-        zIndex: 1000,
+        position: 'fixed',
+        zIndex: 10000,
         minWidth: 200,
         background: 'white',
         border: '1px solid var(--cl-border)',
@@ -214,6 +260,13 @@ export default function IdentityPicker({
         );
       })}
     </div>
+  );
+
+  return (
+    <>
+      {sentinel}
+      {createPortal(pickerNode, document.body)}
+    </>
   );
 }
 
