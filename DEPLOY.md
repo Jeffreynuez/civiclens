@@ -133,6 +133,13 @@ citizen login) will work as soon as ALLOWED_ORIGINS is right.
    the app over HTTPS, the map should populate, and demo logins
    should work.
 
+6. **Email DNS records** (SPF / DKIM / DMARC) — once Postmark and
+   Resend accounts are provisioned, add the five DNS records described
+   in [`docs/EMAIL-DELIVERABILITY.md`](./docs/EMAIL-DELIVERABILITY.md).
+   Required before transactional + notification mail reliably reaches
+   user inboxes. All TXT/CNAME entries are **DNS only** (gray cloud);
+   Cloudflare cannot proxy email-authentication records.
+
 ---
 
 ## Known limitations (call these out to investors)
