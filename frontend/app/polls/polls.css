@@ -176,6 +176,14 @@
   display: flex; align-items: center; gap: 8px;
   flex-wrap: wrap;
   padding-bottom: 14px;
+  /* Lift the kind row + its state dropdown above the sibling
+     .polls-airow. Both rows are non-positioned siblings in
+     .polls-filters__inner stacking context; without z-index
+     here, .states-dd (z-index 80 inside .polls-kindrow) gets
+     clipped behind .polls-airow on mobile because .polls-kindrow
+     doesn't open its own stacking context. */
+  position: relative;
+  z-index: 2;
 }
 .polls-kindrow__chips {
   display: flex; align-items: center; gap: 6px;
@@ -1861,66 +1869,4 @@ a.feed-card__kind--link:hover { filter: brightness(0.95); }
 .thread__comment.is-reply {
   background: var(--cl-surface, #fff);
   padding: 8px 10px;
-}
-
-/* ───────────────────────────────────────────────────────────────────
-   PR #10 — Collapsible composer + AI filter + scrollable comment list
-   ─────────────────────────────────────────────────────────────────── */
-
-/* Collapsed-by-default trigger row for the composer. The trigger
-   pill sits where the composer used to live. Same dropdown chevron
-   style as the AI-filter trigger below — keeps the visual language
-   consistent. */
-.thread__composer-row {
-  display: flex;
-}
-.thread__composer-toggle,
-.thread__filter-toggle {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: transparent;
-  border: 1px solid var(--cl-border, #e5e7eb);
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 12px; font-weight: 600;
-  color: var(--cl-text, #111);
-  cursor: pointer;
-  margin-left: auto;
-}
-.thread__composer-toggle.is-open,
-.thread__filter-toggle.is-open {
-  background: var(--cl-accent-soft, #ecfdf3);
-  color: var(--cl-accent, #18794e);
-  border-color: var(--cl-accent, #18794e);
-}
-.thread__composer-toggle:hover,
-.thread__filter-toggle:hover {
-  background: var(--cl-hover, #f9fafb);
-}
-
-/* Comment list — cap height + scroll inside the card so long threads
-   don't push the rest of the page layout downward. Header / composer /
-   filter rows stay pinned outside this scroll area. */
-.thread__list {
-  max-height: 420px;
-  overflow-y: auto;
-  /* Soft scrollbar styling to match the rest of the app */
-  scrollbar-width: thin;
-  scrollbar-color: var(--cl-border, #e5e7eb) transparent;
-  padding-right: 4px;
-}
-.thread__list::-webkit-scrollbar {
-  width: 6px;
-}
-.thread__list::-webkit-scrollbar-thumb {
-  background: var(--cl-border, #e5e7eb);
-  border-radius: 3px;
-}
-
-/* Reply pool also gets a soft cap so a viral reply thread doesn't
-   nest infinitely tall. Lower cap than the top-level pool. */
-.thread__replies-list {
-  max-height: 280px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--cl-border, #e5e7eb) transparent;
 }
