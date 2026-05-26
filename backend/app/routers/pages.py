@@ -81,6 +81,13 @@ from app.schemas.pages import (
     ReactionSummary,
     RepEventCreate,
     RepEventRead,
+    PostUpdateRequest,
+    CommentUpdateRequest,
+)
+from app.services.edit_window import (
+    can_edit_post,
+    can_edit_comment,
+    comment_edit_is_silent,
 )
 
 
@@ -943,9 +950,130 @@ def delete_post(
     if not (is_rep_author or is_candidate_author):
         raise HTTPException(status_code=403, detail="You can only delete your own posts")
 
+    # Capture the body at delete-time so the moderation audit + the
+    # threat-detection algo (Task #14) can see what the user posted
+    # even after the row is soft-deleted. Only set on first delete;
+    # an undelete + re-delete would otherwise overwrite the original.
+    if post.pre_delete_text is None:
+        post.pre_delete_text = post.body
     post.deleted_at = datetime.utcnow()
     db.commit()
     return
+
+
+# ── Edit endpoints (Task #41) ────────────────────────────────────────────
+@router.patch("/posts/{post_id}", response_model=PostRead)
+def update_post(
+    post_id: int,
+    payload: PostUpdateRequest,
+    db: Session = Depends(get_db),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
+):
+    """Edit a post's body. Author-only; window is 24h from created_at.
+
+    First-edit snapshot preserved in pre_edit_text so moderation +
+    Task #14 threat-detection always have the un-edited version
+    (subsequent edits do NOT overwrite the snapshot).
+    """
+    post = db.get(Post, post_id)
+    if not post or post.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    is_rep_author = (
+        me_rep is not None
+        and post.author_id is not None
+        and post.author_id == me_rep.id
+    )
+    is_candidate_author = (
+        me_candidate is not None
+        and getattr(post, "author_candidate_id", None) is not None
+        and post.author_candidate_id == me_candidate.id
+    )
+    if not (is_rep_author or is_candidate_author):
+        raise HTTPException(status_code=403, detail="You can only edit your own posts")
+
+    if not can_edit_post(created_at=post.created_at, deleted_at=post.deleted_at):
+        raise HTTPException(
+            status_code=403,
+            detail="This post is past the 24-hour edit window.",
+        )
+
+    new_body = payload.body.strip()
+    if not new_body:
+        raise HTTPException(status_code=400, detail="Body cannot be empty.")
+    if post.pre_edit_text is None:
+        post.pre_edit_text = post.body
+    post.body = new_body
+    post.edited_at = datetime.utcnow()
+    db.commit()
+    db.refresh(post)
+    return post
+
+
+@router.patch("/comments/{comment_id}", response_model=CommentRead)
+def update_comment(
+    comment_id: int,
+    payload: CommentUpdateRequest,
+    db: Session = Depends(get_db),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_rep: Optional[RepAccount] = Depends(get_optional_rep),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
+):
+    """Edit a comment's body. Author-only; window is until the first
+    reply lands AND the 60-second silent typo grace has elapsed.
+
+    Edits within the 60s grace window are SILENT — they don't set
+    edited_at and don't show the 'Edited' chip. After 60s the chip
+    appears. The PATCH endpoint also enforces the lock-on-reply rule
+    (first_reply_at set + past grace = forbidden).
+    """
+    comment = db.get(PostComment, comment_id)
+    if not comment or comment.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    is_author_citizen = (
+        me_citizen is not None
+        and comment.citizen_id is not None
+        and comment.citizen_id == me_citizen.id
+    )
+    is_author_rep = (
+        me_rep is not None
+        and getattr(comment, "author_rep_id", None) is not None
+        and comment.author_rep_id == me_rep.id
+    )
+    is_author_candidate = (
+        me_candidate is not None
+        and getattr(comment, "author_candidate_id", None) is not None
+        and comment.author_candidate_id == me_candidate.id
+    )
+    if not (is_author_citizen or is_author_rep or is_author_candidate):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the comment author may edit it.",
+        )
+
+    if not can_edit_comment(
+        created_at=comment.created_at,
+        deleted_at=comment.deleted_at,
+        first_reply_at=comment.first_reply_at,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="This comment can no longer be edited (a reply has been posted).",
+        )
+
+    new_body = payload.body.strip()
+    if not new_body:
+        raise HTTPException(status_code=400, detail="Body cannot be empty.")
+    if comment.pre_edit_text is None:
+        comment.pre_edit_text = comment.body
+    comment.body = new_body
+    if not comment_edit_is_silent(created_at=comment.created_at):
+        comment.edited_at = datetime.utcnow()
+    db.commit()
+    db.refresh(comment)
+    return comment
 
 
 # ── Public: poll voting ───────────────────────────────────────────────
@@ -1712,6 +1840,14 @@ def create_comment(
         scope_county=citizen.county if citizen is not None else None,
     )
     db.add(comment)
+    # Lock-on-reply trigger for the edit feature (Task #41). The FIRST
+    # reply on a top-level comment stamps the parent's first_reply_at;
+    # can_edit_comment() reads this to know the parent is past its
+    # edit window (modulo the 60s typo grace). Subsequent replies do
+    # NOT update first_reply_at — only the very first reply trips it.
+    # Same transaction as the comment insert below.
+    if parent_id is not None and parent.first_reply_at is None:
+        parent.first_reply_at = datetime.utcnow()
     db.commit()
     db.refresh(comment)
     # Kick off the AI classification as a background task — the
@@ -1804,8 +1940,32 @@ def delete_comment(
             detail="Only the comment author may delete it. Use Report instead.",
         )
 
-    comment.deleted_at = datetime.utcnow()
-    db.commit()
+    # Tombstone vs hard-delete (Task #41). If this comment has any
+    # non-deleted reply rows, replace its body with a tombstone
+    # placeholder + preserve the original in pre_delete_text. The
+    # thread structure stays intact so reply authors' content remains
+    # readable in context. If there are no replies, hard-delete the
+    # row (less DB clutter; nothing downstream needs it).
+    has_replies = (
+        db.query(PostComment.id)
+        .filter(
+            PostComment.parent_comment_id == comment.id,
+            PostComment.deleted_at.is_(None),
+        )
+        .first()
+        is not None
+    )
+    if has_replies:
+        if comment.pre_delete_text is None:
+            comment.pre_delete_text = comment.body
+        comment.body = "[deleted by author]"
+        comment.deleted_at = datetime.utcnow()
+        db.commit()
+    else:
+        # Hard-delete: cascade rules on PostComment relationships clean
+        # up reactions etc. via the FK CASCADE on post_comments.id.
+        db.delete(comment)
+        db.commit()
     return
 
 

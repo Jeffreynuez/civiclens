@@ -304,6 +304,10 @@ class PostRead(BaseModel):
     official_id: str
     body: str
     created_at: datetime
+    # NULL = never edited. Task #41. Frontend renders an "Edited" chip
+    # with hover-timestamp when this is set. The 24h edit window runs
+    # from created_at; edited_at is informational only.
+    edited_at: Optional[datetime] = None
     author: AuthorSummary
     poll: Optional[PollRead] = None
     # Phase 1.5 additions — engagement summary.
@@ -354,6 +358,21 @@ class CommentCreate(BaseModel):
     as_identity: Optional[str] = Field(default=None, pattern=r"^(citizen|rep|candidate)$")
 
 
+# ── Edit requests (Task #41) ─────────────────────────────────────────
+class PostUpdateRequest(BaseModel):
+    """Patch body for a post the caller authored. Same min/max bounds
+    as the create endpoint. The PATCH endpoint additionally enforces
+    the 24h edit window via services/edit_window.can_edit_post."""
+    body: str = Field(..., min_length=1, max_length=10000)
+
+
+class CommentUpdateRequest(BaseModel):
+    """Patch body for a comment the caller authored. The PATCH
+    endpoint additionally enforces the lock-on-reply + 60s typo
+    grace via services/edit_window.can_edit_comment."""
+    body: str = Field(..., min_length=1, max_length=1000)
+
+
 class CommentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -390,6 +409,15 @@ class CommentRead(BaseModel):
     citizen_display_name: str
     body: str
     created_at: datetime
+    # Edit-feature fields (Task #41). edited_at NULL = never edited
+    # (or only edited within the 60s silent grace window). Frontend
+    # renders an "Edited" chip with hover-timestamp when this is set.
+    edited_at: Optional[datetime] = None
+    # Set when this comment receives its FIRST reply. Combined with
+    # the 60s grace window, edits are allowed iff first_reply_at is
+    # NULL or (now - created_at) < 60s. Frontend can derive the lock
+    # state from these two fields; the PATCH endpoint is the authority.
+    first_reply_at: Optional[datetime] = None
     # Geography the comment was written under — used by the owner-side
     # filter. Always Unverified in the current build.
     scope_state: Optional[str] = None

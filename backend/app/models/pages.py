@@ -228,6 +228,19 @@ class Post(Base):
     # Soft-delete so reps + candidates can undo recent posts without
     # leaking via polls.
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Edit feature (Task #41). edited_at NULL = never edited. The 24h
+    # edit window runs from created_at, not from edited_at, so people
+    # can't extend the window by editing again.
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # First-edit body snapshot — captures the ORIGINAL body the first
+    # time the author edits, so the moderation audit + threat-detection
+    # algo (Task #14) can see what the user originally posted before
+    # any edits scrubbed it. Subsequent edits do NOT overwrite this.
+    pre_edit_text: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    # Body at delete-time. Posts use soft delete (deleted_at set; row
+    # stays so cascade comments don't get orphaned). This column gives
+    # moderation review the body for already-deleted posts.
+    pre_delete_text: Mapped[Optional[str]] = mapped_column(Text, default=None)
 
     # Rep-side relationship — None for candidate-authored posts.
     author: Mapped[Optional["RepAccount"]] = relationship(back_populates="posts")
@@ -479,6 +492,20 @@ class PostComment(Base):
     scope_county: Mapped[Optional[str]] = mapped_column(String(128), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Edit feature (Task #41). edited_at NULL = never edited (or only
+    # edited within the silent 60s grace window). Lock-on-reply uses
+    # first_reply_at below — see services/edit_window.py for the rule.
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    # Body width matches body's String(1000) so a future migration of
+    # body length stays consistent across these snapshot columns.
+    pre_edit_text: Mapped[Optional[str]] = mapped_column(String(1000), default=None)
+    pre_delete_text: Mapped[Optional[str]] = mapped_column(String(1000), default=None)
+    # Lock-on-reply signal. Set to NOW the first time any reply row
+    # (child PostComment with parent_comment_id == this.id) is
+    # created. Only the FIRST reply trips it. Combined with the 60s
+    # silent grace window, edits are allowed IF first_reply_at IS NULL
+    # OR (now - created_at) < 60s.
+    first_reply_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
 
     # ── AI classification (populated async after comment create) ────
     # All four columns are nullable: NULL means "not classified yet"
