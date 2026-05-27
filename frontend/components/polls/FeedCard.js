@@ -44,6 +44,7 @@ import {
   reactToCitizenPoll,
   clearCitizenPollReaction,
   deletePost,
+  updatePost,
   summarizePost,
   aiHealth,
 } from '../../lib/pagesApi';
@@ -123,6 +124,18 @@ export default function FeedCard({
   // Post-body collapse — long bodies (>400 chars) show an Expand pill
   // and stay collapsed by default. Same pattern the rep page uses.
   const [expanded, setExpanded] = useState(false);
+  // Edit-post state (Task #68). Mirrors PostCard's pattern. Uses
+  // onCardUpdated() to bubble the new body + edited_at back to the
+  // parent feed's card list if the parent wires that callback;
+  // falls back to a local override otherwise (defensive — without
+  // the override, the textarea closes after save but the body
+  // re-renders from the stale card.body and the edit appears to
+  // vanish).
+  const [editingPostBody, setEditingPostBody] = useState(null);
+  const [editBusy, setEditBusy] = useState(false);
+  const [postEditErr, setPostEditErr] = useState(null);
+  const [postBodyOverride, setPostBodyOverride] = useState(null);
+  const [postEditedAtOverride, setPostEditedAtOverride] = useState(null);
 
   // AI summarize — long posts only. Mirrors PostCard.js:283-311 so the
   // /posts feed exposes the same TL;DR affordance as the rep page.
@@ -153,6 +166,42 @@ export default function FeedCard({
       return;
     }
     setAiSummary(data);
+  };
+
+  // ── Edit-post handlers (Task #68) ───────────────────────────────
+  const _canEditPost = kind === 'post' && (isRepAuthor || isCandidateAuthor);
+  const beginEditPost = () => {
+    setEditingPostBody(postBodyOverride ?? card.body ?? '');
+    setPostEditErr(null);
+  };
+  const cancelEditPost = () => {
+    setEditingPostBody(null);
+    setPostEditErr(null);
+  };
+  const handleSavePost = async () => {
+    const draft = (editingPostBody || '').trim();
+    if (!draft) {
+      setPostEditErr('Post body cannot be empty.');
+      return;
+    }
+    setPostEditErr(null);
+    setEditBusy(true);
+    const { data, error } = await updatePost(card.id, draft);
+    setEditBusy(false);
+    if (error) {
+      setPostEditErr(error);
+      return;
+    }
+    const newBody = data?.body ?? draft;
+    const newEditedAt = data?.edited_at ?? new Date().toISOString();
+    setPostBodyOverride(newBody);
+    setPostEditedAtOverride(newEditedAt);
+    setEditingPostBody(null);
+    if (typeof onCardUpdated === 'function') {
+      onCardUpdated(card.id, { body: newBody, edited_at: newEditedAt });
+    } else if (typeof onMutated === 'function') {
+      onMutated();
+    }
   };
 
   // Multi-identity picker state. The /polls + /posts feed treats
@@ -403,6 +452,38 @@ export default function FeedCard({
         )}
         {pageTag && <span className="feed-card__page-tag">{pageTag}</span>}
         <span className="feed-card__time">{relTime(card.created_at)}</span>
+        {(card.edited_at || postEditedAtOverride) && (
+          <span
+            className="feed-card__edited"
+            title={`Edited ${relTime(postEditedAtOverride || card.edited_at)}`}
+            style={{
+              marginLeft: '4px', fontSize: '0.7rem', fontStyle: 'italic',
+              color: 'var(--cl-text-light)',
+            }}
+          >
+            · edited
+          </span>
+        )}
+        {_canEditPost && editingPostBody == null && (
+          <button
+            type="button"
+            className="feed-card__edit"
+            aria-label="Edit this post"
+            onClick={beginEditPost}
+            disabled={busy || editBusy}
+            title="Edit this post (within 24h of creation)"
+            style={{
+              marginLeft: 'auto',
+              border: '1px solid var(--cl-border)',
+              background: 'white', color: 'var(--cl-text)',
+              padding: '2px 8px', borderRadius: '6px',
+              fontSize: '0.72rem', fontWeight: 600,
+              cursor: (busy || editBusy) ? 'wait' : 'pointer',
+            }}
+          >
+            Edit
+          </button>
+        )}
         {showCloseX && (
           <button
             type="button"
@@ -606,9 +687,69 @@ export default function FeedCard({
               </div>
             </div>
           )}
-          <div className={`feed-card__post-body ${expanded ? 'is-expanded' : ''}`}>
-            {card.body}
-          </div>
+          {editingPostBody != null ? (
+            <div className="feed-card__post-body" style={{ paddingTop: 4 }}>
+              <textarea
+                value={editingPostBody}
+                onChange={(e) => setEditingPostBody(e.target.value)}
+                rows={6}
+                disabled={editBusy}
+                style={{
+                  width: '100%', padding: '8px', borderRadius: '6px',
+                  border: '1px solid var(--cl-border)',
+                  fontFamily: 'inherit', fontSize: '0.95rem',
+                  resize: 'vertical', boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={handleSavePost}
+                  disabled={editBusy || !(editingPostBody || '').trim()}
+                  style={{
+                    padding: '6px 14px', borderRadius: '6px',
+                    border: '1px solid var(--cl-accent)',
+                    background: 'var(--cl-accent)', color: 'white',
+                    fontSize: '0.78rem', fontWeight: 600,
+                    cursor: editBusy ? 'wait' : 'pointer',
+                  }}
+                >
+                  {editBusy ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEditPost}
+                  disabled={editBusy}
+                  style={{
+                    padding: '6px 14px', borderRadius: '6px',
+                    border: '1px solid var(--cl-border)',
+                    background: 'white', color: 'var(--cl-text)',
+                    fontSize: '0.78rem', fontWeight: 600,
+                    cursor: editBusy ? 'wait' : 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {postEditErr && (
+                <div
+                  role="alert"
+                  style={{
+                    marginTop: '6px', padding: '6px 8px',
+                    color: '#d63031', fontSize: '0.78rem',
+                    background: '#fef2f2', border: '1px solid #fecaca',
+                    borderRadius: '6px',
+                  }}
+                >
+                  {postEditErr}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className={`feed-card__post-body ${expanded ? 'is-expanded' : ''}`}>
+              {postBodyOverride ?? card.body}
+            </div>
+          )}
           {card.body && card.body.length > 400 && (
             <button
               type="button"

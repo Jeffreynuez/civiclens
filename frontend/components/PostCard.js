@@ -520,6 +520,17 @@ export default function PostCard({
   // textarea. The string IS the draft body; null/undefined means not
   // editing. Save resets to null; Cancel resets to null.
   const [editingPostBody, setEditingPostBody] = useState(null);
+  // Local override for the post body when a successful edit lands.
+  // PageView doesn't pass an onMutated handler down (Task #67) so the
+  // parent's `post.body` doesn't update after save — without this
+  // local override the textarea would close but the rendered body
+  // would stay at the OLD text, making the edit appear to vanish.
+  const [postBodyOverride, setPostBodyOverride] = useState(null);
+  const [postEditedAtOverride, setPostEditedAtOverride] = useState(null);
+  // Inline error display for the post-edit textarea — keeps post-save
+  // errors visible under the editor instead of dumping them in the
+  // comment-error banner where the user might not scroll to see them.
+  const [postEditErr, setPostEditErr] = useState(null);
   // Comment edit: tracks which comment id is currently in edit mode
   // and the draft body for it. Only one comment can be edited at a
   // time per post card.
@@ -536,21 +547,26 @@ export default function PostCard({
   const handleSavePost = async () => {
     const draft = (editingPostBody || '').trim();
     if (!draft) {
-      setCommentErr('Post body cannot be empty.');
+      setPostEditErr('Post body cannot be empty.');
       return;
     }
+    setPostEditErr(null);
     setEditBusy(true);
     const { data, error } = await updatePost(post.id, draft);
     setEditBusy(false);
     if (error) {
-      setCommentErr(error);
+      setPostEditErr(error);
       return;
     }
-    // The parent owns `post`; we can't mutate it directly. Bubble the
-    // updated body + edited_at via onMutated so the surface holding
-    // the list can re-render. If no onMutated handler is wired,
-    // tracker stays stale until next list refresh — degrades
-    // gracefully rather than breaking the save itself.
+    // PageView doesn't pass an onMutated handler today, so capture the
+    // updated body + edited_at locally. The textarea closes, the body
+    // re-renders from the override, and on the next page reload the
+    // backend ships the new body — both paths converge to the same
+    // visible state. Still bubble onMutated if the parent ever DOES
+    // wire one (defensive future-proofing, no harm if it stays
+    // undefined).
+    setPostBodyOverride(data?.body ?? draft);
+    setPostEditedAtOverride(data?.edited_at ?? new Date().toISOString());
     setEditingPostBody(null);
     if (typeof onMutated === 'function') {
       onMutated({ kind: 'post-edited', post: data });
@@ -665,9 +681,9 @@ export default function PostCard({
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--cl-text-light)' }}>
             {author.role ? `${author.role} · ` : ''}{timeAgo(post.created_at)}
-            {post.edited_at && (
+            {(post.edited_at || postEditedAtOverride) && (
               <span
-                title={`Edited ${timeAgo(post.edited_at)}`}
+                title={`Edited ${timeAgo(postEditedAtOverride || post.edited_at)}`}
                 className="edited-chip"
                 style={{
                   marginLeft: '6px', fontSize: '0.7rem', fontStyle: 'italic',
@@ -903,9 +919,22 @@ export default function PostCard({
               Cancel
             </button>
           </div>
+          {postEditErr && (
+            <div
+              role="alert"
+              style={{
+                marginTop: '6px', padding: '6px 8px',
+                color: '#d63031', fontSize: '0.78rem',
+                background: '#fef2f2', border: '1px solid #fecaca',
+                borderRadius: '6px',
+              }}
+            >
+              {postEditErr}
+            </div>
+          )}
         </div>
-      ) : (post.body || '').trim() && (
-        <PostBody body={post.body} />
+      ) : ((postBodyOverride ?? post.body) || '').trim() && (
+        <PostBody body={postBodyOverride ?? post.body} />
       )}
 
       {/* Image gallery — responsive grid driven by image count so a
