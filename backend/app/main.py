@@ -137,6 +137,19 @@ ALLOWED_ORIGINS = (
     else _DEFAULT_ALLOWED
 )
 
+# CSRF middleware (Task #31, Phase 2). Validates X-CSRF-Token on
+# state-changing requests against the HMAC of any currently-active
+# session token. Registered BEFORE CORS so it sits INSIDE the CORS
+# wrapper — every response (including the 403s this middleware emits
+# on token mismatch) flows back out through CORS, which adds the
+# Access-Control-Allow-* headers the browser needs. Reversing this
+# order causes 403 responses to ship without CORS headers, which the
+# browser treats as a CORS failure ("Failed to fetch" in the JS
+# console) and the frontend's retry-on-csrf-mismatch path never fires.
+# Starlette's add_middleware inserts at the FRONT of the user middleware
+# list, so the LAST add wraps everything inside — hence CORS goes last.
+app.add_middleware(CsrfMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -144,14 +157,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# CSRF middleware (Task #31, Phase 2). Validates X-CSRF-Token on
-# state-changing requests against the HMAC of any currently-active
-# session token. Registered AFTER CORS so CORS stays the outermost
-# layer — preflight OPTIONS responses bypass CSRF entirely, and CORS
-# response headers wrap any 403 we emit. See app/middleware/csrf.py
-# for the skip rules (safe methods, exempt paths, no-session paths).
-app.add_middleware(CsrfMiddleware)
 
 
 app.include_router(congress.router, prefix="/api/congress", tags=["Congress"])
