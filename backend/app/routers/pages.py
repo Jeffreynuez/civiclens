@@ -591,6 +591,8 @@ def _post_to_read(
         ),
         comment_count=int(comment_count),
         images=images,
+        # Edit feature (Task #41) — same reason as _comment_to_read.
+        edited_at=getattr(post, "edited_at", None),
     )
 
 
@@ -1450,6 +1452,12 @@ def _comment_to_read(
         down_count=down,
         my_reaction=mine,
         my_reactions=per_identity,
+        # Edit feature (Task #41) — manual CommentRead construction
+        # doesn't auto-pick-up new ORM columns the way response_model
+        # auto-serialization would. Thread these explicitly so the
+        # "Edited" chip survives a list reload.
+        edited_at=getattr(c, "edited_at", None),
+        first_reply_at=getattr(c, "first_reply_at", None),
     )
 
 
