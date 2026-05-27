@@ -500,7 +500,7 @@ function AdminPageInner() {
       { label: 'Granted this week', value: grantedWeek, dot: 'success' },
       { label: 'Denied this week', value: deniedWeek, dot: 'danger' },
     ];
-  } else {
+  } else if (activeTab === 'suspended') {
     // Suspended — three lightweight tiles.
     const now = Date.now();
     const weekAgo = now - 7 * 24 * 3600 * 1000;
