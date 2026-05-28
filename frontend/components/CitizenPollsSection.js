@@ -42,6 +42,7 @@ import {
   filterComments,
 } from '../lib/pagesApi';
 import IdentityPicker, { PostingAsPicker } from './IdentityPicker';
+import PostActionsMenu from './PostActionsMenu';
 import { useActiveIdentities, pickEngagementIdentity } from '../lib/activeIdentities';
 
 const REPORT_REASONS = [
@@ -1477,39 +1478,34 @@ function CommentsThread({ pollId, pollAuthorId, citizen, archived, isOwner, onCi
             </div>
             {(canDelete || canReport || reportedThis || canReplyHere) && (
               <div style={{ display: 'flex', gap: 12, marginTop: 4, alignItems: 'center' }}>
-                {canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(c.id)}
-                    style={{
-                      border: 'none', background: 'transparent',
-                      color: '#d63031', fontSize: '0.7rem',
-                      fontWeight: 600, cursor: 'pointer', padding: 0,
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    Delete
-                  </button>
-                )}
-                {canReport && (
-                  <button
-                    type="button"
-                    onClick={() => handleReport(c.id)}
-                    title="Flag this comment for admin review"
-                    style={{
-                      border: 'none', background: 'transparent',
-                      color: 'var(--cl-text-light)', fontSize: '0.7rem',
-                      fontWeight: 600, cursor: 'pointer', padding: 0,
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    Report
-                  </button>
-                )}
-                {reportedThis && (
-                  <span style={{ color: 'var(--cl-text-muted)', fontSize: '0.68rem', fontStyle: 'italic' }}>
-                    Reported ✓
-                  </span>
+                {/* Delete / Report consolidated into the kebab (⋮),
+                    matching the CommentsThread + PostCard treatment so the
+                    comment overflow affordance is identical across surfaces.
+                    Reply stays a visible button. (This surface has no
+                    comment-edit path, so the kebab carries Delete + Report
+                    only.) */}
+                {(canDelete || canReport || reportedThis) && (
+                  <PostActionsMenu
+                    ariaLabel="Comment actions"
+                    items={[
+                      canDelete && {
+                        id: 'delete',
+                        label: 'Delete',
+                        onClick: () => handleDelete(c.id),
+                        destructive: true,
+                      },
+                      canReport && {
+                        id: 'report',
+                        label: 'Report',
+                        onClick: () => handleReport(c.id),
+                      },
+                      reportedThis && {
+                        id: 'reported',
+                        label: 'Reported ✓',
+                        disabled: true,
+                      },
+                    ].filter(Boolean)}
+                  />
                 )}
                 {canReplyHere && (
                   <button

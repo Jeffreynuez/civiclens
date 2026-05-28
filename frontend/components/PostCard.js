@@ -1618,60 +1618,44 @@ export default function PostCard({
                     <div style={{ fontSize: '0.68rem', color: 'var(--cl-text-light)', marginLeft: '4px' }}>
                       {locLabel || c.scope_state || ''}
                     </div>
-                    {canDelete && editingCommentId !== c.id && (
-                      <button
-                        type="button"
-                        onClick={() => beginEditComment(c)}
-                        disabled={editBusy}
-                        title="Edit this comment (until first reply, after 60s grace)"
-                        style={{
-                          marginLeft: 'auto',
-                          border: 'none', background: 'transparent',
-                          color: 'var(--cl-text-light)', fontSize: '0.7rem',
-                          fontWeight: 600, cursor: editBusy ? 'wait' : 'pointer', padding: '2px 4px',
-                        }}
-                      >
-                        Edit
-                      </button>
-                    )}
-                    {canDelete && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteComment(c)}
-                        style={{
-                          marginLeft: canDelete && editingCommentId !== c.id ? '0' : 'auto',
-                          border: 'none', background: 'transparent',
-                          color: '#d63031', fontSize: '0.7rem',
-                          fontWeight: 600, cursor: 'pointer', padding: '2px 4px',
-                        }}
-                      >
-                        Delete
-                      </button>
-                    )}
-                    {canReport && (
-                      <button
-                        type="button"
-                        onClick={() => handleReportComment(c.id)}
-                        title="Flag this comment for admin review"
-                        style={{
-                          marginLeft: canDelete ? 0 : 'auto',
-                          border: 'none', background: 'transparent',
-                          color: 'var(--cl-text-light)', fontSize: '0.7rem',
-                          fontWeight: 600, cursor: 'pointer', padding: '2px 4px',
-                        }}
-                      >
-                        Report
-                      </button>
-                    )}
-                    {reportedThis && (
-                      <span
-                        style={{
-                          marginLeft: canDelete ? 0 : 'auto',
-                          color: 'var(--cl-text-muted)', fontSize: '0.68rem',
-                          fontStyle: 'italic',
-                        }}
-                      >
-                        Reported ✓
+                    {/* Edit / Delete / Report consolidated into the kebab
+                        (⋮), matching the /polls CommentsThread treatment so
+                        the comment overflow affordance is identical across
+                        every surface. Reply stays a visible button to the
+                        right. Edit only for the author while not editing;
+                        Delete for the author; Report (or a disabled
+                        "Reported ✓" marker once flagged) for others. The
+                        marginLeft:auto wrapper pushes the cluster right,
+                        preserving the old layout. */}
+                    {(canDelete || canReport || reportedThis) && (
+                      <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+                        <PostActionsMenu
+                          ariaLabel="Comment actions"
+                          items={[
+                            canDelete && editingCommentId !== c.id && {
+                              id: 'edit',
+                              label: 'Edit',
+                              onClick: () => beginEditComment(c),
+                              disabled: editBusy,
+                            },
+                            canDelete && {
+                              id: 'delete',
+                              label: 'Delete',
+                              onClick: () => handleDeleteComment(c),
+                              destructive: true,
+                            },
+                            canReport && {
+                              id: 'report',
+                              label: 'Report',
+                              onClick: () => handleReportComment(c.id),
+                            },
+                            reportedThis && {
+                              id: 'reported',
+                              label: 'Reported ✓',
+                              disabled: true,
+                            },
+                          ].filter(Boolean)}
+                        />
                       </span>
                     )}
                     {/* Reply button — visible only on top-level
