@@ -514,6 +514,12 @@ class PageResponse(BaseModel):
     # {"country": "United States", "state": "FL", "district": "FL-19"}.
     # Lets the UI render "Showing: FL-19" without re-deriving the label.
     engagement_scope_labels: dict = {}
+    # Keyset pagination for the page's post feed. The payload returns
+    # the FIRST page of posts (newest first); posts_next_cursor +
+    # posts_has_more let the client infinite-scroll via
+    # GET /api/pages/{official_id}/posts?cursor=...
+    posts_next_cursor: Optional[str] = None
+    posts_has_more: bool = False
 
 
 # ── Owner dashboard (Step 7) ──────────────────────────────────────────

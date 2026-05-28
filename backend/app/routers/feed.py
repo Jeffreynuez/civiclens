@@ -31,8 +31,10 @@ state in that case instead of a fake demo feed.
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -225,6 +227,23 @@ def national_activity(
             }
         )
     return {"items": items}
+
+
+# ── cursor helpers (keyset pagination for /polls + page feeds) ──────
+def _encode_cursor(created_at, id_) -> str:
+    """Opaque base64 keyset cursor over (created_at, id)."""
+    raw = f"{created_at.isoformat()}|{int(id_)}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor: str):
+    """Decode a cursor to (datetime, int). Returns None if malformed."""
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+        ts, sid = raw.rsplit("|", 1)
+        return datetime.fromisoformat(ts), int(sid)
+    except Exception:
+        return None
 
 
 # ── poll feed serialization (shared by /popular-polls + /polls) ─────
@@ -677,6 +696,10 @@ def popular_polls(
 @router.get("/polls")
 def polls_feed(
     limit: int = Query(default=100, ge=1, le=300),
+    cursor: Optional[str] = Query(
+        default=None,
+        description="Opaque keyset cursor from a previous page's next_cursor. Omit for the first page.",
+    ),
     kind: Optional[List[str]] = Query(
         default=None,
         description=(
@@ -737,7 +760,7 @@ def polls_feed(
       States are 2-letter codes (case-insensitive).
     """
     from app.services.page_tags import is_candidate_id
-    from sqlalchemy import or_
+    from sqlalchemy import or_, and_
 
     # Normalize the kind param. FastAPI hands us a list with one item
     # for the single-value form (?kind=rep) and a multi-item list for
@@ -798,7 +821,27 @@ def polls_feed(
             )
         )
 
-    rows = q.order_by(Poll.created_at.desc()).limit(limit).all()
+    # Keyset (cursor) pagination: order by (created_at, id) DESC and,
+    # when a cursor is supplied, fetch only rows strictly older than it.
+    # We pull limit+1 to detect has_more, and derive next_cursor from the
+    # last SQL row SCANNED (not the last returned item) so rows dropped
+    # by the candidate-narrowing pass below are not re-scanned next page.
+    _cur = _decode_cursor(cursor) if cursor else None
+    if _cur is not None:
+        _c_ts, _c_id = _cur
+        q = q.filter(or_(Poll.created_at < _c_ts,
+                         and_(Poll.created_at == _c_ts, Poll.id < _c_id)))
+    _sql_rows = (
+        q.order_by(Poll.created_at.desc(), Poll.id.desc())
+        .limit(limit + 1)
+        .all()
+    )
+    has_more = len(_sql_rows) > limit
+    _sql_rows = _sql_rows[:limit]
+    next_cursor = None
+    if has_more and _sql_rows and _sql_rows[-1].created_at is not None:
+        next_cursor = _encode_cursor(_sql_rows[-1].created_at, _sql_rows[-1].id)
+    rows = _sql_rows
 
     # Precise per-kind narrowing. The SQL pass above is a SUPERSET for
     # the 'citizen' / 'candidate' / 'rep' buckets; we refine here using
@@ -845,13 +888,21 @@ def polls_feed(
         requested = set(kinds)
         rows = [p for p in rows if _effective_kind(p) in requested]
 
-    return {"items": _serialize_poll_feed_items(db, rows, me_citizen, me_rep, me_candidate)}
+    return {
+        "items": _serialize_poll_feed_items(db, rows, me_citizen, me_rep, me_candidate),
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
 
 
 # ── /posts — full posts feed (the new /posts tab on the redesign) ───
 @router.get("/posts")
 def posts_feed(
     limit: int = Query(default=100, ge=1, le=300),
+    offset: int = Query(
+        default=0, ge=0,
+        description="Engagement-ranked posts to skip (slice pagination). Use next_offset from the previous page.",
+    ),
     kind: Optional[List[str]] = Query(
         default=None,
         description=(
@@ -965,7 +1016,7 @@ def posts_feed(
     posts = q.all()
 
     if not posts:
-        return {"items": []}
+        return {"items": [], "has_more": False, "next_offset": None}
 
     post_ids = [p.id for p in posts]
 
@@ -1079,7 +1130,16 @@ def posts_feed(
             -(p.created_at.timestamp() if p.created_at else 0),
         )
     )
-    posts = posts[:limit]
+    # Slice pagination over the engagement-ranked list. Ranking still
+    # runs in Python over the full set (unchanged cost); we just return
+    # a window of it so the client can infinite-scroll. next_offset/
+    # has_more drive the load-more sentinel. (Keyset isn't usable here
+    # because the sort key is a computed score, not a stored column;
+    # swap to keyset if a cached engagement column ever lands.)
+    _total = len(posts)
+    posts = posts[offset:offset + limit]
+    has_more = (offset + limit) < _total
+    next_offset = (offset + limit) if has_more else None
 
     # Resolve authors in two batched lookups (one per identity kind).
     rep_ids = [p.author_id for p in posts if p.author_id]
@@ -1158,4 +1218,4 @@ def posts_feed(
                 },
             }
         )
-    return {"items": items}
+    return {"items": items, "has_more": has_more, "next_offset": next_offset}
