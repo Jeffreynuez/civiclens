@@ -323,7 +323,13 @@ categories:
   4 poll visibility modes, owner dashboard, scope filter), candidate
   pages (parallel composer + dashboard), citizen-led polls on unclaimed
   pages + standalone polls + global /polls feed, three-identity
-  engagement model with multi-identity picker.
+  engagement model with multi-identity picker. Home page "National
+  activity" section renders the same `FeedCard` the `/posts` page uses
+  (full likes + comments + edit/delete/report inline), with an
+  "All posts →" link to the canonical feed. Every post-action surface
+  consolidates Edit / Delete / Report into a single kebab dropdown
+  (`PostActionsMenu`) for a uniform look across home, `/posts`,
+  `/polls`, and rep / candidate PageView feeds.
 - **Identity + auth** — Citizen / rep / candidate auth with separate
   cookies + bearer tokens, 2FA with TOTP + recovery codes (enforced for
   rep / candidate / admin), self-serve account deletion with 30-day
@@ -346,7 +352,12 @@ categories:
 - **Transparency** — Help-build page with line-item funding breakdown,
   5-year financial model in Excel, Benefit Corp formation PDF,
   identity-model spec PDF, full Terms + Privacy + Editorial Standards
-  + Methodology + Contact pages.
+  + Methodology + Contact pages. Public `/api/stats/summary` endpoint
+  powering the home page hero tiles (Senators / Representatives /
+  SCOTUS structural counts + live Reps joined / Verified citizens /
+  Demo accounts created), plus a placeholder `/stats` page that an
+  expanded analytics surface (engagement curves, growth by state)
+  will absorb post-launch.
 
 ---
 
@@ -366,6 +377,7 @@ categories:
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
+| 71 | Build /stats expanded analytics page | pending | Post-launch. Placeholder page at `frontend/app/stats/page.js` is reachable today via the "More stats →" link in the home hero. Expand with engagement curves, growth by state, post + poll volume, verified-citizen coverage map. |
 | 84 | Wrap web app into iOS + Android native via Capacitor | pending | Apple Dev $99/yr + Google Play $25 one-time; ~2-4 weeks for first submission; revenue share considerations covered in financial model |
 | 90 | File Articles of Amendment for Benefit Corp status | pending | Sunbiz; waiting for initial Profit Corp filing (#800474911808) to process. Language is in `docs/civicview_benefit_corp_filing.pdf` |
 
