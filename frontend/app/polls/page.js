@@ -36,7 +36,7 @@
  * Class names match the Claude Design export at
  * /Design Exports/civicview-polls-page/. Styles live in ./polls.css.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   fetchPollsFeed,
@@ -92,6 +92,12 @@ const AI_PRESETS = [
   { id: 'skeptical',   label: 'Skeptical',   prompt: 'skeptical polls questioning the data' },
   { id: 'informative', label: 'Informative', prompt: 'informative polls' },
 ];
+
+// Feed pagination page size (infinite scroll). When an AI semantic
+// filter is active the feed loads a single larger batch instead
+// (AI_FULL_BATCH) so matches aren't limited to the current page.
+const PAGE_SIZE = 20;
+const AI_FULL_BATCH = 300;
 
 function relTime(iso) {
   if (!iso) return '';
@@ -157,6 +163,13 @@ export function GrassrootsFeed({ tab = 'polls' }) {
   const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
   // Singleton accordion — only one comment thread is open at a time.
   const [openCommentId, setOpenCommentId] = useState(null);
+  // Infinite-scroll paging state. Polls page by keyset `cursor`;
+  // posts page by `postsOffset` (engagement-ranked, can't keyset).
+  const [cursor, setCursor] = useState(null);
+  const [postsOffset, setPostsOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef(null);
 
   // Additive chip toggler.
   //   • Clicking 'all' clears every other chip and shows everything.
@@ -228,45 +241,88 @@ export function GrassrootsFeed({ tab = 'polls' }) {
     return () => { cancelled = true; };
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    // Map the active chip set to server-side filter kinds. The
-    // back-end knows 'rep' / 'citizen' / 'standalone' / 'candidate';
-    // page-branch chips (states / congress / executive / judicial)
-    // are narrowed client-side from the wider response.
+  // Server-side filter kinds derived from the active branch chips. The
+  // back-end knows 'rep' / 'citizen' / 'standalone' / 'candidate'; the
+  // page-branch chips (states / congress / executive / judicial) aren't
+  // server kinds, so they fall through to undefined and are narrowed
+  // client-side from the wider response (see branchFiltered).
+  const serverKinds = useMemo(() => {
     const SERVER_KINDS = new Set(['rep', 'citizen', 'standalone', 'candidate']);
     const kinds = branches.includes('all')
       ? undefined
       : branches.filter((b) => SERVER_KINDS.has(b));
-    const feedFn = tab === 'posts' ? fetchPostsFeed : fetchPollsFeed;
-    // The posts feed only knows 'rep' | 'candidate'. Strip the kinds
-    // that don't apply so we don't ask the backend to filter on a
-    // value it doesn't recognize (and so the union doesn't collapse
-    // to empty on the first chip toggle).
+    // The posts feed only knows 'rep' | 'candidate'. Strip kinds it
+    // doesn't recognize so the union doesn't collapse to empty.
     const POSTS_KINDS = new Set(['rep', 'candidate']);
     const effectiveKinds = tab === 'posts' && kinds
       ? kinds.filter((k) => POSTS_KINDS.has(k))
       : kinds;
+    return effectiveKinds && effectiveKinds.length ? effectiveKinds : undefined;
+  }, [branches, tab]);
+
+  // Page-1 (reset) loader. Fetches the first PAGE_SIZE items and seeds
+  // the cursor / offset + has_more for infinite scroll. Also clears any
+  // active AI filter — matched_ids may reference items that fell out of
+  // the new server response.
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const feedFn = tab === 'posts' ? fetchPostsFeed : fetchPollsFeed;
     const { data, error: err } = await feedFn({
-      kinds: effectiveKinds && effectiveKinds.length ? effectiveKinds : undefined,
+      kinds: serverKinds,
       state: stateFilter || undefined,
+      limit: PAGE_SIZE,
     });
     setLoading(false);
     if (err || !data) {
       setError(err || 'Could not load polls.');
-      setItems([]);
+      setItems([]); setHasMore(false); setCursor(null); setPostsOffset(0);
       return;
     }
     setItems(data.items || []);
-    // Clear any active AI filter — matched_ids may reference polls
-    // that fell out of the new server response.
+    setCursor(data.next_cursor || null);
+    setPostsOffset(typeof data.next_offset === 'number' ? data.next_offset : 0);
+    setHasMore(!!data.has_more);
     setAiFilterIds(null);
     setAiFilterLabel('');
     setActiveTags([]);
-  }, [branches, stateFilter, tab]);
+  }, [serverKinds, stateFilter, tab]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Append the next page (infinite scroll). Polls use the keyset
+  // `cursor`; posts use `postsOffset`. No-op while an AI filter is
+  // active (that mode loads a single larger batch with has_more=false).
+  const loadMore = useCallback(async () => {
+    if (loadingMore || loading || !hasMore || aiFilterIds !== null) return;
+    setLoadingMore(true);
+    const feedFn = tab === 'posts' ? fetchPostsFeed : fetchPollsFeed;
+    const { data, error: err } = await feedFn({
+      kinds: serverKinds,
+      state: stateFilter || undefined,
+      limit: PAGE_SIZE,
+      ...(tab === 'posts' ? { offset: postsOffset } : { cursor }),
+    });
+    setLoadingMore(false);
+    if (err || !data) { setHasMore(false); return; }
+    setItems((prev) => [...prev, ...(data.items || [])]);
+    setCursor(data.next_cursor || null);
+    setPostsOffset(typeof data.next_offset === 'number' ? data.next_offset : postsOffset);
+    setHasMore(!!data.has_more);
+  }, [loadingMore, loading, hasMore, aiFilterIds, tab, serverKinds, stateFilter, cursor, postsOffset]);
+
+  // Infinite-scroll sentinel — load the next page when the bottom marker
+  // scrolls within 600px of the viewport.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return undefined;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries[0]?.isIntersecting) loadMore(); },
+      { rootMargin: '600px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore]);
 
   // Branch counts driven from the loaded items. Standalone counts
   // are exact; the page-bound branches (Bill/Committee/Executive/
@@ -341,14 +397,25 @@ export function GrassrootsFeed({ tab = 'polls' }) {
     const finalPrompt = (promptOverride ?? aiPrompt).trim();
     if (!finalPrompt) return;
     setAiFilterBusy(true);
-    const { data, error: err } = await filterPolls({
-      prompt: finalPrompt,
-      kind: undefined,
-    });
+    // Load a single larger batch alongside the semantic match so the
+    // filter isn't limited to the current paginated page. Infinite
+    // scroll is disabled while a filter is active (has_more=false below).
+    const feedFn = tab === 'posts' ? fetchPostsFeed : fetchPollsFeed;
+    const [filterRes, feedRes] = await Promise.all([
+      filterPolls({ prompt: finalPrompt, kind: undefined }),
+      feedFn({ kinds: serverKinds, state: stateFilter || undefined, limit: AI_FULL_BATCH }),
+    ]);
     setAiFilterBusy(false);
+    const { data, error: err } = filterRes;
     if (err || !data) {
       setError(err || 'AI filter failed.');
       return;
+    }
+    if (feedRes && feedRes.data) {
+      setItems(feedRes.data.items || []);
+      setCursor(null);
+      setPostsOffset(0);
+      setHasMore(false);
     }
     setAiFilterIds(new Set(data.matched_ids || []));
     setAiFilterLabel(data.explanation || `Filtered: ${finalPrompt}`);
@@ -656,6 +723,23 @@ export function GrassrootsFeed({ tab = 'polls' }) {
               citizenViewer={citizen}
             />
           ))}
+
+          {/* Infinite-scroll sentinel. Hidden while an AI filter is
+              active (single-batch mode) or there's nothing more to load. */}
+          {!loading && !isFullEmpty && !isInlineEmpty && !aiActive && hasMore && (
+            <div
+              ref={sentinelRef}
+              style={{
+                padding: '16px 0',
+                textAlign: 'center',
+                color: 'var(--cl-text-light)',
+                fontSize: '0.85rem',
+                fontFamily: 'var(--cl-font-sans)',
+              }}
+            >
+              {loadingMore ? 'Loading more…' : ''}
+            </div>
+          )}
         </div>
         </TabContent>
 

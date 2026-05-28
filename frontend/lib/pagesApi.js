@@ -544,13 +544,16 @@ export async function fetchPopularPolls({ limit = 9 } = {}) {
 //   callers that already pass `kind: 'rep'` keep working.
 // `state` is a 2-letter code — filters to polls whose author lives in
 //   (citizen polls) or represents (rep + candidate polls) that state.
-export async function fetchPollsFeed({ limit = 100, kind, kinds, state } = {}) {
+export async function fetchPollsFeed({ limit = 100, kind, kinds, state, cursor } = {}) {
   // Normalize the kind param: array wins; fall back to scalar.
   const kindParam = Array.isArray(kinds) && kinds.length
     ? kinds
     : (kind || undefined);
+  // `cursor` is the opaque keyset token from a previous page's
+  // next_cursor (omit for the first page). Response carries
+  // next_cursor + has_more for infinite scroll.
   return request('/api/feed/polls', {
-    query: { limit, kind: kindParam, state: state || undefined },
+    query: { limit, kind: kindParam, state: state || undefined, cursor: cursor || undefined },
   });
 }
 
@@ -559,10 +562,28 @@ export async function fetchPollsFeed({ limit = 100, kind, kinds, state } = {}) {
 // surface as fetchPollsFeed except `kinds` is ['rep' | 'candidate'].
 // Sort is engagement-score DESC server-side; the response items
 // already arrive in display order.
-export async function fetchPostsFeed({ limit = 100, kinds, state } = {}) {
+export async function fetchPostsFeed({ limit = 100, kinds, state, offset } = {}) {
   const kindParam = Array.isArray(kinds) && kinds.length ? kinds : undefined;
+  // `offset` slices the engagement-ranked list (the /posts feed ranks
+  // in Python, so it pages by offset, not a keyset cursor). Response
+  // carries next_offset + has_more for infinite scroll.
   return request('/api/feed/posts', {
-    query: { limit, kind: kindParam, state: state || undefined },
+    query: { limit, kind: kindParam, state: state || undefined, offset: offset || undefined },
+  });
+}
+
+// Keyset-paginated page posts — the "load more" companion to fetchPage
+// for the rep/candidate page feed. fetchPage returns the first page of
+// posts plus posts_next_cursor / posts_has_more; pass that cursor here
+// for each subsequent page. Returns { items, next_cursor, has_more }.
+export async function fetchPagePosts(officialId, { cursor, limit = 20, voterToken, scope } = {}) {
+  return request(`/api/pages/${encodeURIComponent(officialId)}/posts`, {
+    query: {
+      cursor: cursor || undefined,
+      limit,
+      voter_token: voterToken || undefined,
+      scope: scope || undefined,
+    },
   });
 }
 

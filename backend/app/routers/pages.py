@@ -699,6 +699,11 @@ def get_page(
     poll_scope_override = scope
     engagement_scope = scope if is_owner else None
 
+    # First page of posts (newest first). Keyset-paginated: we pull
+    # _POSTS_PAGE+1 to detect has_more and hand the client a cursor so
+    # it can infinite-scroll the rest via GET /{official_id}/posts.
+    from app.routers.feed import _encode_cursor  # keyset cursor helper
+
     posts_q = (
         db.query(Post)
         .options(
@@ -715,8 +720,8 @@ def get_page(
             Post.official_id == official_id,
             Post.deleted_at.is_(None),
         )
-        .order_by(Post.created_at.desc())
-        .limit(100)
+        .order_by(Post.created_at.desc(), Post.id.desc())
+        .limit(_POSTS_PAGE + 1)
     )
     # Effective owner for scope rollups + AuthorSummary lookups. Both
     # RepAccount and CandidateAccount expose the owner_state /
@@ -724,6 +729,12 @@ def get_page(
     # reads, so passing either through works without further
     # branching.
     effective_owner = owner if owner is not None else candidate_owner
+    _post_rows = posts_q.all()
+    posts_has_more = len(_post_rows) > _POSTS_PAGE
+    _post_rows = _post_rows[:_POSTS_PAGE]
+    posts_next_cursor = None
+    if posts_has_more and _post_rows and _post_rows[-1].created_at is not None:
+        posts_next_cursor = _encode_cursor(_post_rows[-1].created_at, _post_rows[-1].id)
     posts = [
         _post_to_read(
             p, owner=effective_owner, db=db, voter_token=voter_token,
@@ -739,7 +750,7 @@ def get_page(
             engagement_scope=engagement_scope,
             is_owner_viewing=is_owner,
         )
-        for p in posts_q.all()
+        for p in _post_rows
     ]
 
     now_iso = datetime.utcnow().isoformat()
@@ -780,10 +791,95 @@ def get_page(
         owner=PageOwnerInfo.model_validate(effective_owner) if effective_owner else None,
         is_owner=is_owner,
         posts=posts,
+        posts_next_cursor=posts_next_cursor,
+        posts_has_more=posts_has_more,
         upcoming_events=upcoming_events,
         allowed_engagement_scopes=allowed_scopes,
         engagement_scope_labels=scope_labels,
     )
+
+
+
+# ── Public: keyset-paginated page posts (infinite scroll) ─────────────
+_POSTS_PAGE = 20
+
+
+@router.get("/{official_id}/posts")
+def get_page_posts(
+    official_id: str,
+    cursor: Optional[str] = Query(
+        default=None,
+        description="Opaque keyset cursor from the page payload's posts_next_cursor (or a prior page's next_cursor). Omit for the first page.",
+    ),
+    limit: int = Query(default=_POSTS_PAGE, ge=1, le=50),
+    voter_token: Optional[str] = Query(default=None, max_length=64),
+    scope: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    me: Optional[RepAccount] = Depends(get_optional_rep),
+    me_citizen: Optional[CitizenAccount] = Depends(get_optional_citizen),
+    me_candidate: Optional[CandidateAccount] = Depends(get_optional_candidate),
+):
+    """Load-more endpoint for a rep/candidate page's post feed.
+
+    Same per-post serialization + owner/scope/voter_token semantics as
+    GET /{official_id} (the page payload), just keyset-paginated so the
+    frontend can infinite-scroll. Returns {items, next_cursor, has_more}.
+    """
+    from app.routers.feed import _encode_cursor, _decode_cursor
+    from sqlalchemy import or_, and_
+
+    if scope and scope not in SCOPE_VALUES:
+        raise HTTPException(status_code=400, detail=f"Unknown scope '{scope}'")
+
+    owner = _load_owner(db, official_id)
+    candidate_owner = _load_candidate_owner(db, official_id) if owner is None else None
+    is_owner = (
+        (owner is not None and me is not None and me.id == owner.id)
+        or (candidate_owner is not None and me_candidate is not None and me_candidate.id == candidate_owner.id)
+    )
+    poll_scope_override = scope
+    engagement_scope = scope if is_owner else None
+    effective_owner = owner if owner is not None else candidate_owner
+
+    q = (
+        db.query(Post)
+        .options(
+            selectinload(Post.author),
+            selectinload(Post.author_candidate),
+            selectinload(Post.poll).selectinload(Poll.options).selectinload(PollOption.votes),
+            selectinload(Post.reactions),
+            selectinload(Post.images),
+        )
+        .filter(Post.official_id == official_id, Post.deleted_at.is_(None))
+    )
+    _cur = _decode_cursor(cursor) if cursor else None
+    if _cur is not None:
+        _c_ts, _c_id = _cur
+        q = q.filter(or_(Post.created_at < _c_ts,
+                         and_(Post.created_at == _c_ts, Post.id < _c_id)))
+    rows = (
+        q.order_by(Post.created_at.desc(), Post.id.desc())
+        .limit(limit + 1)
+        .all()
+    )
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    next_cursor = None
+    if has_more and rows and rows[-1].created_at is not None:
+        next_cursor = _encode_cursor(rows[-1].created_at, rows[-1].id)
+    items = [
+        _post_to_read(
+            p, owner=effective_owner, db=db, voter_token=voter_token,
+            me_citizen=me_citizen,
+            me_rep=me if is_owner else None,
+            me_candidate=me_candidate if is_owner else None,
+            scope_override=poll_scope_override,
+            engagement_scope=engagement_scope,
+            is_owner_viewing=is_owner,
+        )
+        for p in rows
+    ]
+    return {"items": items, "next_cursor": next_cursor, "has_more": has_more}
 
 
 # ── Authenticated: posts ──────────────────────────────────────────────

@@ -399,6 +399,57 @@ def main() -> int:
         assert len(items) == 2, f"phase 13: rep filter on posts returned {len(items)}"
         assert all(i["kind"] == "rep" for i in items)
 
+        # Phase 14 — /polls keyset cursor pagination. Page by 2; the
+        # union of all pages must equal the unpaginated set with no
+        # duplicates, and has_more must terminate.
+        seen, cursor, pages = [], None, 0
+        while True:
+            url = "/api/feed/polls?limit=2" + (f"&cursor={cursor}" if cursor else "")
+            j = c.get(url).json()
+            assert "has_more" in j and "next_cursor" in j, "phase 14: missing paging fields"
+            seen += [it["id"] for it in j["items"]]
+            pages += 1
+            if not j["has_more"] or pages > 20:
+                break
+            cursor = j["next_cursor"]
+        assert len(seen) == len(set(seen)), f"phase 14: duplicate ids across pages: {seen}"
+        full = [it["id"] for it in c.get("/api/feed/polls?limit=100").json()["items"]]
+        assert set(seen) == set(full), f"phase 14: paginated {seen} != full {full}"
+        assert pages >= 2, f"phase 14: expected multiple pages, got {pages}"
+
+        # Phase 15 — /posts offset (slice) pagination preserves the
+        # engagement-ranked order across pages.
+        seen_p, offset, pages = [], 0, 0
+        while True:
+            j = c.get(f"/api/feed/posts?limit=1&offset={offset}").json()
+            assert "has_more" in j and "next_offset" in j, "phase 15: missing paging fields"
+            seen_p += [it["id"] for it in j["items"]]
+            pages += 1
+            if not j["has_more"] or pages > 20:
+                break
+            offset = j["next_offset"]
+        full_p = [it["id"] for it in c.get("/api/feed/posts?limit=100").json()["items"]]
+        assert seen_p == full_p, f"phase 15: paginated order {seen_p} != full {full_p}"
+
+        # Phase 16 — rep/candidate page post feed: the page payload
+        # exposes the first page + keyset fields, and the dedicated
+        # /{official_id}/posts cursor endpoint pages without duplicates.
+        from app.models.pages import Post as _Post
+        with SessionLocal() as _db:
+            _oid = _db.query(_Post.official_id).filter(_Post.deleted_at.is_(None)).first()[0]
+        pg = c.get(f"/api/pages/{_oid}").json()
+        assert "posts_has_more" in pg and "posts_next_cursor" in pg, "phase 16: page payload missing paging fields"
+        seen_e, cur, pages = [], None, 0
+        while True:
+            j = c.get(f"/api/pages/{_oid}/posts?limit=1" + (f"&cursor={cur}" if cur else "")).json()
+            assert "has_more" in j and "next_cursor" in j, "phase 16: page posts missing paging fields"
+            seen_e += [it["id"] for it in j["items"]]
+            pages += 1
+            if not j["has_more"] or pages > 50:
+                break
+            cur = j["next_cursor"]
+        assert len(seen_e) == len(set(seen_e)), f"phase 16: duplicate page-post ids {seen_e}"
+
     print("ALL PHASES PASSED.")
     return 0
 

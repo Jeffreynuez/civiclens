@@ -4,7 +4,7 @@
 // Proprietary and confidential. See LICENSE at the repository root.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchPage } from '../lib/pagesApi';
+import { fetchPage, fetchPagePosts } from '../lib/pagesApi';
 import { useAuth } from '../lib/auth';
 import { useCandidateAuth } from '../lib/candidateAuth';
 import { getVoterToken } from '../lib/voterToken';
@@ -127,6 +127,12 @@ export default function PageView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const reqIdRef = useRef(0);
+  // Infinite-scroll state for the page's post feed. The advancing
+  // keyset cursor + has_more live in `payload` (posts_next_cursor /
+  // posts_has_more), seeded by the page payload and updated as more
+  // pages are appended — same pattern as the in-place patch helpers.
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
+  const postsSentinelRef = useRef(null);
   // Two scope states — only one is visible at a time depending on who's
   // looking. `ownerScope` drives the OwnerScopeFilter and affects
   // polls + reactions + comment_count (the engagement filter is
@@ -186,6 +192,41 @@ export default function PageView({
     }
     setPayload(data);
   }, [officialId, effectiveScope]);
+
+  // Append the next page of posts (infinite scroll). Keyset cursor +
+  // has_more come from the payload; we fold the new page back into
+  // payload.posts and advance the cursor so the next scroll continues.
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMorePosts) return;
+    if (!officialId || !payload?.posts_has_more || !payload?.posts_next_cursor) return;
+    setLoadingMorePosts(true);
+    const { data, error: err } = await fetchPagePosts(officialId, {
+      cursor: payload.posts_next_cursor,
+      voterToken: getVoterToken(),
+      scope: effectiveScope || undefined,
+    });
+    setLoadingMorePosts(false);
+    if (err || !data) return;
+    setPayload((p) => (p ? {
+      ...p,
+      posts: [...p.posts, ...(data.items || [])],
+      posts_next_cursor: data.next_cursor || null,
+      posts_has_more: !!data.has_more,
+    } : p));
+  }, [loadingMorePosts, officialId, payload, effectiveScope]);
+
+  // Sentinel observer — fetch the next page when the bottom marker
+  // scrolls within 600px of the viewport.
+  useEffect(() => {
+    const el = postsSentinelRef.current;
+    if (!el) return undefined;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries[0]?.isIntersecting) loadMorePosts(); },
+      { rootMargin: '600px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMorePosts]);
 
   // Jump-to-post effect — triggered by the dashboard when the owner
   // clicks a top-engaged post. We're guaranteed to be back in the
@@ -911,6 +952,21 @@ export default function PageView({
                     commentScope={isOwner ? ownerScope : null}
                   />
                 ))}
+
+                {/* Infinite-scroll sentinel for the post feed. */}
+                {payload?.posts_has_more && (
+                  <div
+                    ref={postsSentinelRef}
+                    style={{
+                      padding: '16px 0',
+                      textAlign: 'center',
+                      color: 'var(--cl-text-light)',
+                      fontSize: '0.85rem',
+                    }}
+                  >
+                    {loadingMorePosts ? 'Loading more…' : ''}
+                  </div>
+                )}
 
                 {/* Citizen-led polls. Component decides on its own
                     whether to render based on claim status + caller
