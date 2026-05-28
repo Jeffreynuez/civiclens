@@ -249,8 +249,14 @@ export default function ConstituentDashboard({
 // Welcome header
 // ─────────────────────────────────────────────────────────────────
 function WelcomeHeader({ citizen, greeting, dateLabel }) {
-  const firstName = (citizen?.name || '').split(' ')[0] || 'there';
-  const district = citizen?.district || '—';
+  // Accept either the mapped shape ({name, district}) the home mount
+  // passes OR the raw citizen object ({display_name,
+  // congressional_district}) the /polls mount passes — otherwise the
+  // greeting falls back to 'there'/'Citizen'/'—' depending on which
+  // surface opened the dashboard.
+  const displayName = citizen?.display_name || citizen?.name || '';
+  const firstName = displayName.split(' ')[0] || 'there';
+  const district = citizen?.congressional_district || citizen?.district || '—';
   const city = citizen?.city || '';
   const state = citizen?.state || '';
 
@@ -269,7 +275,7 @@ function WelcomeHeader({ citizen, greeting, dateLabel }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
-        <Avatar name={citizen?.name} size="lg" />
+        <Avatar name={displayName || undefined} size="lg" />
         <div style={{ minWidth: 0 }}>
           <h1
             className="cl-h1"
@@ -295,7 +301,7 @@ function WelcomeHeader({ citizen, greeting, dateLabel }) {
             }}
           >
             <span style={{ fontWeight: 600, color: 'var(--cl-text)' }}>
-              {citizen?.name || 'Citizen'}
+              {displayName || 'Citizen'}
             </span>
             <span aria-hidden="true">·</span>
             <span>
@@ -311,6 +317,7 @@ function WelcomeHeader({ citizen, greeting, dateLabel }) {
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
         justifyContent: 'space-between', gap: 12, alignSelf: 'stretch',
+        marginLeft: 'auto',
       }}>
         <div style={{ textAlign: 'right' }}>
           <Eyebrow>Today</Eyebrow>
