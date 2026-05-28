@@ -60,6 +60,7 @@ import { useAuth as useRepAuth } from '../../lib/auth';
 import { useCandidateAuth } from '../../lib/candidateAuth';
 import { useActiveIdentities, pickEngagementIdentity } from '../../lib/activeIdentities';
 import IdentityPicker, { PostingAsPicker } from '../IdentityPicker';
+import PostActionsMenu from '../PostActionsMenu';
 
 // AI tone presets — same labels + ids the page-level filter uses.
 const TONE_PRESETS = [
@@ -883,34 +884,28 @@ function CommentRow({
         </span>
         {loc && <span className="thread__c-location">{loc}</span>}
         <span className="thread__c-spacer" />
-        {isMine && !isEditing && (
-          <button
-            type="button"
-            className="thread__c-link"
-            onClick={beginEdit}
-            disabled={editBusy}
-            title="Edit this comment (until first reply, after 60s grace)"
-          >
-            Edit
-          </button>
-        )}
-        {isMine ? (
-          <button
-            type="button"
-            className="thread__c-link thread__c-link--del"
-            onClick={() => onDelete(c.id)}
-          >
-            Delete
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="thread__c-link"
-            onClick={() => onReport(c.id)}
-          >
-            Report
-          </button>
-        )}
+        {/* Edit / Delete / Report consolidated into the kebab (⋮) so the
+            row stays uncluttered and the destructive Delete is out of
+            accidental-tap range. Reply stays a visible button to the
+            right — it's a primary action with its own composer/cancel
+            state. Edit is offered only to the author and only while not
+            already editing; Delete to the author, Report to everyone
+            else. Reuses the same PostActionsMenu as the post + poll
+            cards so the overflow affordance is identical across surfaces. */}
+        <PostActionsMenu
+          ariaLabel="Comment actions"
+          items={[
+            isMine && !isEditing && {
+              id: 'edit',
+              label: 'Edit',
+              onClick: beginEdit,
+              disabled: editBusy,
+            },
+            isMine
+              ? { id: 'delete', label: 'Delete', onClick: () => onDelete(c.id), destructive: true }
+              : { id: 'report', label: 'Report', onClick: () => onReport(c.id) },
+          ].filter(Boolean)}
+        />
         {/* Reply only appears on top-level comments (Phase 3 rule:
             replies-to-replies aren't supported, threads stay one
             level deep). */}
