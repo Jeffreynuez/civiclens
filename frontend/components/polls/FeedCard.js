@@ -35,6 +35,19 @@
  */
 
 import { useEffect, useState } from 'react';
+// Co-located stylesheet import. polls.css is ALSO imported by
+// app/polls/page.js — Next.js dedupes via the CSS hash, so importing
+// it from here is idempotent. Why import from the component at all:
+// FeedCard is now used outside the /polls + /posts routes (the home
+// page's National activity section, via NationalOfficialsPanel), and
+// the page-route import didn't reach those callers — the card
+// rendered as unstyled stacked text. Pulling polls.css in from the
+// component itself guarantees the styles travel with it no matter
+// where it renders. Follow-up Task #74 will extract the
+// .feed-card__* / .feed-act / .comments-thread blocks into a
+// co-located FeedCard.css so this import doesn't drag the entire
+// polls-page stylesheet along.
+import '../../app/polls/polls.css';
 import {
   voteOnCitizenPoll,
   closeCitizenPoll,
