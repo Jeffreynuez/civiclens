@@ -136,6 +136,48 @@ identity-resolution shortcut.
 
 ---
 
+## Reusable shared components (use these, don't fork them)
+
+Three component patterns recur across the app. Adding a new surface
+should reach for these first.
+
+- **`FeedCard`** (`frontend/components/polls/FeedCard.js`) — the
+  canonical post / poll card used by `/polls`, `/posts`, AND the home
+  page's National activity section. Anywhere you need to show a
+  "sample of the real feed," wire this up via `fetchPostsFeed({ limit })`
+  with a singleton-comments accordion at the section level. Props
+  worth knowing: `card`, `kind`, `isCommentsOpen`, `onToggleComments`,
+  `signedIn`, `onLoginRequired`, `onCardUpdated` (in-place patch),
+  `onMutated` (fallback reload), `citizenViewer`. Don't fork a
+  "preview" variant — anonymous viewers fall through to
+  `onLoginRequired` for any engagement action; that IS the gate.
+
+- **`PostActionsMenu`** (`frontend/components/PostActionsMenu.js`) —
+  three-dot kebab dropdown that consolidates Edit / Delete / Report
+  on every post surface. Items array is `{id, label, onClick,
+  destructive?, disabled?}`. Trigger renders grayed + disabled when
+  items is empty (safety net). Used by both `FeedCard` and `PostCard`
+  so the two surfaces stay visually identical.
+
+- **`IdentityPicker`** + **`PostingAsPicker`** — see the "Act as"
+  section above. Required for every engagement write surface.
+
+**CSS topology rule:** Component styles co-locate with the component.
+Page chrome stays in the page-route stylesheet. FeedCard's styles
+live in `frontend/components/polls/FeedCard.css` (imported by
+FeedCard.js), NOT in `frontend/app/polls/polls.css`. A component
+that silently relies on a page-route stylesheet breaks the moment
+it's reused outside that route. When extracting a new shared
+component, audit its selectors and pull them into a co-located
+`.css` file from the start.
+
+These conventions have Pinecone records in the `default` namespace
+(`pattern-reuse-feedcard-on-preview-surfaces-20260528`,
+`pattern-css-topology-component-vs-page-chrome-20260528`) for cross-
+session continuity.
+
+---
+
 ## Cross-session memory via Pinecone (optional layer)
 
 Jeffrey installed a Cowork plugin called **pinecone-memory** that
@@ -220,6 +262,12 @@ Headline list:
   BOOLEAN NOT NULL columns must use `server_default=expression.false()`
   or Postgres rejects the migration. See the "Failed to fetch"
   incident notes in the handoff.
+- **Home page hero stats** are powered by `GET /api/stats/summary`
+  (unauthenticated; `backend/app/routers/stats.py`). Returns
+  structural constants (Senators=100, Representatives=435, SCOTUS=9)
+  plus live `COUNT()`s for `reps_joined` / `verified_citizens` /
+  `demo_accounts_created`. The demo-accounts tile retires when
+  ID.me ships and `verified_citizens` becomes meaningful.
 
 ## File paths in this environment
 
