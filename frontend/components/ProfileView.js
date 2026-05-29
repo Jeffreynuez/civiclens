@@ -2269,6 +2269,14 @@ function VotesTab({ role, member }) {
   const [showProcedural, setShowProcedural] = useState(false);
   const [loading, setLoading] = useState(false);
   const [votes, setVotes] = useState(null); // null = initial, [] = loaded+empty
+  // AI search toggle (item 4). Plain mode = the substring search
+  // below; AI mode = explicit Apply that semantic-filters the loaded
+  // year's votes via /api/ai/filter-items.
+  const [aiMode, setAiMode] = useState(false);
+  const [aiAvailable, setAiAvailable] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMatched, setAiMatched] = useState(null); // Set<voteKey> | null
+  const [aiLabel, setAiLabel] = useState('');
 
   // Fetch whenever year changes OR the user triggers a manual reload
   // (via the empty-state retry button). The reloadNonce is a counter
@@ -2286,6 +2294,29 @@ function VotesTab({ role, member }) {
     });
     return () => { cancelled = true; };
   }, [member.bioguide_id, year, reloadNonce]);
+
+  useEffect(() => {
+    let cancelled = false;
+    aiHealth().then((h) => { if (!cancelled) setAiAvailable(!!(h && h.configured)); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const voteKey = (v) => v.vote_id
+    || `${v.date || ''}|${(v.bill && v.bill.display_number) || ''}|${(v.question || '').slice(0, 40)}`;
+  const runAi = async () => {
+    const q = search.trim();
+    if (!q) { setAiMatched(null); setAiLabel(''); return; }
+    setAiBusy(true);
+    const items = (votes || []).map((v) => ({
+      id: voteKey(v),
+      text: [v.question, v.bill && v.bill.display_number, v.bill && v.bill.title].filter(Boolean).join(' '),
+    }));
+    const res = await filterItems({ prompt: q, items });
+    setAiBusy(false);
+    if (!res || res.error) { setAiMatched(new Set()); setAiLabel('AI search unavailable.'); return; }
+    setAiMatched(new Set(res.matched_ids || []));
+    setAiLabel(res.explanation || '');
+  };
 
   // Build year dropdown: from member's first year served up through current.
   const yearOptions = [];
