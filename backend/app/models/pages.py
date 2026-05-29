@@ -25,7 +25,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (
-    String, Integer, DateTime, ForeignKey, Boolean, Text, Index,
+    String, Integer, Float, DateTime, ForeignKey, Boolean, Text, Index,
     UniqueConstraint, func,
 )
 from sqlalchemy.sql import expression as sa_expression
@@ -1831,6 +1831,41 @@ class SavedItem(Base):
     saved_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
+
+
+class ContentModerationVerdict(Base):
+    """Audit record for one automated threat/incitement assessment of a
+    piece of content (Task #41 — see docs/threat-detection-prd.md).
+
+    One row per assessment (re-checks on edit append new rows). Stores
+    the model's verdict + the decision the policy derived from it, plus
+    the policy_version so verdicts stay interpretable and rollback-able
+    as the rubric evolves. In Phase 0 (shadow mode) `decision` is
+    recorded but NO content state changes — nothing is hidden.
+    """
+
+    __tablename__ = "content_moderation_verdicts"
+    __table_args__ = (
+        Index("ix_cmv_content", "content_type", "content_id"),
+        Index("ix_cmv_decision", "decision"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 'post' | 'poll' | 'post_comment' | 'poll_comment'
+    content_type: Mapped[str] = mapped_column(String(16))
+    content_id: Mapped[int] = mapped_column(Integer)
+    author_kind: Mapped[Optional[str]] = mapped_column(String(16), default=None)
+    author_id: Mapped[Optional[int]] = mapped_column(Integer, default=None)
+    # Verdict from the rubric (moderation_policy.CATEGORIES).
+    category: Mapped[str] = mapped_column(String(32))
+    severity: Mapped[float] = mapped_column(Float, default=0.0)
+    # Policy-derived action: 'publish' | 'flag' | 'auto_hide' | 'skipped'.
+    decision: Mapped[str] = mapped_column(String(16))
+    rationale: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    offending_span: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    model: Mapped[Optional[str]] = mapped_column(String(64), default=None)
+    policy_version: Mapped[str] = mapped_column(String(16), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 # ─────────────────────────────────────────────────────────────────────

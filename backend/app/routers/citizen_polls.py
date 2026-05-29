@@ -360,6 +360,12 @@ def create_citizen_poll(
     # comment classification. No-op if AI isn't configured.
     from app.services.poll_classifier import classify_poll
     bg_tasks.add_task(classify_poll, poll.id)
+    # Threat/incitement moderation (Task #41) — async shadow pass.
+    from app.services.moderation_service import assess_in_background
+    bg_tasks.add_task(
+        assess_in_background, "poll", poll.id, poll.question,
+        "citizen", (citizen.id if citizen is not None else None),
+    )
 
     return serialize_citizen_poll(db, poll, citizen, None)
 
@@ -448,6 +454,12 @@ def create_standalone_poll(
     # poll creation. The /polls feed picks up the tags once they land.
     from app.services.poll_classifier import classify_poll
     bg_tasks.add_task(classify_poll, poll.id)
+    # Threat/incitement moderation (Task #41) — async shadow pass.
+    from app.services.moderation_service import assess_in_background
+    bg_tasks.add_task(
+        assess_in_background, "poll", poll.id, poll.question,
+        "citizen", (citizen.id if citizen is not None else None),
+    )
 
     return serialize_citizen_poll(db, poll, citizen, None)
 
@@ -901,6 +913,15 @@ def create_citizen_poll_comment(
     # create_comment on a rep post. No-op if AI isn't configured.
     from app.services.comment_classifier import classify_poll_comment
     bg_tasks.add_task(classify_poll_comment, comment.id)
+    # Threat/incitement moderation (Task #41) — async shadow pass.
+    from app.services.moderation_service import assess_in_background
+    if getattr(comment, "author_rep_id", None):
+        _mk, _mid = "rep", comment.author_rep_id
+    elif getattr(comment, "author_candidate_id", None):
+        _mk, _mid = "candidate", comment.author_candidate_id
+    else:
+        _mk, _mid = "citizen", comment.citizen_id
+    bg_tasks.add_task(assess_in_background, "poll_comment", comment.id, comment.body, _mk, _mid)
     # Hand-build the response so author_kind reflects the triple-
     # identity shape; model_validate alone wouldn't set the
     # discriminator on a fresh row.
