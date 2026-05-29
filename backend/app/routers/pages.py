@@ -1006,6 +1006,19 @@ def create_post(
         from app.services.poll_classifier import classify_poll
         bg_tasks.add_task(classify_poll, attached_poll_id)
 
+    # Threat/incitement moderation (Task #41) — async shadow-mode pass.
+    # Records a verdict only; hides nothing in Phase 0. No latency hit
+    # for the author. See docs/threat-detection-prd.md.
+    from app.services.moderation_service import assess_in_background
+    _author_kind = "rep" if rep is not None else "candidate"
+    _author_id = rep.id if rep is not None else (candidate.id if candidate is not None else None)
+    bg_tasks.add_task(assess_in_background, "post", post.id, post.body, _author_kind, _author_id)
+    if attached_poll_id is not None and post.poll is not None:
+        bg_tasks.add_task(
+            assess_in_background, "poll", attached_poll_id, post.poll.question,
+            _author_kind, _author_id,
+        )
+
     return _post_to_read(
         post,
         owner=(rep if rep is not None else candidate),
@@ -1999,6 +2012,17 @@ def create_comment(
     # visible, just not filterable on sentiment / tone).
     from app.services.comment_classifier import classify_post_comment
     bg_tasks.add_task(classify_post_comment, comment.id)
+    # Threat/incitement moderation (Task #41) — async shadow pass.
+    from app.services.moderation_service import assess_in_background
+    if getattr(comment, "citizen_id", None):
+        _mk, _mid = "citizen", comment.citizen_id
+    elif getattr(comment, "author_rep_id", None):
+        _mk, _mid = "rep", comment.author_rep_id
+    elif getattr(comment, "author_candidate_id", None):
+        _mk, _mid = "candidate", comment.author_candidate_id
+    else:
+        _mk, _mid = None, None
+    bg_tasks.add_task(assess_in_background, "post_comment", comment.id, comment.body, _mk, _mid)
 
     # Phase 5 reply notification — fired in-process (not via
     # background task) because the row is tiny and we want the
