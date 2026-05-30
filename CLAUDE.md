@@ -25,18 +25,18 @@ both. Don't strip the credit if you touch the README.
 Always read these before doing real work. They cover the persistent
 state that this file deliberately does NOT duplicate:
 
-1. **`docs/HANDOFF_TO_NEXT_SESSION.md`** — Canonical state doc.
-   Has the bootstrap prompt, current git/branch state, what landed
-   in the most recent sessions, sandbox tooling quirks, user
-   working-style preferences. Read this top-to-bottom every new
-   session.
-2. **`README.md`** — Project overview, tech stack, what's shipped,
-   open tasks, launch sequencing, engagement permission gates.
-3. **`frontend/components/HelpBuildThisView.js`** — Canonical
+1. **`README.md`** — Project overview, tech stack, what's shipped,
+   launch sequencing, engagement permission gates. Its **"Pending
+   tasks" table is the canonical open-tasks list** — on session start,
+   recreate each open row (plus the launch-sequence items) as a task in
+   the Cowork Progress widget (`TaskCreate`) so the open backlog carries
+   across sessions. (No separate handoff doc — README + this manifest +
+   Pinecone memory are the three sources of truth.)
+2. **`frontend/components/HelpBuildThisView.js`** — Canonical
    shipped-vs-blocked list with sourced dollar amounts. Source of
    truth for the public funding ask.
-4. **`docs/SECURITY.md`** — Env-var posture + secrets model.
-5. **`backend/app/models/pages.py`** — All SQLAlchemy models in one
+3. **`docs/SECURITY.md`** — Env-var posture + secrets model.
+4. **`backend/app/models/pages.py`** — All SQLAlchemy models in one
    file. The shape of the data layer.
 
 ## Hard rules (durable across sessions)
@@ -58,7 +58,7 @@ generic "default behavior" you might otherwise reach for.
 - **Detailed commit messages.** Structured body (what / why /
   verification / env vars when relevant). ~50-100 lines is normal
   for substantive commits. Co-author trailer on every commit:
-  `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
+  `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
   (bump the model version when newer ones land).
 - **Use AskUserQuestion proactively** before any multi-step work
   where scope is ambiguous. Don't guess; ask once with good
@@ -226,14 +226,14 @@ flow above is the baseline; Pinecone augments it.
 
 ## Sandbox tooling quirks worth knowing
 
-Repeated bites in past sessions; full workarounds in
-`docs/HANDOFF_TO_NEXT_SESSION.md` under "Sandbox tooling quirks".
-Headline list:
+Repeated bites in past sessions; full workarounds live in the `shared`
+Pinecone memory records (search "sandbox quirk" / "fuse cache" /
+"edit tool"). Headline list:
 
 1. **Recurring `bad signature 0x00000000` git-index corruption.**
    Fix: `rm -f .git/index .git/index.lock && git read-tree HEAD`
    (or `git reset --mixed HEAD` if read-tree errors). Check the
-   handoff for the deeper recipe.
+   `shared` Pinecone records for the deeper recipe.
 2. **Edit / Write tool silently truncates large files** (>~600
    lines). Workaround: write large files via bash heredocs or
    short Python scripts. Always parse-check after a big write.

@@ -361,6 +361,29 @@ categories:
 
 ---
 
+## Shipped this session — 2026-05-28 (Claude Opus 4.8)
+
+Local/uncommitted unless pushed — Jeffrey decides the commits.
+
+- **Task #16 — Save/favorite posts + polls** to a dashboard "Saved" section
+  (`SavedItem` model, `/api/saved`, `viewer.is_saved`, Save kebab on cards).
+- **Task #41 — Threat/incitement detection, Phase 0 (shadow mode)** — verdicts
+  logged, nothing hidden (`docs/threat-detection-prd.md`). Acting on verdicts is
+  Task #49.
+- Home "Popular polls" → shared `FeedCard` parity; `/polls ?kind=rep`
+  candidate-leak fix; comments Edit/Delete/Report consolidated into the kebab
+  on all three comment surfaces.
+- Feed **cursor pagination + infinite scroll** on rep/candidate pages, `/polls`,
+  and `/posts`.
+- Map: desktop slider now matches the mobile chunky bar + a reset-view control
+  (clicking outside the US also resets the camera).
+- Rep profile: Bills tab search + an **AI-search toggle** on Bills + Votes
+  (`POST /api/ai/filter-items`, scoped to the loaded set).
+- **Non-partisan neutrality** hardening on the bill / EO / vote AI prompts, plus
+  a one-time cache reset (`backend/scripts/reset_summary_cache.py`).
+
+---
+
 ## In progress
 
 (Mirrored on `/help-build` under the "In progress" section.)
@@ -375,6 +398,11 @@ categories:
 
 ## Pending tasks (handed off to the next session)
 
+> **Canonical open-tasks list.** On session start, recreate every row below
+> (plus the launch-sequence items) as a task in the Cowork **Progress** widget
+> so the backlog carries across sessions. (CLAUDE.md instructs this read
+> on every session start; Pinecone holds the per-session narrative.)
+
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
 | 71 | Build /stats expanded analytics page | pending | Post-launch. Placeholder page at `frontend/app/stats/page.js` is reachable today via the "More stats →" link in the home hero. Expand with engagement curves, growth by state, post + poll volume, verified-citizen coverage map. |
@@ -384,6 +412,7 @@ categories:
 | 92 | Trim /polls + /posts filter cruft (audit follow-up) | pending | Audit 2026-05-28: the data layer is clean (shared `/api/feed/polls` + `/api/feed/posts`, one SQL sweep app-wide), but two trimmable bits remain in `frontend/app/polls/page.js`. (a) The States / Executive / Judicial / Congress branch chips render but count ~0 because the backend only emits a `branch` value for Congress reps — hide the inert chips (and the `pollBranch`/`branchCounts`/`branchFiltered` pipeline that feeds them) until the backend emits their branch. (b) The client-side state re-filter (~lines 313-319) duplicates the backend `?state=` narrowing — `load()` already refetches when `stateFilter` changes, so the client pass is dead work. Low-risk cleanup; does not touch the data pull. |
 | 93 | Unify forked comment rendering onto CommentsThread | pending | Comments are rendered by THREE independent implementations, each with its own inline row actions: `components/polls/CommentsThread.js` (shared feed thread — /polls, /posts, home), `components/PostCard.js` (~line 1621, rep/candidate page posts), and `components/CitizenPollsSection.js` (~line 1478, citizen polls — which also confusingly mounts CommentsThread at ~824). The 2026-05-28 comments-kebab change had to touch all three. Consolidate onto CommentsThread to kill the 3-way fork (violates the 'use shared components, don't fork them' rule). Medium refactor — note PostCard's comment list has an edit path while CitizenPollsSection's does not, so reconcile that during unification. |
 | 94 | Threat-detection v2 enhancements (post-v1) | pending | Deferred follow-ups from the threat-detection PRD (`docs/threat-detection-prd.md` §14): image/media moderation; multi-language support; repeat-offender escalation to auto-suspend; embeddings-based near-duplicate threat detection; user-facing "why was this flagged" explanations; and an optional synchronous block-on-submit path for the worst, highest-confidence cases. Revisit after the v1 flag→review pipeline (Task #41) is live and tuned. |
+| 49 | Threat detection Phase 1+ — act on verdicts | pending | Phase 0 (shadow mode) is live (verdicts logged, nothing hidden). Phase 1+: build a labeled eval set; implement `moderation_service._apply_decision` (set `hide_reason='threat_hidden'` on auto_hide) + surface flag/auto_hide verdicts in the admin queue; wire the self-harm resources flow; then flip `moderation_policy.SHADOW_MODE` off for Phase 2 (doxxing + credible_threat only) AFTER attorney review of the policy (`docs/LEGAL-REVIEW-ROADMAP.md`). See `docs/threat-detection-prd.md` §11. |
 
 **Closed:** Task #58 (Add financial-model link to /help-build) — won't ship as a public link. The `docs/civicview_financial_model.xlsx` is already in the public GitHub repo for anyone who wants to audit the math; shared on request rather than surfaced as a download on the campaign or app surfaces.
 
